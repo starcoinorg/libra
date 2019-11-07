@@ -6,6 +6,7 @@ use proto::miner::{
     create_miner_proxy, MineCtxRequest, MineCtxResponse, MinedBlockRequest, MinedBlockResponse,
     MinerProxy,
 };
+use std::sync::Mutex;
 use std::{
     io::{self, Read},
     sync::Arc,
@@ -19,7 +20,7 @@ where
     miner_proxy_inner: Arc<MinerProxyServerInner<S>>,
 }
 
-pub struct MinerProxyServerInner<S>
+struct MinerProxyServerInner<S>
 where
     S: MineState + Clone + Send + Clone + 'static,
 {
@@ -43,8 +44,43 @@ impl MineState for DummyMineState {
 }
 
 pub struct MineCtx {
-    nonce: u64,
-    header: Vec<u8>,
+    pub nonce: u64,
+    pub header: Vec<u8>,
+}
+
+#[derive(Clone)]
+pub struct MineStateManager {
+    inner: Arc<Mutex<StateInner>>,
+}
+
+struct StateInner {
+    mine_ctx: Option<MineCtx>,
+}
+
+impl MineStateManager {
+    pub fn new() -> Self {
+        MineStateManager {
+            inner: Arc::new(Mutex::new(StateInner { mine_ctx: None })),
+        }
+    }
+
+    pub fn set_mine_ctx(&mut self, mine_ctx: MineCtx) {
+        let mut x = self.inner.lock().unwrap();
+        *x = StateInner {
+            mine_ctx: Some(mine_ctx),
+        };
+    }
+}
+
+impl MineState for MineStateManager {
+    fn get_current_mine_ctx(&self) -> MineCtx {
+        let mut inner = self.inner.lock().unwrap();
+        let ctx = inner.mine_ctx.as_ref().unwrap();
+        MineCtx {
+            header: ctx.header.clone(),
+            nonce: ctx.nonce,
+        }
+    }
 }
 
 impl<S: MineState + Clone + Send + Clone + 'static> MinerProxy for MinerProxyServer<S> {
@@ -98,10 +134,23 @@ where
 }
 
 pub fn run_service() {
-    let mut grpc_srv = setup_minerproxy_service(DummyMineState);
+    let mut mine_state = MineStateManager::new();
+    mine_state.set_mine_ctx(MineCtx {
+        header: vec![2],
+        nonce: 10,
+    });
+    let mut grpc_srv = setup_minerproxy_service(mine_state.clone());
     grpc_srv.start();
+
     for &(ref host, port) in grpc_srv.bind_addrs() {
         println!("listening on {}:{}", host, port);
+    }
+    for i in (1..100) {
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        mine_state.set_mine_ctx(MineCtx {
+            header: vec![2],
+            nonce: i as u64,
+        });
     }
     let (tx, rx) = oneshot::channel();
 

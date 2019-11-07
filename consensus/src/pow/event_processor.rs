@@ -19,6 +19,11 @@ use libra_types::account_address::AccountAddress;
 use libra_types::transaction::{SignedTransaction, Transaction};
 use libra_types::PeerId;
 use logger::prelude::*;
+use std::{convert::TryFrom, path::PathBuf};
+use tokio::runtime::TaskExecutor;
+
+use logger::prelude::*;
+use miner::server::{setup_minerproxy_service, MineStateManager};
 use network::{
     proto::{
         ConsensusMsg,
@@ -29,8 +34,6 @@ use network::{
 };
 use prost_ext::MessageExt;
 use std::sync::Arc;
-use std::{convert::TryFrom, path::PathBuf};
-use tokio::runtime::TaskExecutor;
 
 pub struct EventProcessor {
     block_cache_sender: mpsc::Sender<Block<BlockPayloadExt>>,
@@ -73,7 +76,6 @@ impl EventProcessor {
         let block_store = Arc::new(ConsensusDB::new(storage_dir));
 
         let pow_srv = Arc::new(PowCuckoo::new(6, 8));
-
         let genesis_txn_vec = match genesis_txn {
             Transaction::UserTransaction(signed_txn) => vec![signed_txn].to_vec(),
             _ => vec![],
@@ -98,6 +100,12 @@ impl EventProcessor {
             chain_manager.clone(),
         )));
 
+        let mine_state = MineStateManager::new();
+        let mut miner_proxy = setup_minerproxy_service(mine_state.clone());
+        miner_proxy.start();
+        for &(ref host, port) in miner_proxy.bind_addrs() {
+            println!("listening on {}:{}", host, port);
+        }
         let mint_manager = Arc::new(MintManager::new(
             txn_manager.clone(),
             state_computer.clone(),
@@ -108,6 +116,7 @@ impl EventProcessor {
             pow_srv.clone(),
             genesis_txn_vec.clone(),
             chain_manager.clone(),
+            mine_state,
         ));
 
         EventProcessor {

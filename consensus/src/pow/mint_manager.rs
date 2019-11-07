@@ -14,6 +14,9 @@ use libra_types::crypto_proxies::ValidatorSigner;
 use libra_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use libra_types::transaction::SignedTransaction;
 use logger::prelude::*;
+
+use grpcio::Server;
+use miner::server::{MineCtx, MineState, MineStateManager};
 use network::{
     proto::{
         Block as BlockProto, ConsensusMsg,
@@ -38,6 +41,7 @@ pub struct MintManager {
     pow_srv: Arc<dyn PowService>,
     genesis_txn: Vec<SignedTransaction>,
     chain_manager: Arc<AtomicRefCell<ChainManager>>,
+    mine_state: MineStateManager,
 }
 
 impl MintManager {
@@ -51,6 +55,7 @@ impl MintManager {
         pow_srv: Arc<dyn PowService>,
         genesis_txn: Vec<SignedTransaction>,
         chain_manager: Arc<AtomicRefCell<ChainManager>>,
+        mine_state: MineStateManager,
     ) -> Self {
         MintManager {
             txn_manager,
@@ -62,6 +67,7 @@ impl MintManager {
             pow_srv,
             genesis_txn,
             chain_manager,
+            mine_state,
         }
     }
 
@@ -75,7 +81,7 @@ impl MintManager {
         let pow_srv = self.pow_srv.clone();
         let genesis_txn_vec = self.genesis_txn.clone();
         let chain_manager = self.chain_manager.clone();
-
+        let mut mine_state = self.mine_state.clone();
         let mint_fut = async move {
             let chain_manager_clone = chain_manager.clone();
             loop {
@@ -152,12 +158,16 @@ impl MintManager {
 
                                     let nonce = generate_nonce();
                                     let proof = pow_srv.solve(li.hash().as_ref(), nonce);
+
                                     let solve = match proof {
                                         Some(proof) => proof.solve,
                                         None => vec![10],
                                     };
                                     let mint_data = BlockPayloadExt { txns, nonce, solve };
-
+                                    mine_state.set_mine_ctx(MineCtx {
+                                        header: li.hash().to_vec(),
+                                        nonce,
+                                    });
                                     let block = Block::<BlockPayloadExt>::new_internal(
                                         mint_data,
                                         0,
