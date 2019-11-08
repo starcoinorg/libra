@@ -3,11 +3,12 @@
 
 module Test{
     import 0x0.ChannelAccount;
+    import 0x0.ChannelTransaction;
 
     public assert_channel_txn(){
         let receiver: address;
-        assert(is_channel_txn() == true, 42);
-        receiver = get_txn_receiver();
+        assert(ChannelTransaction.native_is_channel_txn() == true, 42);
+        receiver = ChannelTransaction.native_get_txn_receiver();
         assert(copy(receiver) == {{bob}}, 42);
         return;
     }
@@ -15,9 +16,10 @@ module Test{
 
 //! new-transaction
 //! sender: alice
+import 0x0.ChannelTransaction;
 main() {
     let x: bool;
-    x = is_channel_txn();
+    x = ChannelTransaction.native_is_channel_txn();
 
     assert(copy(x) == false, 77);
     return;

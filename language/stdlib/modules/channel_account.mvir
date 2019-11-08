@@ -7,6 +7,7 @@ module ChannelAccount {
     import 0x0.U64Util;
     import 0x0.AddressUtil;
     import 0x0.BytearrayUtil;
+    import 0x0.ChannelTransaction;
 
     // Every Channel account has a LibraCoin.T resource
     resource T {
@@ -214,7 +215,7 @@ module ChannelAccount {
         let receiver_sequence_number_value: u64;
         let transaction_channel_sequence_number_value: u64;
 
-        transaction_channel_sequence_number_value = get_txn_channel_sequence_number();
+        transaction_channel_sequence_number_value = ChannelTransaction.native_get_txn_channel_sequence_number();
 
         // sequence_number 0 should be open channel txn.
         if(copy(transaction_channel_sequence_number_value) == 0){
@@ -226,7 +227,7 @@ module ChannelAccount {
             sender_sequence_number_value = Self.sender_sequence_number();
             receiver_sequence_number_value = Self.receiver_sequence_number();
             assert(copy(sender_sequence_number_value) == copy(receiver_sequence_number_value), 402);
-            if(is_offchain()){
+            if(ChannelTransaction.native_is_offchain()){
                 assert(copy(transaction_channel_sequence_number_value) == copy(sender_sequence_number_value), 403);
             }else{
                 assert(copy(transaction_channel_sequence_number_value) >= copy(sender_sequence_number_value), 404);
@@ -251,11 +252,44 @@ module ChannelAccount {
        let transaction_channel_sequence_number_value: u64;
        let new_sequence_number: u64;
 
-       transaction_channel_sequence_number_value = get_txn_channel_sequence_number();
+       transaction_channel_sequence_number_value = ChannelTransaction.native_get_txn_channel_sequence_number();
        new_sequence_number = move(transaction_channel_sequence_number_value) + 1;
 
        Self.update_sequence_number(true, copy(new_sequence_number));
        Self.update_sequence_number(false, move(new_sequence_number));
        return;
     }
+
+    native public native_move_to_channel<T: resource>(t: T, to_sender: bool);
+    native public native_exist_channel<T: resource>(in_sender: bool): bool;
+    native public native_move_from_channel<T: resource>(from_sender: bool): T;
+    native public native_borrow_channel<T: resource>(from_sender: bool): &mut T;
+
+    public move_to_channel_sender<T: resource>(t: T) {
+        Self.native_move_to_channel<T>(move(t), true);
+        return;
+    }
+
+    public move_to_channel_receiver<T: resource>(t: T){
+        //assert(ChannelTransaction.has_receiver_signature(), 11);
+        Self.native_move_to_channel<T>(move(t), false);
+        return;
+    }
+
+    public exist_channel_sender<T: resource>(): bool {
+        return Self.native_exist_channel<T>(true);
+    }
+
+    public exist_channel_receiver<T: resource>(): bool {
+        return Self.native_exist_channel<T>(false);
+    }
+
+    public move_from_channel_sender<T: resource>(): T {
+        return Self.native_move_from_channel<T>(true);
+    }
+
+    public move_from_channel_receiver<T: resource>(): T {
+        return Self.native_move_from_channel<T>(false);
+    }
+
 }

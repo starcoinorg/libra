@@ -6,6 +6,7 @@ module LibraAccount {
     import 0x0.U64Util;
     import 0x0.AddressUtil;
     import 0x0.BytearrayUtil;
+    import 0x0.ChannelTransaction;
 
     // Every Libra account has a LibraAccount.T resource
     resource T {
@@ -379,7 +380,7 @@ module LibraAccount {
         // Check that the account has enough balance for all of the gas
         // Not check gas when tx execute on offchain vm.
         // Not check auth key for allow offchain vm to mock another use TODO(jole) security
-        if(!is_offchain()){
+        if(!ChannelTransaction.native_is_offchain()){
             // Check that the transaction's public key matches the account's current auth key
             sender_public_key = get_txn_public_key();
             public_key_hash = Hash.sha3_256(move(sender_public_key));
@@ -419,7 +420,7 @@ module LibraAccount {
 
 
         // Not charge when tx execute on offchain vm.
-        if(!is_offchain()){
+        if(!ChannelTransaction.native_is_offchain()){
              transaction_sender = get_txn_sender();
 
             // Load the transaction sender's account
@@ -452,7 +453,7 @@ module LibraAccount {
         let receiver_account: &mut Self.T;
 
         assert(is_channel_txn(), 6);
-        receiver_account = borrow_global_mut<T>(get_txn_receiver());
+        receiver_account = borrow_global_mut<T>(ChannelTransaction.native_get_txn_receiver());
         if (*&copy(receiver_account).delegated_withdrawal_capability) {
             // The sender has delegated the privilege to withdraw from her account elsewhere--abort.
             abort(11);
