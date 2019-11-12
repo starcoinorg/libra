@@ -1,7 +1,7 @@
 use async_std::task;
 use futures::Future;
 use futures03::{channel::oneshot, compat::Future01CompatExt};
-use grpcio::{self, Environment, RpcContext, Server, ServerBuilder, UnarySink};
+use grpcio::{self, Environment, RpcContext, ServerBuilder, UnarySink};
 use proto::miner::{
     create_miner_proxy, MineCtxRequest, MineCtxResponse, MinedBlockRequest, MinedBlockResponse,
     MinerProxy,
@@ -30,21 +30,9 @@ struct MinerProxyServerInner<S>
 pub trait MineState: Send + Sync {
     fn get_current_mine_ctx(&self) -> MineCtx;
     fn drop_miner_state(&self, mine_ctx: &MineCtx) -> bool;
+    fn mark_accept(&self);
 }
 
-#[derive(Clone)]
-struct DummyMineState;
-
-impl MineState for DummyMineState {
-    fn get_current_mine_ctx(&self) -> MineCtx {
-        return MineCtx {
-            nonce: 0,
-            header: vec![0],
-        };
-    }
-
-    fn drop_miner_state(&self, mine_ctx: &MineCtx) -> bool { true }
-}
 
 #[derive(PartialEq, Eq)]
 pub struct MineCtx {
@@ -55,24 +43,32 @@ pub struct MineCtx {
 #[derive(Clone)]
 pub struct MineStateManager {
     inner: Arc<Mutex<StateInner>>,
+
 }
 
 struct StateInner {
     mine_ctx: Option<MineCtx>,
+    tx: Option<oneshot::Sender<()>>,
 }
 
 impl MineStateManager {
     pub fn new() -> Self {
         MineStateManager {
-            inner: Arc::new(Mutex::new(StateInner { mine_ctx: None })),
+            inner: Arc::new(Mutex::new(StateInner {
+                mine_ctx: None,
+                tx: None,
+            })),
         }
     }
 
-    pub fn set_mine_ctx(&mut self, mine_ctx: MineCtx) {
+    pub fn set_mine_ctx(&mut self, mine_ctx: MineCtx) -> oneshot::Receiver<()> {
         let mut x = self.inner.lock().unwrap();
+        let (tx, rx) = oneshot::channel();
         *x = StateInner {
             mine_ctx: Some(mine_ctx),
+            tx: Some(tx),
         };
+        rx
     }
 }
 
@@ -87,19 +83,28 @@ impl MineState for MineStateManager {
     }
 
     fn drop_miner_state(&self, mine_ctx: &MineCtx) -> bool {
+        return true;
         let mut x = self.inner.lock().unwrap();
-        match &x.mine_ctx{
-            None=>false,
-            Some(mine_ctx_inner)=>{
+        match &x.mine_ctx {
+            None => false,
+            Some(mine_ctx_inner) => {
                 if mine_ctx_inner == mine_ctx {
                     *x = StateInner {
                         mine_ctx: None,
+                        tx: None,
                     };
                     true
                 } else {
                     false
                 }
             }
+        }
+    }
+
+    fn mark_accept(&self) {
+        let mut x = self.inner.lock().unwrap();
+        if let Some(tx) = x.tx.take() {
+            tx.send(()).unwrap();
         }
     }
 }
@@ -129,19 +134,17 @@ impl<S: MineState + Clone + Send + Clone + 'static> MinerProxy for MinerProxySer
         sink: UnarySink<MinedBlockResponse>,
     ) {
         let mut accept = false;
-        match req.mine_ctx {
-            Some(mine_req) => {
-                let mine_ctx = MineCtx {
-                    nonce: mine_req.nonce,
-                    header: mine_req.header,
-                };
-                if self.miner_proxy_inner.state.drop_miner_state(&mine_ctx) == true {
-
-                    accept = true;
-                }
+        if let Some(mine_req) = req.mine_ctx {
+            let mine_ctx = MineCtx {
+                nonce: mine_req.nonce,
+                header: mine_req.header,
+            };
+            if self.miner_proxy_inner.state.drop_miner_state(&mine_ctx) == true {
+                self.miner_proxy_inner.state.mark_accept();
+                accept = true;
             }
-            _ => {}
         }
+
         let resp = MinedBlockResponse { accept };
         let fut = sink.success(resp).map_err(|e| eprintln!("Failed to response to mined {}", e));
         ctx.spawn(fut);
@@ -167,23 +170,18 @@ pub fn setup_minerproxy_service<S>(mine_state: S) -> grpcio::Server
 
 pub fn run_service() {
     let mut mine_state = MineStateManager::new();
-    mine_state.set_mine_ctx(MineCtx {
-        header: vec![2],
-        nonce: 10,
-    });
     let mut grpc_srv = setup_minerproxy_service(mine_state.clone());
     grpc_srv.start();
-
     for &(ref host, port) in grpc_srv.bind_addrs() {
         println!("listening on {}:{}", host, port);
     }
-    for i in 1..100 {
-        std::thread::sleep(std::time::Duration::from_secs(1));
-        mine_state.set_mine_ctx(MineCtx {
+    task::spawn(async move {
+        let tx = mine_state.set_mine_ctx(MineCtx {
             header: vec![2],
-            nonce: i as u64,
+            nonce: 0 as u64,
         });
-    }
+        tx.await.unwrap();
+    });
     let (tx, rx) = oneshot::channel();
 
     task::spawn(async {
