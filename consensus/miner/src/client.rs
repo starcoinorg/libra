@@ -13,6 +13,5 @@ fn main() {
 
     let req = MineCtxRequest {};
     let mine_ctx = client.get_mine_ctx(&req);
-    //client.Mined(MinedBlockRequest)
     println!("proof {:?}", mine_ctx);
 }
