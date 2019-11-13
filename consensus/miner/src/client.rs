@@ -4,7 +4,7 @@ use std::env;
 use std::sync::Arc;
 
 use grpcio::{ChannelBuilder, EnvBuilder};
-use proto::miner::{MineCtxRequest, MinedBlockRequest, MinerProxyClient, MineCtxResponse};
+use proto::miner::{MineCtxRequest, MinedBlockRequest, MinerProxyClient, MineCtxResponse, MineCtx as MineCtxRpc};
 
 fn main() {
     let env = Arc::new(EnvBuilder::new().build());
@@ -14,6 +14,13 @@ fn main() {
     let req = MineCtxRequest {};
     let mine_ctx = client.get_mine_ctx(&req);
     println!("proof {:?}", mine_ctx);
-    let req = MinedBlockRequest { mine_ctx: Some(MineCtxResponse { header: vec![], nonce: 2 }), proof: vec![1 as u8] };
-    client.mined(&req);
+    let req = MinedBlockRequest {
+        mine_ctx: Some(MineCtxRpc {
+            header: vec![2],
+            nonce: 0 as u64,
+        }),
+        proof: vec![1 as u8]
+    };
+    let resp = client.mined(&req);
+    println!("mined{:?}", resp);
 }

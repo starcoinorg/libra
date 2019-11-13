@@ -4,7 +4,7 @@ use futures03::{channel::oneshot, compat::Future01CompatExt};
 use grpcio::{self, Environment, RpcContext, ServerBuilder, UnarySink};
 use proto::miner::{
     create_miner_proxy, MineCtxRequest, MineCtxResponse, MinedBlockRequest, MinedBlockResponse,
-    MinerProxy,
+    MinerProxy, MineCtx as MineCtxRpc,
 };
 use std::sync::Mutex;
 use std::{
@@ -27,13 +27,6 @@ struct MinerProxyServerInner<S>
     state: S,
 }
 
-pub trait MineState: Send + Sync {
-    fn get_current_mine_ctx(&self) -> MineCtx;
-    fn drop_miner_state(&self, mine_ctx: &MineCtx) -> bool;
-    fn mark_accept(&self);
-}
-
-
 #[derive(PartialEq, Eq)]
 pub struct MineCtx {
     pub nonce: u64,
@@ -43,12 +36,11 @@ pub struct MineCtx {
 #[derive(Clone)]
 pub struct MineStateManager {
     inner: Arc<Mutex<StateInner>>,
-
 }
 
 struct StateInner {
     mine_ctx: Option<MineCtx>,
-    tx: Option<oneshot::Sender<()>>,
+    tx: Option<oneshot::Sender<Vec<u8>>>,
 }
 
 impl MineStateManager {
@@ -60,8 +52,47 @@ impl MineStateManager {
             })),
         }
     }
+}
 
-    pub fn set_mine_ctx(&mut self, mine_ctx: MineCtx) -> oneshot::Receiver<()> {
+pub trait MineState: Send + Sync {
+    fn get_current_mine_ctx(&self) -> Option<MineCtx>;
+    fn mine_accept(&self, mine_ctx: &MineCtx, proof: Vec<u8>) -> bool;
+    fn set_mine_ctx(&mut self, mine_ctx: MineCtx) -> oneshot::Receiver<Vec<u8>>;
+}
+
+
+impl MineState for MineStateManager {
+    fn get_current_mine_ctx(&self) -> Option<MineCtx> {
+        let inner = self.inner.lock().unwrap();
+        let ctx = inner.mine_ctx.as_ref()?;
+        Some(MineCtx {
+            header: ctx.header.clone(),
+            nonce: ctx.nonce,
+        })
+    }
+    fn mine_accept(&self, mine_ctx_req: &MineCtx, proof: Vec<u8>) -> bool {
+        let mut x = self.inner.lock().unwrap();
+        if let Some(mine_ctx) = &x.mine_ctx {
+            if mine_ctx == mine_ctx_req {
+                // todo: verify proof
+            } else {
+                return false;
+            }
+        } else { return false; }
+
+        if let Some(tx) = x.tx.take() {
+            tx.send(proof).unwrap();
+            *x = StateInner {
+                mine_ctx: None,
+                tx: None,
+            };
+        } else { return false; }
+
+        return true;
+    }
+
+
+    fn set_mine_ctx(&mut self, mine_ctx: MineCtx) -> oneshot::Receiver<Vec<u8>> {
         let mut x = self.inner.lock().unwrap();
         let (tx, rx) = oneshot::channel();
         *x = StateInner {
@@ -72,54 +103,23 @@ impl MineStateManager {
     }
 }
 
-impl MineState for MineStateManager {
-    fn get_current_mine_ctx(&self) -> MineCtx {
-        let inner = self.inner.lock().unwrap();
-        let ctx = inner.mine_ctx.as_ref().unwrap();
-        MineCtx {
-            header: ctx.header.clone(),
-            nonce: ctx.nonce,
-        }
-    }
-
-    fn drop_miner_state(&self, mine_ctx: &MineCtx) -> bool {
-        return true;
-        let mut x = self.inner.lock().unwrap();
-        match &x.mine_ctx {
-            None => false,
-            Some(mine_ctx_inner) => {
-                if mine_ctx_inner == mine_ctx {
-                    *x = StateInner {
-                        mine_ctx: None,
-                        tx: None,
-                    };
-                    true
-                } else {
-                    false
-                }
-            }
-        }
-    }
-
-    fn mark_accept(&self) {
-        let mut x = self.inner.lock().unwrap();
-        if let Some(tx) = x.tx.take() {
-            tx.send(()).unwrap();
-        }
-    }
-}
-
 impl<S: MineState + Clone + Send + Clone + 'static> MinerProxy for MinerProxyServer<S> {
     fn get_mine_ctx(
         &mut self,
         ctx: RpcContext,
-        req: MineCtxRequest,
+        _req: MineCtxRequest,
         sink: UnarySink<MineCtxResponse>,
     ) {
-        let mine_ctx = self.miner_proxy_inner.state.get_current_mine_ctx();
+        let mine_ctx_rpc = if let Some(mine_ctx) = self.miner_proxy_inner.state.get_current_mine_ctx() {
+            Some(MineCtxRpc {
+                nonce: mine_ctx.nonce,
+                header: mine_ctx.header,
+            })
+        } else {
+            None
+        };
         let resp = MineCtxResponse {
-            nonce: mine_ctx.nonce,
-            header: mine_ctx.header,
+            mine_ctx: mine_ctx_rpc
         };
         let fut = sink
             .success(resp)
@@ -139,10 +139,8 @@ impl<S: MineState + Clone + Send + Clone + 'static> MinerProxy for MinerProxySer
                 nonce: mine_req.nonce,
                 header: mine_req.header,
             };
-            if self.miner_proxy_inner.state.drop_miner_state(&mine_ctx) == true {
-                self.miner_proxy_inner.state.mark_accept();
-                accept = true;
-            }
+            let proof = req.proof;
+            accept = self.miner_proxy_inner.state.mine_accept(&mine_ctx, proof);
         }
 
         let resp = MinedBlockResponse { accept };
@@ -168,6 +166,7 @@ pub fn setup_minerproxy_service<S>(mine_state: S) -> grpcio::Server
     server
 }
 
+
 pub fn run_service() {
     let mut mine_state = MineStateManager::new();
     let mut grpc_srv = setup_minerproxy_service(mine_state.clone());
@@ -180,7 +179,8 @@ pub fn run_service() {
             header: vec![2],
             nonce: 0 as u64,
         });
-        tx.await.unwrap();
+        let proof = tx.await.unwrap();
+        println!("mined success proof:{:?}", proof);
     });
     let (tx, rx) = oneshot::channel();
 
