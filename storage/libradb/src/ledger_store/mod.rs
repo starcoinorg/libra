@@ -4,6 +4,7 @@
 //! This file defines ledger store APIs that are related to the main ledger accumulator, from the
 //! root(LedgerInfo) to leaf(TransactionInfo).
 
+use crate::schema::epoch_by_version::EpochByVersionSchema;
 use crate::{
     change_set::ChangeSet,
     errors::LibraDbError,
@@ -61,6 +62,26 @@ impl LedgerStore {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn get_epoch(&self, version: Version) -> Result<u64> {
+        let mut iter = self
+            .db
+            .iter::<EpochByVersionSchema>(ReadOptions::default())?;
+        iter.seek_for_prev(&version)?;
+        let (epoch_start_version, epoch) = iter
+            .next()
+            .transpose()?
+            .ok_or_else(|| LibraDbError::NotFound(format!("version {}", version)))?;
+        ensure!(
+            epoch_start_version <= version,
+            "DB corruption: looking for epoch at version {}, got epoch {} started at version {}",
+            version,
+            epoch,
+            epoch_start_version
+        );
+        Ok(epoch)
+    }
+
     /// Return the ledger infos with their least 2f+1 signatures starting from `start_epoch` to
     /// the most recent one.
     /// Note: ledger infos and signatures are only available at the last version of each earlier
@@ -97,7 +118,7 @@ impl LedgerStore {
             .ok_or_else(|| format_err!("No TransactionInfo at version {}", version))
     }
 
-    pub fn get_latest_transaction_info_option(&self) -> Result<Option<(Version, TransactionInfo)>> {
+    fn get_latest_transaction_info_option(&self) -> Result<Option<(Version, TransactionInfo)>> {
         let mut iter = self
             .db
             .iter::<TransactionInfoSchema>(ReadOptions::default())?;
@@ -107,7 +128,7 @@ impl LedgerStore {
 
     /// Get latest transaction info together with its version. Note that during node syncing, this
     /// version can be greater than what's in the latest LedgerInfo.
-    pub fn get_latest_transaction_info(&self) -> Result<(Version, TransactionInfo)> {
+    pub fn _get_latest_transaction_info(&self) -> Result<(Version, TransactionInfo)> {
         self.get_latest_transaction_info_option()?
             .ok_or_else(|| LibraDbError::NotFound(String::from("Genesis TransactionInfo.")).into())
     }
@@ -193,6 +214,15 @@ impl LedgerStore {
         ledger_info_with_sigs: &LedgerInfoWithSignatures,
         cs: &mut ChangeSet,
     ) -> Result<()> {
+        let ledger_info = ledger_info_with_sigs.ledger_info();
+
+        if ledger_info.next_validator_set().is_some() {
+            // Although the current block is under `epoch`, from now on the ledger is considered to
+            // be in `epoch+1`, this is useful in the case that the next block is empty (hence still
+            // has the same `version`)
+            cs.batch
+                .put::<EpochByVersionSchema>(&ledger_info.version(), &(ledger_info.epoch() + 1))?;
+        }
         cs.batch.put::<LedgerInfoSchema>(
             &ledger_info_with_sigs.ledger_info().epoch(),
             ledger_info_with_sigs,

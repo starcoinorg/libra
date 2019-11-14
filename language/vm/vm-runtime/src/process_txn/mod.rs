@@ -1,12 +1,11 @@
-use crate::{
-    code_cache::module_cache::ModuleCache, data_cache::RemoteCache,
-    loaded_data::loaded_module::LoadedModule,
-};
+// Copyright (c) The Libra Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
+use crate::{code_cache::module_cache::ModuleCache, data_cache::RemoteCache};
 use libra_config::config::{VMMode, VMPublishingOption};
 use libra_types::transaction::SignatureCheckedTransaction;
 use std::marker::PhantomData;
-use vm::errors::VMResult;
-use vm_cache_map::Arena;
+use vm::{errors::VMResult, gas_schedule::CostTable};
 
 pub mod balance_checker;
 pub mod execute;
@@ -23,9 +22,9 @@ where
     P: ModuleCache<'alloc>,
 {
     txn: SignatureCheckedTransaction,
+    gas_schedule: &'txn CostTable,
     module_cache: P,
     data_cache: &'txn dyn RemoteCache,
-    allocator: &'txn Arena<LoadedModule>,
     phantom: PhantomData<&'alloc ()>,
 }
 
@@ -37,15 +36,15 @@ where
     /// Creates a new instance of `ProcessTransaction`.
     pub fn new(
         txn: SignatureCheckedTransaction,
+        gas_schedule: &'txn CostTable,
         module_cache: P,
         data_cache: &'txn dyn RemoteCache,
-        allocator: &'txn Arena<LoadedModule>,
     ) -> Self {
         Self {
             txn,
+            gas_schedule,
             module_cache,
             data_cache,
-            allocator,
             phantom: PhantomData,
         }
     }

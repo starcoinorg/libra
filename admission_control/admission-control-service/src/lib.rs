@@ -11,6 +11,13 @@
 //! 1. SubmitTransaction, to submit transaction to associated validator.
 //! 2. UpdateToLatestLedger, to query storage, e.g. account state, transaction log, and proofs.
 
+#[cfg(test)]
+#[path = "unit_tests/admission_control_service_test.rs"]
+mod admission_control_service_test;
+
+#[cfg(feature = "fuzzing")]
+/// Fuzzer for admission control
+pub mod admission_control_fuzzing;
 /// AC client mock
 pub mod admission_control_mock_client;
 /// AC gRPC service.
@@ -26,6 +33,7 @@ use lazy_static::lazy_static;
 use libra_metrics::OpMetrics;
 
 use libra_types::account_address::AccountAddress;
+pub use upstream_proxy::UpstreamProxyData;
 type PeerId = AccountAddress;
 
 lazy_static! {

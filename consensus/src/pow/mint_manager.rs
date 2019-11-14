@@ -4,7 +4,7 @@ use crate::pow::event_processor::EventProcessor;
 use crate::pow::payload_ext::BlockPayloadExt;
 use crate::state_replication::{StateComputer, TxnManager};
 use atomic_refcell::AtomicRefCell;
-use consensus_types::block_info::BlockInfo;
+use libra_types::block_info::BlockInfo;
 use consensus_types::{block::Block, quorum_cert::QuorumCert, vote_data::VoteData};
 use cuckoo::consensus::PowService;
 use libra_crypto::hash::CryptoHash;
@@ -118,26 +118,17 @@ impl MintManager {
 
                                     // vote data
                                     let parent_block_info = parent_vd.proposed().clone();
-                                    let block_info = BlockInfo::new(
+                                    let current_block_info = BlockInfo::new(
                                         epoch,
                                         height + 1,
                                         parent_block_id,
-                                        state_id,
+                                        txn_accumulator_hash,
                                         txn_len,
                                         parent_li.timestamp_usecs(),
                                         v_s.clone(),
                                     );
-                                    let vote_data = VoteData::new(block_info, parent_block_info);
-                                    // ledger info
-                                    let li = LedgerInfo::new(
-                                        txn_len,
-                                        txn_accumulator_hash,
-                                        vote_data.hash(),
-                                        parent_block_id,
-                                        epoch,
-                                        parent_li.timestamp_usecs(),
-                                        v_s,
-                                    );
+                                    let vote_data = VoteData::new(current_block_info.clone(), parent_block_info);
+                                    let li = LedgerInfo::new(current_block_info, state_id);
                                     let signer = ValidatorSigner::genesis(); //TODO:change signer
                                     let signature = signer
                                         .sign_message(li.hash())
@@ -193,6 +184,8 @@ impl MintManager {
                                     error!("{:?}", e);
                                 }
                             }
+                        } else {
+                            warn!("pull_txns zero txn.");
                         }
 
                         let mut r = rand::thread_rng();
