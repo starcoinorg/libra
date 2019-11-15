@@ -8,7 +8,7 @@ use async_std::{
     prelude::*,
     task::{Context, Poll},
 };
-use miner::types::{MineCtx, MAX_EDGE, CYCLE_LENGTH};
+use miner::types::{MineCtx, MAX_EDGE, CYCLE_LENGTH, DUMMY_INPUT};
 use std::{task::Waker, sync::Mutex};
 use byteorder::{ByteOrder, LittleEndian};
 use cuckoo::util::blake2b_256;
@@ -89,8 +89,10 @@ impl MineClient {
                     }),
                     proof,
                 };
+                thread::sleep(std::time::Duration::from_secs(10));
                 let resp = self.rpc_client.mined(&req);
                 println!("mined{:?}", resp);
+
             } else {
                 thread::sleep(std::time::Duration::from_secs(1));
             }
@@ -113,10 +115,11 @@ fn pow_input(header_hash: &[u8], nonce: u64) -> [u8; 40] {
 pub fn mine(header_hash: &[u8], nonce: u64, max_edge_bits: u8, cycle_length: usize) -> Option<Vec<u8>> {
     unsafe {
         let pow_input = pow_input(header_hash, nonce);
-        let input = blake2b_256(&pow_input.as_ref());
+        //let input = blake2b_256(&pow_input.as_ref());
+        let input = DUMMY_INPUT;
+        let input = blake2b_256(&input.as_ref());
         let mut output = vec![0u32; cycle_length];
         let max_edge = 1 << max_edge_bits;
-        println!("what");
         if c_solve(
             output.as_mut_ptr(),
             input.as_ptr(),
@@ -142,29 +145,27 @@ fn main() {
 #[cfg(test)]
 mod test {
     use super::*;
+    use cuckoo::Cuckoo;
 
     #[test]
     fn test_mine() {
         unsafe {
             let mut output = vec![0u32; CYCLE_LENGTH];
-            let input = [238, 237, 143, 251, 211, 26, 16, 237, 158, 89, 77, 62, 49, 241, 85, 233, 49, 77,
-                230, 148, 177, 49, 129, 38, 152, 148, 40, 170, 1, 115, 145, 191, 44, 10, 206, 23,
-                226, 132, 186, 196, 204, 205, 133, 173, 209, 20, 116, 16, 159, 161, 117, 167, 151,
-                171, 246, 181, 209, 140, 189, 163, 206, 155, 209, 157, 110, 2, 79, 249, 34, 228,
-                252, 245, 141, 27, 9, 156, 85, 58, 121, 46];
-            let input = blake2b_256(input.as_ref());
+            let input = DUMMY_INPUT;
+            let input_hash = blake2b_256(input.as_ref());
             if c_solve(
                 output.as_mut_ptr(),
-                input.as_ptr(),
+                input_hash.as_ptr(),
                 1 << MAX_EDGE,
                 CYCLE_LENGTH as u32,
             ) > 0
             {
                 let mut output_u8 = vec![0u8; CYCLE_LENGTH << 2];
                 LittleEndian::write_u32_into(&output, &mut output_u8);
-                return;
             }
-            panic!("test failed");
+
+            let cuckoo = Cuckoo::new(MAX_EDGE, CYCLE_LENGTH);
+            assert!(cuckoo.verify(&input, &output));
         }
     }
 }

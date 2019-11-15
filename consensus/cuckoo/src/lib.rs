@@ -1,4 +1,5 @@
 pub mod util;
+
 use crate::util::blake2b_256;
 use byteorder::{ByteOrder, LittleEndian};
 use std::collections::HashMap;
@@ -33,7 +34,7 @@ impl Cuckoo {
             return false;
         }
 
-        let keys = CuckooSip::input_to_keys(input);
+        let keys = CuckooSip::input_to_keys(&input);
         let hasher = CuckooSip::new(keys[0], keys[1], keys[2], keys[3]);
 
         let mut from_upper: HashMap<_, Vec<_>> = HashMap::with_capacity(proof.len());
@@ -152,14 +153,14 @@ mod test {
 
     #[test]
     fn test_pow() {
-        let input = [
-            24, 75, 179, 121, 98, 241, 250, 124, 100, 197, 125, 237, 29, 128, 222, 12, 134, 5, 241,
-            148, 87, 86, 159, 53, 217, 6, 202, 87, 71, 169, 8, 6, 202, 47, 50, 214, 18, 68, 84,
-            248, 105, 201, 162, 182, 95, 189, 145, 108, 234, 173, 81, 191, 109, 56, 192, 59, 176,
-            113, 85, 75, 254, 237, 161, 177, 189, 22, 219, 131, 24, 67, 96, 12, 22, 192, 108, 1,
-            189, 243, 22, 31,
-        ];
-        let proof = [1, 15, 20, 22, 39, 41, 52, 56];
+        let input =
+            [238, 237, 143, 251, 211, 26, 16, 237, 158, 89, 77, 62, 49, 241, 85, 233, 49, 77,
+                230, 148, 177, 49, 129, 38, 152, 148, 40, 170, 1, 115, 145, 191, 44, 10, 206, 23,
+                226, 132, 186, 196, 204, 205, 133, 173, 209, 20, 116, 16, 159, 161, 117, 167, 151,
+                171, 246, 181, 209, 140, 189, 163, 206, 155, 209, 157, 110, 2, 79, 249, 34, 228,
+                252, 245, 141, 27, 9, 156, 85, 58, 121, 46];
+
+        let proof = [1, 12, 23, 27, 31, 48, 50, 60];
         let pow = &Cuckoo::new(6, 8);
         assert!(pow.verify(&input, &proof));
     }
