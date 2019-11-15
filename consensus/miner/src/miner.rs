@@ -91,6 +91,8 @@ impl MineClient {
                 };
                 let resp = self.rpc_client.mined(&req);
                 println!("mined{:?}", resp);
+            } else {
+                thread::sleep(std::time::Duration::from_secs(1));
             }
         }
     }
@@ -114,6 +116,7 @@ pub fn mine(header_hash: &[u8], nonce: u64, max_edge_bits: u8, cycle_length: usi
         let input = blake2b_256(&pow_input.as_ref());
         let mut output = vec![0u32; cycle_length];
         let max_edge = 1 << max_edge_bits;
+        println!("what");
         if c_solve(
             output.as_mut_ptr(),
             input.as_ptr(),
@@ -121,7 +124,7 @@ pub fn mine(header_hash: &[u8], nonce: u64, max_edge_bits: u8, cycle_length: usi
             cycle_length as u32,
         ) > 0
         {
-            let mut output_u8 = vec![];
+            let mut output_u8 = vec![0u8; CYCLE_LENGTH << 2];
             LittleEndian::write_u32_into(&output, &mut output_u8);
             return Some(output_u8);
         }
@@ -134,4 +137,34 @@ fn main() {
     task::block_on(
         miner.start()
     );
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_mine() {
+        unsafe {
+            let mut output = vec![0u32; CYCLE_LENGTH];
+            let input = [238, 237, 143, 251, 211, 26, 16, 237, 158, 89, 77, 62, 49, 241, 85, 233, 49, 77,
+                230, 148, 177, 49, 129, 38, 152, 148, 40, 170, 1, 115, 145, 191, 44, 10, 206, 23,
+                226, 132, 186, 196, 204, 205, 133, 173, 209, 20, 116, 16, 159, 161, 117, 167, 151,
+                171, 246, 181, 209, 140, 189, 163, 206, 155, 209, 157, 110, 2, 79, 249, 34, 228,
+                252, 245, 141, 27, 9, 156, 85, 58, 121, 46];
+            let input = blake2b_256(input.as_ref());
+            if c_solve(
+                output.as_mut_ptr(),
+                input.as_ptr(),
+                1 << MAX_EDGE,
+                CYCLE_LENGTH as u32,
+            ) > 0
+            {
+                let mut output_u8 = vec![0u8; CYCLE_LENGTH << 2];
+                LittleEndian::write_u32_into(&output, &mut output_u8);
+                return;
+            }
+            panic!("test failed");
+        }
+    }
 }

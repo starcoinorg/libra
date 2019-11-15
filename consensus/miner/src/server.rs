@@ -100,7 +100,7 @@ pub fn run_service() {
         println!("listening on {}:{}", host, port);
     }
     task::spawn(async move {
-        for i in 0..100 as u64 {
+        for i in 0..1 as u64 {
             let tx = mine_state.mine_block(MineCtx {
                 header: vec![2;32],
                 nonce: i,
