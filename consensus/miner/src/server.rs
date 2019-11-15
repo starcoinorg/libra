@@ -8,8 +8,8 @@ use proto::miner::{
     MinerProxy, MineCtx as MineCtxRpc,
 };
 use std::{
-    io::{self, Read},
     sync::Arc,
+    io::{self, Read},
 };
 
 #[derive(Clone)]
@@ -46,7 +46,6 @@ impl<S: MineState + Clone + Send + Clone + 'static> MinerProxy for MinerProxySer
         let resp = MineCtxResponse {
             mine_ctx: mine_ctx_rpc
         };
-        println!("called here");
         let fut = sink
             .success(resp)
             .map_err(|e| eprintln!("Failed to response to get_mine_ctx {}", e));
@@ -101,12 +100,15 @@ pub fn run_service() {
         println!("listening on {}:{}", host, port);
     }
     task::spawn(async move {
-        let tx = mine_state.set_mine_ctx(MineCtx {
-            header: vec![2],
-            nonce: 0 as u64,
-        });
-        let proof = tx.await.unwrap();
-        println!("mined success proof:{:?}", proof);
+        for i in 0..100 as u64 {
+            let tx = mine_state.set_mine_ctx(MineCtx {
+                header: vec![2],
+                nonce: i,
+            });
+            let proof = tx.await.unwrap();
+            println!("mined success proof:{:?}", proof);
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
     });
     let (tx, rx) = oneshot::channel();
 
