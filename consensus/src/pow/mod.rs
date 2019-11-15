@@ -5,3 +5,4 @@ mod event_processor;
 mod mint_manager;
 mod payload_ext;
 mod sync_manager;
+mod pow_impl;

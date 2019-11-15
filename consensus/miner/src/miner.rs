@@ -8,9 +8,10 @@ use async_std::{
     prelude::*,
     task::{Context, Poll},
 };
-use miner::types::MineCtx;
-use std::task::Waker;
-use std::sync::Mutex;
+use miner::types::{MineCtx, MAX_EDGE, CYCLE_LENGTH};
+use std::{task::Waker, sync::Mutex};
+use byteorder::{ByteOrder, LittleEndian};
+use cuckoo::util::blake2b_256;
 
 struct MineCtxStream {
     client: MinerProxyClient,
@@ -79,16 +80,52 @@ impl MineClient {
         let mut ctx_stream = MineCtxStream::new(self.rpc_client.clone());
         while let Some(ctx) = ctx_stream.next().await {
             println!("the ctx is {:?}", ctx);
-            let req = MinedBlockRequest {
-                mine_ctx: Some(MineCtxRpc {
-                    header: vec![2],
-                    nonce: 0 as u64,
-                }),
-                proof: vec![1 as u8],
-            };
-            let resp = self.rpc_client.mined(&req);
-            println!("mined{:?}", resp);
+            let proof = mine(&ctx.header, ctx.nonce, MAX_EDGE, CYCLE_LENGTH);
+            if let Some(proof) = proof {
+                let req = MinedBlockRequest {
+                    mine_ctx: Some(MineCtxRpc {
+                        header: ctx.header,
+                        nonce: ctx.nonce,
+                    }),
+                    proof,
+                };
+                let resp = self.rpc_client.mined(&req);
+                println!("mined{:?}", resp);
+            }
         }
+    }
+}
+
+extern "C" {
+    pub fn c_solve(output: *mut u32, input: *const u8, max_edge: u64, cycle_length: u32) -> u32;
+}
+
+fn pow_input(header_hash: &[u8], nonce: u64) -> [u8; 40] {
+    let mut input = [0; 40];
+    assert!(header_hash.len() == 32);
+    input[8..40].copy_from_slice(&header_hash[..32]);
+    LittleEndian::write_u64(&mut input, nonce);
+    input
+}
+
+pub fn mine(header_hash: &[u8], nonce: u64, max_edge_bits: u8, cycle_length: usize) -> Option<Vec<u8>> {
+    unsafe {
+        let pow_input = pow_input(header_hash, nonce);
+        let input = blake2b_256(&pow_input.as_ref());
+        let mut output = vec![0u32; cycle_length];
+        let max_edge = 1 << max_edge_bits;
+        if c_solve(
+            output.as_mut_ptr(),
+            input.as_ptr(),
+            max_edge,
+            cycle_length as u32,
+        ) > 0
+        {
+            let mut output_u8 = vec![];
+            LittleEndian::write_u32_into(&output, &mut output_u8);
+            return Some(output_u8);
+        }
+        return None;
     }
 }
 
