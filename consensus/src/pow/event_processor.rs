@@ -11,7 +11,7 @@ use consensus_types::block::Block;
 use consensus_types::block_retrieval::{
     BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus,
 };
-use cuckoo::consensus::{PowCuckoo, PowService, Proof};
+use cuckoo::consensus::{PowService, Proof, PowCuckoo};
 use futures::channel::mpsc;
 use futures::{stream::select, SinkExt, StreamExt, TryStreamExt};
 use libra_crypto::hash::CryptoHash;
@@ -22,6 +22,7 @@ use libra_prost_ext::MessageExt;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::SignedTransaction;
 use libra_types::PeerId;
+
 use network::{
     proto::{
         Block as BlockProto, ConsensusMsg,
@@ -33,6 +34,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::{convert::TryFrom, path::PathBuf};
 use tokio::runtime::TaskExecutor;
+use miner::{server::setup_minerproxy_service, types::{MineStateManager, MAX_EDGE, CYCLE_LENGTH}};
 
 pub struct EventProcessor {
     block_cache_sender: mpsc::Sender<Block<BlockPayloadExt>>,
@@ -58,8 +60,8 @@ impl EventProcessor {
     pub fn new(
         network_sender: ConsensusNetworkSender,
         network_events: ConsensusNetworkEvents,
-        txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
-        state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
+        txn_manager: Arc<dyn TxnManager<Payload=Vec<SignedTransaction>>>,
+        state_computer: Arc<dyn StateComputer<Payload=Vec<SignedTransaction>>>,
         author: AccountAddress,
         storage_dir: PathBuf,
         rollback_flag: bool,
@@ -72,9 +74,6 @@ impl EventProcessor {
         let (sync_signal_sender, sync_signal_receiver) = mpsc::channel(1024);
 
         let block_store = Arc::new(ConsensusDB::new(storage_dir));
-
-        let pow_srv = Arc::new(PowCuckoo::new(6, 8));
-
         let chain_manager = Arc::new(AtomicRefCell::new(ChainManager::new(
             Some(block_cache_receiver),
             Arc::clone(&block_store),
@@ -94,6 +93,13 @@ impl EventProcessor {
             chain_manager.clone(),
         )));
 
+        let mine_state = MineStateManager::new();
+        let mut miner_proxy = setup_minerproxy_service(mine_state.clone());
+        miner_proxy.start();
+        for &(ref host, port) in miner_proxy.bind_addrs() {
+            println!("listening on {}:{}", host, port);
+        }
+        let pow_srv = Arc::new(PowCuckoo::new(MAX_EDGE, CYCLE_LENGTH));
         let mint_manager = Arc::new(MintManager::new(
             txn_manager.clone(),
             state_computer.clone(),
@@ -103,6 +109,7 @@ impl EventProcessor {
             block_store.clone(),
             pow_srv.clone(),
             chain_manager.clone(),
+            mine_state,
         ));
 
         EventProcessor {
@@ -213,7 +220,7 @@ impl EventProcessor {
                                         msg,
                                         vec![peer_id],
                                     )
-                                    .await;
+                                        .await;
                                 }
 
                                 if let Err(err) = (&mut block_cache_sender).send(block).await {
@@ -290,14 +297,14 @@ impl EventProcessor {
                                         &mut self_sender.clone(),
                                         resp_block_msg,
                                     )
-                                    .await;
+                                        .await;
                                 }
                             }
                             ConsensusMsg_oneof::RespondBlock(resp_block) => {
                                 let block_resp = BlockRetrievalResponse::try_from(resp_block)
                                     .expect("parse err.");
                                 if let Err(err) =
-                                    sync_block_sender.send((peer_id, block_resp)).await
+                                sync_block_sender.send((peer_id, block_resp)).await
                                 {
                                     error!("send sync block err: {:?}", err);
                                 };
@@ -339,7 +346,7 @@ impl EventProcessor {
             msg,
             vec![],
         )
-        .await;
+            .await;
     }
 
     pub async fn broadcast_consensus_msg_but(

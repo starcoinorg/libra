@@ -15,6 +15,9 @@ use libra_types::account_address::AccountAddress;
 use libra_types::crypto_proxies::ValidatorSigner;
 use libra_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use libra_types::transaction::SignedTransaction;
+use grpcio::Server;
+use miner::types::{MineCtx, MineState, MineStateManager};
+
 use network::{
     proto::{
         Block as BlockProto, ConsensusMsg,
@@ -39,6 +42,7 @@ pub struct MintManager {
     block_store: Arc<ConsensusDB>,
     pow_srv: Arc<dyn PowService>,
     chain_manager: Arc<AtomicRefCell<ChainManager>>,
+    mine_state: MineStateManager,
 }
 
 impl MintManager {
@@ -51,6 +55,7 @@ impl MintManager {
         block_store: Arc<ConsensusDB>,
         pow_srv: Arc<dyn PowService>,
         chain_manager: Arc<AtomicRefCell<ChainManager>>,
+        mine_state: MineStateManager,
     ) -> Self {
         MintManager {
             txn_manager,
@@ -61,6 +66,7 @@ impl MintManager {
             block_store,
             pow_srv,
             chain_manager,
+            mine_state,
         }
     }
 
@@ -73,7 +79,7 @@ impl MintManager {
         let block_db = self.block_store.clone();
         let pow_srv = self.pow_srv.clone();
         let chain_manager = self.chain_manager.clone();
-
+        let mut mine_state = self.mine_state.clone();
         let mint_fut = async move {
             let chain_manager_clone = chain_manager.clone();
             loop {
@@ -142,11 +148,12 @@ impl MintManager {
 
                                     //mint
                                     let nonce = generate_nonce();
-                                    let proof = pow_srv.solve(li.hash().as_ref(), nonce);
-                                    let solve = match proof {
-                                        Some(proof) => proof.solve,
-                                        None => vec![10],
-                                    };
+
+                                    let proof = mine_state.mine_block(MineCtx {
+                                        header: li.hash().to_vec(),
+                                        nonce,
+                                    });
+                                    let solve = proof.await.unwrap();
                                     let mint_data = BlockPayloadExt { txns, nonce, solve };
 
                                     //block data
