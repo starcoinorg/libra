@@ -22,11 +22,17 @@ pub struct BlockTree {
 }
 
 impl BlockTree {
-    pub fn add_block_info(&self) -> Result<()> {
+    pub fn add_block_info(&self, new_block_info: BlockInfo) -> Result<()> {
+        //1. new_block_info not exist
+        //2. parent exist
+        //3. is new root
+        //4. add new block info
+        //5. update parent
         unimplemented!()
     }
 
     fn prune(&self) {
+        //1. prune from begin
         unimplemented!()
     }
 
@@ -35,10 +41,10 @@ impl BlockTree {
     }
 
     fn root(&self) -> HashValue {
-        unimplemented!()
+        self.root
     }
 
-    pub fn find_output_by_id(&self, id: HashValue) -> Result<BlockInfo> {
+    pub fn find_output_by_id(&self, id: HashValue) -> Option<BlockInfo> {
         unimplemented!()
     }
 }
