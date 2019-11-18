@@ -15,7 +15,6 @@ use libra_types::account_address::AccountAddress;
 use libra_types::crypto_proxies::ValidatorSigner;
 use libra_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use libra_types::transaction::SignedTransaction;
-use grpcio::Server;
 use miner::types::{MineCtx, MineState, MineStateManager};
 
 use network::{
@@ -34,8 +33,8 @@ use std::time::Duration;
 use std::thread::sleep;
 
 pub struct MintManager {
-    txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
-    state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
+    txn_manager: Arc<dyn TxnManager<Payload=Vec<SignedTransaction>>>,
+    state_computer: Arc<dyn StateComputer<Payload=Vec<SignedTransaction>>>,
     network_sender: ConsensusNetworkSender,
     author: AccountAddress,
     self_sender: channel::Sender<failure::Result<Event<ConsensusMsg>>>,
@@ -47,8 +46,8 @@ pub struct MintManager {
 
 impl MintManager {
     pub fn new(
-        txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
-        state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
+        txn_manager: Arc<dyn TxnManager<Payload=Vec<SignedTransaction>>>,
+        state_computer: Arc<dyn StateComputer<Payload=Vec<SignedTransaction>>>,
         network_sender: ConsensusNetworkSender,
         author: AccountAddress,
         self_sender: channel::Sender<failure::Result<Event<ConsensusMsg>>>,
@@ -106,92 +105,92 @@ impl MintManager {
                             match mint_state_computer
                                 .compute_by_hash(grandpa_block_id, parent_block_id, tmp_id, &txns)
                                 .await
-                            {
-                                Ok(processed_vm_output) => {
-                                    let executed_trees = processed_vm_output.executed_trees();
-                                    let state_id = executed_trees.state_root();
-                                    let txn_accumulator_hash =
-                                        executed_trees.txn_accumulator().root_hash();
-                                    let txn_len = executed_trees.version().expect("version err.");
+                                {
+                                    Ok(processed_vm_output) => {
+                                        let executed_trees = processed_vm_output.executed_trees();
+                                        let state_id = executed_trees.state_root();
+                                        let txn_accumulator_hash =
+                                            executed_trees.txn_accumulator().root_hash();
+                                        let txn_len = executed_trees.version().expect("version err.");
 
-                                    let parent_li = quorum_cert.ledger_info().ledger_info().clone();
-                                    let parent_vd = quorum_cert.vote_data();
-                                    let epoch = parent_vd.parent().epoch();
-                                    let v_s = match parent_li.next_validator_set() {
-                                        Some(n_v_s) => Some(n_v_s.clone()),
-                                        None => None,
-                                    };
+                                        let parent_li = quorum_cert.ledger_info().ledger_info().clone();
+                                        let parent_vd = quorum_cert.vote_data();
+                                        let epoch = parent_vd.parent().epoch();
+                                        let v_s = match parent_li.next_validator_set() {
+                                            Some(n_v_s) => Some(n_v_s.clone()),
+                                            None => None,
+                                        };
 
-                                    // vote data
-                                    let parent_block_info = parent_vd.proposed().clone();
-                                    let current_block_info = BlockInfo::new(
-                                        epoch,
-                                        height + 1,
-                                        parent_block_id,
-                                        txn_accumulator_hash,
-                                        txn_len,
-                                        parent_li.timestamp_usecs(),
-                                        v_s.clone(),
-                                    );
-                                    let vote_data = VoteData::new(current_block_info.clone(), parent_block_info);
-                                    let li = LedgerInfo::new(current_block_info, state_id);
-                                    let signer = ValidatorSigner::genesis(); //TODO:change signer
-                                    let signature = signer
-                                        .sign_message(li.hash())
-                                        .expect("Fail to sign genesis ledger info");
-                                    let mut signatures = BTreeMap::new();
-                                    signatures.insert(signer.author(), signature);
-                                    let new_qc = QuorumCert::new(
-                                        vote_data,
-                                        LedgerInfoWithSignatures::new(li.clone(), signatures),
-                                    );
+                                        // vote data
+                                        let parent_block_info = parent_vd.proposed().clone();
+                                        let current_block_info = BlockInfo::new(
+                                            epoch,
+                                            height + 1,
+                                            parent_block_id,
+                                            txn_accumulator_hash,
+                                            txn_len,
+                                            parent_li.timestamp_usecs(),
+                                            v_s.clone(),
+                                        );
+                                        let vote_data = VoteData::new(current_block_info.clone(), parent_block_info);
+                                        let li = LedgerInfo::new(current_block_info, state_id);
+                                        let signer = ValidatorSigner::genesis(); //TODO:change signer
+                                        let signature = signer
+                                            .sign_message(li.hash())
+                                            .expect("Fail to sign genesis ledger info");
+                                        let mut signatures = BTreeMap::new();
+                                        signatures.insert(signer.author(), signature);
+                                        let new_qc = QuorumCert::new(
+                                            vote_data,
+                                            LedgerInfoWithSignatures::new(li.clone(), signatures),
+                                        );
 
-                                    //mint
-                                    let nonce = generate_nonce();
+                                        //mint
+                                        let nonce = generate_nonce();
 
-                                    let (rx,tx) = mine_state.mine_block(MineCtx {
-                                        header: li.hash().to_vec(),
-                                        nonce,
-                                    });
+                                        let (rx, tx) = mine_state.mine_block(MineCtx {
+                                            header: li.hash().to_vec(),
+                                            nonce,
+                                        });
 
-                                    let solve = rx.recv().await.unwrap();
-                                    let mint_data = BlockPayloadExt { txns, nonce, solve };
+                                        let solve = rx.recv().await.unwrap();
+                                        let mint_data = BlockPayloadExt { txns, nonce, solve };
 
-                                    //block data
-                                    let block = Block::<BlockPayloadExt>::new_proposal(
-                                        mint_data,
-                                        height + 1,
-                                        parent_li.timestamp_usecs(),
-                                        new_qc,
-                                        &ValidatorSigner::from_int(1),
-                                    );
+                                        //block data
+                                        let block = Block::<BlockPayloadExt>::new_proposal(
+                                            mint_data,
+                                            height + 1,
+                                            parent_li.timestamp_usecs(),
+                                            new_qc,
+                                            &ValidatorSigner::from_int(1),
+                                        );
 
-                                    info!(
-                                        "Minter : {:?} find a new block : {:?}",
-                                        mint_author,
-                                        block.id()
-                                    );
-                                    let block_pb = TryInto::<BlockProto>::try_into(block)
-                                        .expect("parse block err.");
+                                        info!(
+                                            "Minter : {:?} find a new block : {:?}",
+                                            mint_author,
+                                            block.id()
+                                        );
+                                        let block_pb = TryInto::<BlockProto>::try_into(block)
+                                            .expect("parse block err.");
 
-                                    // send block
-                                    let msg = ConsensusMsg {
-                                        message: Some(ConsensusMsg_oneof::NewBlock(block_pb)),
-                                    };
+                                        // send block
+                                        let msg = ConsensusMsg {
+                                            message: Some(ConsensusMsg_oneof::NewBlock(block_pb)),
+                                        };
 
-                                    EventProcessor::broadcast_consensus_msg(
-                                        &mut mint_network_sender,
-                                        true,
-                                        mint_author,
-                                        &mut self_sender,
-                                        msg,
-                                    )
-                                    .await;
+                                        EventProcessor::broadcast_consensus_msg(
+                                            &mut mint_network_sender,
+                                            true,
+                                            mint_author,
+                                            &mut self_sender,
+                                            msg,
+                                        )
+                                            .await;
+                                    }
+                                    Err(e) => {
+                                        error!("{:?}", e);
+                                    }
                                 }
-                                Err(e) => {
-                                    error!("{:?}", e);
-                                }
-                            }
                         } else {
                             warn!("pull_txns zero txn.");
                         }

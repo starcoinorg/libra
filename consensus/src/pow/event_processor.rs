@@ -22,7 +22,7 @@ use libra_prost_ext::MessageExt;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::SignedTransaction;
 use libra_types::PeerId;
-
+use grpcio::Server;
 use network::{
     proto::{
         Block as BlockProto, ConsensusMsg,
@@ -52,7 +52,6 @@ pub struct EventProcessor {
 
     pow_srv: Arc<dyn PowService>,
     pub chain_manager: Arc<AtomicRefCell<ChainManager>>,
-
     pub mint_manager: Arc<MintManager>,
 }
 
@@ -65,6 +64,7 @@ impl EventProcessor {
         author: AccountAddress,
         storage_dir: PathBuf,
         rollback_flag: bool,
+        mine_state: MineStateManager,
     ) -> Self {
         let (block_cache_sender, block_cache_receiver) = mpsc::channel(10);
 
@@ -92,13 +92,6 @@ impl EventProcessor {
             Some(sync_signal_receiver),
             chain_manager.clone(),
         )));
-
-        let mine_state = MineStateManager::new();
-        let mut miner_proxy = setup_minerproxy_service(mine_state.clone());
-        miner_proxy.start();
-        for &(ref host, port) in miner_proxy.bind_addrs() {
-            println!("listening on {}:{}", host, port);
-        }
         let pow_srv = Arc::new(PowCuckoo::new(MAX_EDGE, CYCLE_LENGTH));
         let mint_manager = Arc::new(MintManager::new(
             txn_manager.clone(),
@@ -111,7 +104,6 @@ impl EventProcessor {
             chain_manager.clone(),
             mine_state,
         ));
-
         EventProcessor {
             block_cache_sender,
             block_store,

@@ -15,10 +15,12 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::runtime::{self, TaskExecutor};
 use vm_runtime::MoveVM;
-
+use miner::{server::setup_minerproxy_service, types::MineStateManager};
+use grpcio::Server;
 pub struct PowConsensusProvider {
     runtime: tokio::runtime::Runtime,
     event_handle: Option<EventProcessor>,
+    miner_proxy: Server,
 }
 
 impl PowConsensusProvider {
@@ -47,6 +49,12 @@ impl PowConsensusProvider {
         let author = AccountAddress::try_from(peer_id_str.clone())
             .expect("Failed to parse peer id of a validator");
 
+        let mine_state = MineStateManager::new();
+        let mut miner_proxy = setup_minerproxy_service(mine_state.clone());
+        miner_proxy.start();
+        for &(ref host, port) in miner_proxy.bind_addrs() {
+            println!("listening on {}:{}", host, port);
+        }
         let event_handle = EventProcessor::new(
             network_sender,
             network_events,
@@ -55,10 +63,12 @@ impl PowConsensusProvider {
             author,
             node_config.get_storage_dir(),
             rollback_flag,
+            mine_state,
         );
         Self {
             runtime,
             event_handle: Some(event_handle),
+            miner_proxy,
         }
     }
 
