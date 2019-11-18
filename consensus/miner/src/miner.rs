@@ -66,6 +66,12 @@ pub struct MineClient {
     rpc_client: MinerProxyClient
 }
 
+impl Default for MineClient {
+    fn default() -> Self {
+        MineClient::new("127.0.0.1:4251".to_string())
+    }
+}
+
 impl MineClient {
     pub fn new(miner_server: String) -> Self {
         let env = Arc::new(EnvBuilder::new().build());
