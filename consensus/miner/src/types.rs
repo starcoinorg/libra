@@ -1,4 +1,5 @@
-use futures03::{channel::oneshot};
+use async_std::{sync::{channel, Sender, Receiver}, task};
+
 use std::sync::{Arc, Mutex};
 use cuckoo::Cuckoo;
 use cuckoo::util::{pow_input, blake2b_256};
@@ -26,7 +27,7 @@ pub struct MineStateManager {
 
 struct StateInner {
     mine_ctx: Option<MineCtx>,
-    tx: Option<oneshot::Sender<Vec<u8>>>,
+    tx: Option<Sender<Vec<u8>>>,
 }
 
 impl MineStateManager {
@@ -44,7 +45,7 @@ impl MineStateManager {
 pub trait MineState: Send + Sync {
     fn get_current_mine_ctx(&self) -> Option<MineCtx>;
     fn mine_accept(&self, mine_ctx: &MineCtx, proof: Vec<u8>) -> bool;
-    fn mine_block(&mut self, mine_ctx: MineCtx) -> oneshot::Receiver<Vec<u8>>;
+    fn mine_block(&mut self, mine_ctx: MineCtx) -> (Receiver<Vec<u8>>, Sender<Vec<u8>>);
 }
 
 impl MineState for MineStateManager {
@@ -78,7 +79,8 @@ impl MineState for MineStateManager {
         } else { return false; }
 
         if let Some(tx) = x.tx.take() {
-            tx.send(proof).unwrap();
+            task::block_on(async move { tx.send(proof).await; });
+
             *x = StateInner {
                 mine_ctx: None,
                 tx: None,
@@ -87,13 +89,13 @@ impl MineState for MineStateManager {
         return true;
     }
 
-    fn mine_block(&mut self, mine_ctx: MineCtx) -> oneshot::Receiver<Vec<u8>> {
+    fn mine_block(&mut self, mine_ctx: MineCtx) -> (Receiver<Vec<u8>>, Sender<Vec<u8>>) {
         let mut x = self.inner.lock().unwrap();
-        let (tx, rx) = oneshot::channel();
+        let (tx, rx) = channel(1);
         *x = StateInner {
             mine_ctx: Some(mine_ctx),
-            tx: Some(tx),
+            tx: Some(tx.clone()),
         };
-        rx
+        (rx, tx)
     }
 }

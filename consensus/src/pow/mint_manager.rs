@@ -149,11 +149,12 @@ impl MintManager {
                                     //mint
                                     let nonce = generate_nonce();
 
-                                    let proof = mine_state.mine_block(MineCtx {
+                                    let (rx,tx) = mine_state.mine_block(MineCtx {
                                         header: li.hash().to_vec(),
                                         nonce,
                                     });
-                                    let solve = proof.await.unwrap();
+
+                                    let solve = rx.recv().await.unwrap();
                                     let mint_data = BlockPayloadExt { txns, nonce, solve };
 
                                     //block data

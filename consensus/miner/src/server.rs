@@ -101,14 +101,13 @@ pub fn run_service() {
     }
     task::spawn(async move {
         for i in 0..100 as u64 {
-            let tx = mine_state.mine_block(MineCtx {
-                header: vec![2;32],
+            let (rx, tx) = mine_state.mine_block(MineCtx {
+                header: vec![2; 32],
                 nonce: i,
             });
-            let proof = tx.await.unwrap();
+            let proof = rx.recv().await.unwrap();
             println!("mined success");
             std::thread::sleep(std::time::Duration::from_secs(1));
-
         }
     });
     let (tx, rx) = oneshot::channel();
