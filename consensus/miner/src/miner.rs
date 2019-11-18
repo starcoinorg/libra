@@ -119,7 +119,7 @@ fn pow_input(header_hash: &[u8], nonce: u64) -> [u8; 40] {
 
 pub fn mine(header_hash: &[u8], nonce: u64, max_edge_bits: u8, cycle_length: usize) -> Option<Vec<u8>> {
     unsafe {
-        let pow_input = pow_input(header_hash, nonce);
+        let _pow_input = pow_input(header_hash, nonce);
         //let input = blake2b_256(&pow_input.as_ref());
         let input = DUMMY_INPUT;
         let input = blake2b_256(&input.as_ref());

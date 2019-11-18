@@ -10,6 +10,7 @@ use proto::miner::{
 use std::{
     sync::Arc,
     io::{self, Read},
+    string::String,
 };
 use std::time::Duration;
 
@@ -75,7 +76,7 @@ impl<S: MineState + Clone + Send + Clone + 'static> MinerProxy for MinerProxySer
     }
 }
 
-pub fn setup_minerproxy_service<S>(mine_state: S) -> grpcio::Server
+pub fn setup_minerproxy_service<S>(mine_state: S, addr: String) -> grpcio::Server
     where
         S: MineState + Clone + Send + Sync + 'static,
 {
@@ -84,9 +85,12 @@ pub fn setup_minerproxy_service<S>(mine_state: S) -> grpcio::Server
         miner_proxy_inner: Arc::new(MinerProxyServerInner { state: mine_state }),
     };
     let service = create_miner_proxy(miner_proxy_srv);
+    let addr:Vec<_> = addr.split(":").collect();
+    assert!(addr.len() == 2);
+
     let server = ServerBuilder::new(env)
         .register_service(service)
-        .bind("127.0.0.1", 4251)
+        .bind(addr[0], addr[1].parse().unwrap())
         .build()
         .unwrap();
     server
@@ -95,7 +99,7 @@ pub fn setup_minerproxy_service<S>(mine_state: S) -> grpcio::Server
 
 pub fn run_service() {
     let mut mine_state = MineStateManager::new();
-    let mut grpc_srv = setup_minerproxy_service(mine_state.clone());
+    let mut grpc_srv = setup_minerproxy_service(mine_state.clone(),"127.0.0.1:4251".to_string());
     grpc_srv.start();
     for &(ref host, port) in grpc_srv.bind_addrs() {
         println!("listening on {}:{}", host, port);

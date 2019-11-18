@@ -360,6 +360,7 @@ impl SwarmConfig {
             consensus_peers: template.consensus.consensus_peers.clone(),
             safety_rules: safety_rules_config,
             consensus_type: template.consensus.consensus_type.clone(),
+            miner_rpc_address: String::from(&template.consensus.miner_rpc_address),
         };
         let mut config = NodeConfig {
             base: base_config,

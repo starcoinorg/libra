@@ -169,7 +169,7 @@ impl EventProcessor {
                                 );
 
                                 let payload = block.payload().expect("payload is none");
-                                let _verify = pow_srv.verify(
+                                let verify = pow_srv.verify(
                                     block
                                         .quorum_cert()
                                         .ledger_info()
@@ -181,7 +181,7 @@ impl EventProcessor {
                                         solve: payload.solve.clone(),
                                     },
                                 );
-
+                                assert!(verify==true);
                                 if self_peer_id != peer_id {
                                     let (height, block_index) =
                                         chain_manager.borrow().chain_height_and_root().await;

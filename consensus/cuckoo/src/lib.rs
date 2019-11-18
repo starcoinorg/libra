@@ -1,5 +1,6 @@
 pub mod util;
 pub mod consensus;
+
 use crate::util::blake2b_256;
 use byteorder::{ByteOrder, LittleEndian};
 use std::collections::HashMap;
@@ -33,8 +34,8 @@ impl Cuckoo {
         if !is_monotonous {
             return false;
         }
-
-        let keys = CuckooSip::input_to_keys(&input);
+        assert!(input.len() != 0);
+        let keys = CuckooSip::input_to_keys(&KEEY_SEED);
         let hasher = CuckooSip::new(keys[0], keys[1], keys[2], keys[3]);
 
         let mut from_upper: HashMap<_, Vec<_>> = HashMap::with_capacity(proof.len());
@@ -146,22 +147,10 @@ impl CuckooSip {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::util::blake2b_256;
+const KEEY_SEED: [u8; 80] = [238, 237, 143, 251, 211, 26, 16, 237, 158, 89, 77, 62, 49, 241, 85, 233, 49, 77,
+    230, 148, 177, 49, 129, 38, 152, 148, 40, 170, 1, 115, 145, 191, 44, 10, 206, 23,
+    226, 132, 186, 196, 204, 205, 133, 173, 209, 20, 116, 16, 159, 161, 117, 167, 151,
+    171, 246, 181, 209, 140, 189, 163, 206, 155, 209, 157, 110, 2, 79, 249, 34, 228,
+    252, 245, 141, 27, 9, 156, 85, 58, 121, 46];
 
-    #[test]
-    fn test_pow() {
-        let input =
-            [238, 237, 143, 251, 211, 26, 16, 237, 158, 89, 77, 62, 49, 241, 85, 233, 49, 77,
-                230, 148, 177, 49, 129, 38, 152, 148, 40, 170, 1, 115, 145, 191, 44, 10, 206, 23,
-                226, 132, 186, 196, 204, 205, 133, 173, 209, 20, 116, 16, 159, 161, 117, 167, 151,
-                171, 246, 181, 209, 140, 189, 163, 206, 155, 209, 157, 110, 2, 79, 249, 34, 228,
-                252, 245, 141, 27, 9, 156, 85, 58, 121, 46];
 
-        let proof = [1, 12, 23, 27, 31, 48, 50, 60];
-        let pow = &Cuckoo::new(6, 8);
-        assert!(pow.verify(&input, &proof));
-    }
-}

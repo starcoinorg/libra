@@ -17,10 +17,11 @@ use tokio::runtime::{self, TaskExecutor};
 use vm_runtime::MoveVM;
 use miner::{server::setup_minerproxy_service, types::MineStateManager};
 use grpcio::Server;
+
 pub struct PowConsensusProvider {
     runtime: tokio::runtime::Runtime,
     event_handle: Option<EventProcessor>,
-    miner_proxy: Server,
+    miner_proxy: Option<Server>,
 }
 
 impl PowConsensusProvider {
@@ -50,7 +51,8 @@ impl PowConsensusProvider {
             .expect("Failed to parse peer id of a validator");
 
         let mine_state = MineStateManager::new();
-        let mut miner_proxy = setup_minerproxy_service(mine_state.clone());
+        let miner_rpc_addr = String::from(&node_config.consensus.miner_rpc_address);
+        let mut miner_proxy = setup_minerproxy_service(mine_state.clone(), miner_rpc_addr);
         miner_proxy.start();
         for &(ref host, port) in miner_proxy.bind_addrs() {
             println!("listening on {}:{}", host, port);
@@ -68,7 +70,7 @@ impl PowConsensusProvider {
         Self {
             runtime,
             event_handle: Some(event_handle),
-            miner_proxy,
+            miner_proxy: Some(miner_proxy),
         }
     }
 
@@ -112,6 +114,9 @@ impl ConsensusProvider for PowConsensusProvider {
         //TODO
         // 1. stop mint
         // 2. stop process event
-        //unimplemented!()
+        // Stop Miner proxy
+        if let Some(miner_proxy) = self.miner_proxy.take() {
+            drop(miner_proxy);
+        }
     }
 }
