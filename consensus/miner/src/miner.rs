@@ -8,7 +8,7 @@ use async_std::{
     prelude::*,
     task::{Context, Poll},
 };
-use miner::types::{MineCtx, MAX_EDGE, CYCLE_LENGTH, DUMMY_INPUT};
+use crate::types::{MineCtx, MAX_EDGE, CYCLE_LENGTH, DUMMY_INPUT};
 use std::{task::Waker, sync::Mutex};
 use byteorder::{ByteOrder, LittleEndian};
 use cuckoo::util::blake2b_256;
@@ -62,7 +62,7 @@ impl Stream for MineCtxStream {
     }
 }
 
-struct MineClient {
+pub struct MineClient {
     rpc_client: MinerProxyClient
 }
 
@@ -135,12 +135,6 @@ pub fn mine(header_hash: &[u8], nonce: u64, max_edge_bits: u8, cycle_length: usi
     }
 }
 
-fn main() {
-    let miner = MineClient::new("127.0.0.1:4251".to_string());
-    task::block_on(
-        miner.start()
-    );
-}
 
 #[cfg(test)]
 mod test {

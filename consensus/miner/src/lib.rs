@@ -1,6 +1,7 @@
 pub mod types;
 pub mod server;
-
+pub mod miner;
+pub use miner::MineClient;
 #[cfg(test)]
 mod tests {
     use crate::server;

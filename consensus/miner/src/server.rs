@@ -11,6 +11,7 @@ use std::{
     sync::Arc,
     io::{self, Read},
 };
+use std::time::Duration;
 
 #[derive(Clone)]
 pub struct MinerProxyServer<S>
