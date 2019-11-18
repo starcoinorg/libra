@@ -19,6 +19,7 @@ pub(crate) mod transaction_accumulator;
 pub mod transaction_by_account;
 pub(crate) mod transaction_info;
 pub(crate) mod validator;
+pub(crate) mod transaction_accumulator_by_hash;
 
 use failure::prelude::*;
 use schemadb::ColumnFamilyName;
