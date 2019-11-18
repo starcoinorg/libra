@@ -5,7 +5,8 @@ use consensus_types::block::Block;
 use executor::{ExecutedTrees, ProcessedVMOutput, StateComputeResult};
 use failure::Result;
 use futures::Future;
-use libra_types::crypto_proxies::LedgerInfoWithSignatures;
+use libra_crypto::HashValue;
+use libra_types::{crypto_proxies::{LedgerInfoWithSignatures, ValidatorChangeEventWithProof}};
 use std::{pin::Pin, sync::Arc};
 
 /// Retrieves and updates the status of transactions on demand (e.g., via talking with Mempool)
@@ -49,6 +50,21 @@ pub trait StateComputer: Send + Sync {
         executed_trees: ExecutedTrees,
     ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>>;
 
+    /// How to execute a sequence of transactions and obtain the next state. While some of the
+    /// transactions succeed, some of them can fail.
+    /// In case all the transactions are failed, new_state_id is equal to the previous state id.
+    fn compute_by_hash(
+        &self,
+        // The id of a grandpa block
+        grandpa_block_id: HashValue,
+        // The id of a parent block
+        parent_block_id: HashValue,
+        // The id of a current block.
+        block_id: HashValue,
+        // Transactions to execute.
+        transactions: &Self::Payload,
+    ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>>;
+
     /// Send a successful commit. A future is fulfilled when the state is finalized.
     fn commit(
         &self,
@@ -56,30 +72,35 @@ pub trait StateComputer: Send + Sync {
         finality_proof: LedgerInfoWithSignatures,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 
+    /// Rollback
+    fn rollback(&self, block_id: HashValue) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+
+    /// Best effort state synchronization to the given target LedgerInfo.
+    /// In case of success (`Result::Ok`) the LI of storage is at the given target.
+    /// In case of failure (`Result::Error`) the LI of storage remains unchanged, and the validator
+    /// can assume there were no modifications to the storage made.
     fn sync_to(
         &self,
-        commit: LedgerInfoWithSignatures,
-    ) -> Pin<Box<dyn Future<Output = Result<bool>> + Send>>;
+        target: LedgerInfoWithSignatures,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 
     fn committed_trees(&self) -> ExecutedTrees;
 
     fn sync_to_or_bail(&self, commit: LedgerInfoWithSignatures) {
         let status = futures::executor::block_on(self.sync_to(commit));
-        match status {
-            Ok(true) => (),
-            Ok(false) => panic!(
-                "state synchronizer failure, this validator will be killed as it can not \
-                 recover from this error.  After the validator is restarted, synchronization will \
-                 be retried.",
-            ),
-            Err(e) => panic!(
-                "state synchronizer failure: {:?}, this validator will be killed as it can not \
-                 recover from this error.  After the validator is restarted, synchronization will \
-                 be retried.",
-                e
-            ),
-        }
+        // TODO: this is going to change after https://github.com/libra/libra/issues/1590
+        status.expect(
+            "state synchronizer failure, this validator will be killed as it can not \
+             recover from this error.  After the validator is restarted, synchronization will \
+             be retried. failure:",
+        )
     }
+
+    /// Generate the epoch change proof from start_epoch to the latest epoch.
+    fn get_epoch_proof(
+        &self,
+        start_epoch: u64,
+    ) -> Pin<Box<dyn Future<Output = Result<ValidatorChangeEventWithProof>> + Send>>;
 }
 
 pub trait StateMachineReplication {

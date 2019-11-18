@@ -1,6 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::config::ConsensusType::{PBFT, POW};
 use crate::{
     config::ConsensusProposerType::{FixedProposer, MultipleOrderedProposers, RotatingProposer},
     keys::{ConsensusKeyPair, NetworkKeyPairs},
@@ -74,9 +75,6 @@ pub struct NodeConfig {
     pub log_collector: LoggerConfig,
     #[serde(default)]
     pub vm_config: VMConfig,
-
-    #[serde(default)]
-    pub secret_service: SecretServiceConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -224,22 +222,6 @@ impl Default for LoggerConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
-pub struct SecretServiceConfig {
-    pub address: String,
-    pub secret_service_port: u16,
-}
-
-impl Default for SecretServiceConfig {
-    fn default() -> SecretServiceConfig {
-        SecretServiceConfig {
-            address: "localhost".to_string(),
-            secret_service_port: 6185,
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(default)]
 pub struct AdmissionControlConfig {
     pub address: String,
     pub admission_control_service_port: u16,
@@ -264,7 +246,6 @@ impl Default for AdmissionControlConfig {
 #[serde(default)]
 pub struct DebugInterfaceConfig {
     pub admission_control_node_debug_port: u16,
-    pub secret_service_node_debug_port: u16,
     pub storage_node_debug_port: u16,
     // This has similar use to the core-node-debug-server itself
     pub metrics_server_port: u16,
@@ -277,7 +258,6 @@ impl Default for DebugInterfaceConfig {
         DebugInterfaceConfig {
             admission_control_node_debug_port: 6191,
             storage_node_debug_port: 6194,
-            secret_service_node_debug_port: 6195,
             metrics_server_port: 9101,
             public_metrics_server_port: 9102,
             address: "localhost".to_string(),
@@ -339,6 +319,7 @@ pub struct NetworkConfig {
     #[serde(skip)]
     pub seed_peers: SeedPeersConfig,
     pub seed_peers_file: PathBuf,
+    pub is_public_network: bool,
 }
 
 impl Default for NetworkConfig {
@@ -358,6 +339,7 @@ impl Default for NetworkConfig {
             network_peers: NetworkPeersConfig::default(),
             seed_peers_file: PathBuf::from("seed_peers.config.toml"),
             seed_peers: SeedPeersConfig::default(),
+            is_public_network: true,
         }
     }
 }
@@ -417,6 +399,14 @@ pub struct ConsensusConfig {
     #[serde(skip)]
     pub consensus_peers: ConsensusPeersConfig,
     pub consensus_peers_file: PathBuf,
+    pub safety_rules: SafetyRulesConfig,
+    pub consensus_type: String,
+}
+
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+pub enum ConsensusType {
+    PBFT,
+    POW,
 }
 
 impl Default for ConsensusConfig {
@@ -431,6 +421,8 @@ impl Default for ConsensusConfig {
             consensus_keypair_file: PathBuf::from("consensus_keypair.config.toml"),
             consensus_peers: ConsensusPeersConfig::default(),
             consensus_peers_file: PathBuf::from("consensus_peers.config.toml"),
+            safety_rules: SafetyRulesConfig::default(),
+            consensus_type: "pow".to_string(),
         }
     }
 }
@@ -457,6 +449,20 @@ impl ConsensusConfig {
                 path.as_ref().with_file_name(&self.consensus_peers_file),
             );
         }
+        if let SafetyRulesBackend::OnDiskStorage {
+            default,
+            path: sr_path,
+        } = &self.safety_rules.backend
+        {
+            // If the file is relative, it means it is in the same directory as this config,
+            // unfortunately this is meaningless to the process that would load the config.
+            if !sr_path.as_os_str().is_empty() && sr_path.is_relative() {
+                self.safety_rules.backend = SafetyRulesBackend::OnDiskStorage {
+                    default: *default,
+                    path: path.as_ref().with_file_name(sr_path),
+                };
+            }
+        }
         Ok(())
     }
 
@@ -466,6 +472,14 @@ impl ConsensusConfig {
             "rotating_proposer" => RotatingProposer,
             "multiple_ordered_proposers" => MultipleOrderedProposers,
             &_ => unimplemented!("Invalid proposer type: {}", self.proposer_type),
+        }
+    }
+
+    pub fn get_consensus_type(&self) -> ConsensusType {
+        match self.consensus_type.as_str() {
+            "pbft" => PBFT,
+            "pow" => POW,
+            &_ => unimplemented!("Invalid consensus type: {}", self.consensus_type),
         }
     }
 
@@ -483,6 +497,10 @@ impl ConsensusConfig {
 
     pub fn pacemaker_initial_timeout_ms(&self) -> &Option<u64> {
         &self.pacemaker_initial_timeout_ms
+    }
+
+    pub fn safety_rules(&self) -> &SafetyRulesConfig {
+        &self.safety_rules
     }
 }
 
@@ -517,6 +535,33 @@ impl Default for MempoolConfig {
             system_transaction_gc_interval_ms: 180_000,
         }
     }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub struct SafetyRulesConfig {
+    pub backend: SafetyRulesBackend,
+}
+
+impl Default for SafetyRulesConfig {
+    fn default() -> Self {
+        Self {
+            backend: SafetyRulesBackend::InMemoryStorage,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "type")]
+pub enum SafetyRulesBackend {
+    InMemoryStorage,
+    OnDiskStorage {
+        // In testing scenarios this implies that the default state is okay if
+        // a state is not specified.
+        default: bool,
+        // Required path for on disk storage
+        path: PathBuf,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -556,6 +601,8 @@ impl NodeConfig {
     /// Paths used in the config are either absolute or relative to the config location
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut config = Self::load_config(&path);
+        config.consensus.load(path.as_ref())?;
+        let is_public = config.consensus.get_consensus_type() == ConsensusType::POW;
         let mut validator_count = 0;
         for network in &mut config.networks {
             // We use provided peer id for validator role. Otherwise peer id is generated using
@@ -570,8 +617,8 @@ impl NodeConfig {
             } else {
                 network.load(path.as_ref())?;
             }
+            network.is_public_network = is_public;
         }
-        config.consensus.load(path.as_ref())?;
         Ok(config)
     }
 
@@ -675,9 +722,15 @@ impl NodeConfigHelpers {
     /// consensus_peers_file, network_keypairs_file, consensus_keypair_file, and seed_peers_file
     /// set. It is expected that the callee will provide these.
     pub fn get_single_node_test_config(random_ports: bool) -> NodeConfig {
-        Self::get_single_node_test_config_publish_options(
+        Self::get_single_node_test_config_times(random_ports, 0)
+    }
+
+    /// times
+    pub fn get_single_node_test_config_times(random_ports: bool, times: usize) -> NodeConfig {
+        Self::get_single_node_test_config_publish_options_times(
             random_ports,
             Some(VMPublishingOption::Open),
+            times,
         )
     }
 
@@ -688,6 +741,14 @@ impl NodeConfigHelpers {
     pub fn get_single_node_test_config_publish_options(
         random_ports: bool,
         publishing_options: Option<VMPublishingOption>,
+    ) -> NodeConfig {
+        Self::get_single_node_test_config_publish_options_times(random_ports, publishing_options, 0)
+    }
+
+    pub fn get_single_node_test_config_publish_options_times(
+        random_ports: bool,
+        publishing_options: Option<VMPublishingOption>,
+        times: usize,
     ) -> NodeConfig {
         let config_string = String::from_utf8_lossy(CONFIG_TEMPLATE);
         let mut config =
@@ -704,7 +765,7 @@ impl NodeConfigHelpers {
             config.vm_config.publishing_options = vm_publishing_option;
         }
         let (mut private_keys, test_consensus_peers, test_network_peers) =
-            ConfigHelpers::gen_validator_nodes(1, None);
+            ConfigHelpers::gen_validator_nodes_times(1, None, times);
         let peer_id = *private_keys.keys().nth(0).unwrap();
         let (
             ConsensusPrivateKey {
@@ -741,11 +802,9 @@ impl NodeConfigHelpers {
         config.debug_interface.admission_control_node_debug_port = get_available_port();
         config.debug_interface.metrics_server_port = get_available_port();
         config.debug_interface.public_metrics_server_port = get_available_port();
-        config.debug_interface.secret_service_node_debug_port = get_available_port();
         config.debug_interface.storage_node_debug_port = get_available_port();
         config.execution.port = get_available_port();
         config.mempool.mempool_service_port = get_available_port();
-        config.secret_service.secret_service_port = get_available_port();
         config.storage.port = get_available_port();
     }
 }

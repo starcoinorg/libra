@@ -30,12 +30,14 @@ use std::{pin::Pin, sync::Arc};
 use storage_proto::{
     proto::storage::{GetStartupInfoRequest, StorageClient},
     GetAccountStateWithProofByVersionRequest, GetAccountStateWithProofByVersionResponse,
-    GetLatestLedgerInfosPerEpochRequest, GetLatestLedgerInfosPerEpochResponse,
-    GetStartupInfoResponse, GetTransactionsRequest, GetTransactionsResponse,
-    SaveTransactionsRequest, StartupInfo,
+    GetHistoryStartupInfoByBlockIdRequest, GetLatestLedgerInfosPerEpochRequest,
+    GetLatestLedgerInfosPerEpochResponse, GetStartupInfoResponse, GetTransactionsRequest,
+    GetTransactionsResponse, RollbackRequest, SaveTransactionsRequest,
+    StartupInfo,
 };
 
 pub use crate::state_view::VerifiedStateView;
+use libra_crypto::HashValue;
 
 fn pick<T>(items: &[T]) -> &T {
     let mut rng = rand::thread_rng();
@@ -98,7 +100,7 @@ impl StorageRead for StorageReadServiceClient {
     ) -> Result<(
         Vec<ResponseItem>,
         LedgerInfoWithSignatures,
-        Vec<ValidatorChangeEventWithProof>,
+        ValidatorChangeEventWithProof,
         AccumulatorConsistencyProof,
     )> {
         block_on(self.update_to_latest_ledger_async(client_known_version, requested_items))
@@ -114,7 +116,7 @@ impl StorageRead for StorageReadServiceClient {
                     Output = Result<(
                         Vec<ResponseItem>,
                         LedgerInfoWithSignatures,
-                        Vec<ValidatorChangeEventWithProof>,
+                        ValidatorChangeEventWithProof,
                         AccumulatorConsistencyProof,
                     )>,
                 > + Send,
@@ -199,6 +201,18 @@ impl StorageRead for StorageReadServiceClient {
         block_on(self.get_startup_info_async())
     }
 
+    fn get_history_startup_info_by_block_id(
+        &self,
+        block_id: HashValue,
+    ) -> Result<Option<StartupInfo>> {
+        let req = GetHistoryStartupInfoByBlockIdRequest { block_id };
+        let startup_info_resp = self
+            .client()
+            .get_history_startup_info_by_block_id(&req.into());
+        let resp = GetStartupInfoResponse::try_from(startup_info_resp?)?;
+        Ok(resp.info)
+    }
+
     fn get_startup_info_async(
         &self,
     ) -> Pin<Box<dyn Future<Output = Result<Option<StartupInfo>>> + Send>> {
@@ -280,6 +294,11 @@ impl StorageWrite for StorageWriteServiceClient {
             .map_ok(|_| ())
             .boxed()
     }
+
+    fn rollback_by_block_id(&self, block_id: HashValue) {
+        let req = RollbackRequest { block_id };
+        self.client().rollback_by_block_id(&req.into()).expect("rollback err.");
+    }
 }
 
 /// This trait defines interfaces to be implemented by a storage read client.
@@ -299,7 +318,7 @@ pub trait StorageRead: Send + Sync {
     ) -> Result<(
         Vec<ResponseItem>,
         LedgerInfoWithSignatures,
-        Vec<ValidatorChangeEventWithProof>,
+        ValidatorChangeEventWithProof,
         AccumulatorConsistencyProof,
     )>;
 
@@ -317,7 +336,7 @@ pub trait StorageRead: Send + Sync {
                     Output = Result<(
                         Vec<ResponseItem>,
                         LedgerInfoWithSignatures,
-                        Vec<ValidatorChangeEventWithProof>,
+                        ValidatorChangeEventWithProof,
                         AccumulatorConsistencyProof,
                     )>,
                 > + Send,
@@ -372,6 +391,12 @@ pub trait StorageRead: Send + Sync {
     /// ../libradb/struct.LibraDB.html#method.get_startup_info
     fn get_startup_info(&self) -> Result<Option<StartupInfo>>;
 
+    /// history startup info
+    fn get_history_startup_info_by_block_id(
+        &self,
+        block_id: HashValue,
+    ) -> Result<Option<StartupInfo>>;
+
     /// See [`LibraDB::get_startup_info`].
     ///
     /// [`LibraDB::get_startup_info`]:
@@ -424,6 +449,9 @@ pub trait StorageWrite: Send + Sync {
         first_version: Version,
         ledger_info_with_sigs: Option<LedgerInfoWithSignatures>,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+
+    /// Rollback
+    fn rollback_by_block_id(&self, block_id: HashValue);
 }
 
 fn convert_grpc_err(e: grpcio::Error) -> Error {

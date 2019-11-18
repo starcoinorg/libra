@@ -2,20 +2,23 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    Chunk, Command, CommittableBlockBatch, ExecutableBlock, ExecutedTrees, ProcessedVMOutput,
-    TransactionData, OP_COUNTERS,
+    Chunk, Command, CommittableBlock, CommittableBlockBatch, ExecutableBlock, ExecutedTrees,
+    ProcessedVMOutput, TransactionData, OP_COUNTERS,
 };
 use failure::prelude::*;
 use futures::channel::oneshot;
 use libra_config::config::VMConfig;
 use libra_crypto::{
-    hash::{CryptoHash, EventAccumulatorHasher},
+    hash::{CryptoHash, EventAccumulatorHasher, PRE_GENESIS_BLOCK_ID},
     HashValue,
 };
 use libra_logger::prelude::*;
+use libra_types::block_info::BlockInfo;
 use libra_types::{
     account_address::AccountAddress,
     account_state_blob::AccountStateBlob,
+    crypto_proxies::LedgerInfoWithSignatures,
+    ledger_info::LedgerInfo,
     proof::{accumulator::InMemoryAccumulator, definition::LeafCount, SparseMerkleProof},
     transaction::{
         Transaction, TransactionInfo, TransactionOutput, TransactionPayload, TransactionStatus,
@@ -40,12 +43,6 @@ enum Mode {
     Syncing,
 }
 
-fn error_when_syncing(id: HashValue) -> Error {
-    let message = format!("Syncing. Unable to serve request for block {:x}.", id);
-    warn!("{}", message);
-    format_err!("{}", message)
-}
-
 pub(crate) struct BlockProcessor<V> {
     /// Where the processor receives commands.
     command_receiver: mpsc::Receiver<Command>,
@@ -53,7 +50,11 @@ pub(crate) struct BlockProcessor<V> {
     /// The timestamp of the last committed ledger info.
     committed_timestamp_usecs: u64,
 
+    /// The latest committed merkle trees.
     committed_trees: Arc<Mutex<ExecutedTrees>>,
+
+    /// The latest merkle trees synced to storage but not committed. `synced_trees` are always ahead of committed_trees or be `None`.
+    synced_trees: Option<ExecutedTrees>,
 
     /// The cached executable blocks.
     blocks_to_execute: VecDeque<(ExecutableBlock, oneshot::Sender<Result<ProcessedVMOutput>>)>,
@@ -82,16 +83,20 @@ where
     /// Constructs a new `BlockProcessor`.
     pub fn new(
         command_receiver: mpsc::Receiver<Command>,
-        committed_timestamp_usecs: u64,
-        committed_trees: Arc<Mutex<ExecutedTrees>>,
         storage_read_client: Arc<dyn StorageRead>,
         storage_write_client: Arc<dyn StorageWrite>,
+        committed_trees: Arc<Mutex<ExecutedTrees>>,
+        synced_trees: Option<ExecutedTrees>,
+        committed_timestamp_usecs: u64,
         vm_config: VMConfig,
+        genesis_txn: Transaction,
+        resp_sender: oneshot::Sender<()>,
     ) -> Self {
-        BlockProcessor {
+        let mut processor = BlockProcessor {
             command_receiver,
             committed_timestamp_usecs,
             committed_trees,
+            synced_trees,
             blocks_to_execute: VecDeque::new(),
             block_batch_to_commit: None,
             storage_read_client,
@@ -99,7 +104,88 @@ where
             mode: Mode::Normal,
             vm_config,
             phantom: PhantomData,
+        };
+        processor.init_genesis_if_needed(genesis_txn);
+        resp_sender.send(()).expect("cannot fail");
+        processor
+    }
+
+    /// This is used when we start for the first time and the DB is completely empty. It will write
+    /// necessary information to DB by committing the genesis transaction.
+    fn init_genesis_if_needed(&mut self, genesis_txn: Transaction) {
+        // Check whether initialize with genesis txn is needed.
+        if self.committed_trees.lock().unwrap().version().is_some() {
+            return;
         }
+
+        let genesis_txns = vec![genesis_txn];
+
+        // Create a block with genesis_txn being the only transaction. Execute it then commit it
+        // immediately.
+        // We create `PRE_GENESIS_BLOCK_ID` as the parent of the genesis block.
+        let genesis_block = ExecutableBlock {
+            transactions: genesis_txns.clone(),
+            parent_trees: ExecutedTrees::new_empty(),
+            parent_id: *PRE_GENESIS_BLOCK_ID,
+            id: HashValue::zero(), /* we use 0 as genesis block id in executor internally but it may be different in consensus */
+        };
+        let output = self
+            .execute_block(genesis_block)
+            .expect("Failed to execute genesis block.");
+
+        let root_hash = output.accu_root();
+        let ledger_info = LedgerInfo::new(
+            BlockInfo::new(
+                0,
+                0,
+                *PRE_GENESIS_BLOCK_ID,
+                root_hash,
+                0,
+                0,
+                Some(ValidatorSet::new(vec![])),
+            ),
+            HashValue::zero(),
+        );
+        let ledger_info_with_sigs =
+            LedgerInfoWithSignatures::new(ledger_info, /* signatures = */ BTreeMap::new());
+        self.commit_block_batch(CommittableBlockBatch {
+            blocks: vec![CommittableBlock {
+                transactions: genesis_txns,
+                output: Arc::new(output),
+            }],
+            finality_proof: ledger_info_with_sigs,
+        })
+        .expect("Failed to commit genesis block.");
+        info!("GENESIS transaction is committed.")
+    }
+
+    /// Rollback
+    pub fn rollback(&mut self, block_id: HashValue) -> Result<()> {
+        // 1. rollback
+        self.storage_write_client.rollback_by_block_id(block_id);
+
+        // 2. get StartInfo
+        let startup_info = self
+            .storage_read_client
+            .get_startup_info()
+            .expect("Failed to read startup info from storage.")
+            .expect("block not exist err.");
+
+        // 3. Reset ExecutedTrees
+        let state_tree = Arc::new(SparseMerkleTree::new(startup_info.committed_tree_state.account_state_root_hash));
+        let transaction_accumulator = Arc::new(
+            InMemoryAccumulator::new(
+                startup_info.committed_tree_state.ledger_frozen_subtree_hashes,
+                startup_info.committed_tree_state.version + 1,
+            )
+            .expect("The startup info read from storage should be valid."),
+        );
+        self.committed_trees
+            .lock()
+            .unwrap()
+            .reset(state_tree, transaction_accumulator);
+
+        Ok(())
     }
 
     /// Keeps processing blocks until the command sender is disconnected.
@@ -161,12 +247,29 @@ where
                 resp_sender,
             } => {
                 if let Mode::Syncing = self.mode {
-                    if let Err(_err) =
-                        resp_sender.send(Err(error_when_syncing(executable_block.id)))
-                    {
-                        warn!("Failed to send execute block error (sync mode).");
-                    };
-                    return;
+                    info!("execute block {} in sync mode.", executable_block.id);
+                };
+                self.blocks_to_execute
+                    .push_back((executable_block, resp_sender));
+            }
+            Command::ExecuteBlockById {
+                transactions,
+                grandpa_id,
+                parent_id,
+                id,
+                resp_sender,
+            } => {
+                let parent_executed_trees = self.executed_trees_by_id(grandpa_id);
+
+                let executable_block = ExecutableBlock {
+                    transactions,
+                    parent_trees: parent_executed_trees,
+                    parent_id,
+                    id,
+                };
+
+                if let Mode::Syncing = self.mode {
+                    info!("execute block by id {} in sync mode.", executable_block.id);
                 }
                 self.blocks_to_execute
                     .push_back((executable_block, resp_sender));
@@ -180,11 +283,12 @@ where
                     .ledger_info()
                     .consensus_block_id();
                 if let Mode::Syncing = self.mode {
-                    if let Err(_err) = resp_sender.send(Err(error_when_syncing(id))) {
-                        warn!("Failed to send commit blocks error (sync mode).");
-                    };
-                    return;
-                }
+                    info!(
+                        "Commit block {} in sync mode. Switch back to Normal mode.",
+                        id
+                    );
+                    self.mode = Mode::Normal;
+                };
                 assert!(self
                     .block_batch_to_commit
                     .replace((committable_block_batch, resp_sender))
@@ -203,7 +307,37 @@ where
                     warn!("Failed to send execute and commit chunk response.");
                 }
             }
+            Command::RollbackBlock {
+                block_id,
+                resp_sender,
+            } => {
+                let res = self.rollback(block_id).map_err(|e| {
+                    security_log(SecurityEvent::InvalidBlock)
+                        .error(&e)
+                        .data(block_id)
+                        .log();
+                    e
+                });
+                resp_sender
+                    .send(res)
+                    .expect("Failed to send rollback response.");
+            }
         }
+    }
+
+    /// Query from storage
+    fn executed_trees_by_id(&self, id: HashValue) -> ExecutedTrees {
+        let info = self
+            .storage_read_client
+            .get_history_startup_info_by_block_id(id)
+            .expect("Failed to read startup info from storage.")
+            .expect("startup info is none.");
+
+        ExecutedTrees::new(
+            info.committed_tree_state.account_state_root_hash,
+            info.committed_tree_state.ledger_frozen_subtree_hashes,
+            info.committed_tree_state.version + 1,
+        )
     }
 
     /// Verifies the transactions based on the provided proofs and ledger info. If the transactions
@@ -222,20 +356,23 @@ where
 
         if let Mode::Normal = self.mode {
             self.mode = Mode::Syncing;
+            if self.synced_trees.is_none() {
+                self.synced_trees = Some(self.committed_trees.lock().unwrap().clone());
+            }
             info!("Start syncing...");
         }
+        let synced_trees = self.synced_trees.as_ref().expect("Synced tree must exist.");
 
-        let mut committed_trees = self.committed_trees.lock().unwrap();
         info!(
             "Local version: {}. First transaction version in request: {:?}. \
              Number of transactions in request: {}.",
-            committed_trees.txn_accumulator().num_leaves() - 1,
+            synced_trees.txn_accumulator().num_leaves() - 1,
             chunk.txn_list_with_proof.first_transaction_version,
             chunk.txn_list_with_proof.transactions.len(),
         );
 
         let (num_txns_to_skip, first_version) =
-            Self::verify_chunk(&chunk, committed_trees.txn_accumulator().num_leaves())?;
+            Self::verify_chunk(&chunk, synced_trees.txn_accumulator().num_leaves())?;
 
         let (txn_list_with_proof, li_with_sigs) =
             (chunk.txn_list_with_proof, chunk.ledger_info_with_sigs);
@@ -249,9 +386,9 @@ where
         // Construct a StateView and pass the transactions to VM.
         let state_view = VerifiedStateView::new(
             Arc::clone(&self.storage_read_client),
-            committed_trees.version(),
-            committed_trees.state_root(),
-            committed_trees.state_tree(),
+            synced_trees.version(),
+            synced_trees.state_root(),
+            synced_trees.state_tree(),
         );
         let vm_outputs = {
             let _timer = OP_COUNTERS.timer("vm_execute_chunk_time_s");
@@ -273,7 +410,7 @@ where
             account_to_proof,
             &transactions,
             vm_outputs,
-            &committed_trees,
+            synced_trees,
         )?;
 
         // Since we have verified the proofs, we just need to verify that each TransactionInfo
@@ -291,7 +428,7 @@ where
 
         // If this is the last chunk corresponding to this ledger info, send the ledger info to
         // storage.
-        let ledger_info_to_commit = if committed_trees.txn_accumulator().num_leaves()
+        let ledger_info_to_commit = if synced_trees.txn_accumulator().num_leaves()
             + txns_to_commit.len() as LeafCount
             == li_with_sigs.ledger_info().version() + 1
         {
@@ -316,13 +453,14 @@ where
             ledger_info_to_commit.clone(),
         )?;
 
-        *committed_trees = output.executed_trees().clone();
-        // Drop the read lock explicitely to avoid wrapping the code above into a code block.
-        drop(committed_trees);
+        self.synced_trees = Some(output.executed_trees().clone());
 
         if let Some(ledger_info_with_sigs) = ledger_info_to_commit {
             self.committed_timestamp_usecs = ledger_info_with_sigs.ledger_info().timestamp_usecs();
             self.mode = Mode::Normal;
+            assert!(self.synced_trees.is_some());
+            *self.committed_trees.lock().unwrap() =
+                self.synced_trees.take().expect("synced trees must exist.");
             info!(
                 "Synced to version {}.",
                 ledger_info_with_sigs.ledger_info().version()
@@ -375,6 +513,56 @@ where
     /// and only `C` and `E` have signatures, we will send `A`, `B` and `C` in the first batch,
     /// then `D` and `E` later in the another batch.
     fn commit_block_batch(&mut self, block_batch: CommittableBlockBatch) -> Result<()> {
+        let last_block = block_batch
+            .blocks
+            .last()
+            .expect("CommittableBlockBatch has at least 1 block.");
+
+        // Check that the version in ledger info (computed by consensus) matches the version
+        // computed by us. TODO: we should also verify signatures and check that timestamp is
+        // strictly increasing.
+        let ledger_info_with_sigs = block_batch.finality_proof;
+        let version = ledger_info_with_sigs.ledger_info().version();
+        let num_txns_in_speculative_accumulator = last_block
+            .output
+            .executed_trees()
+            .txn_accumulator()
+            .num_leaves();
+        assert_eq!(
+            version + 1,
+            num_txns_in_speculative_accumulator as Version,
+            "Number of transactions in ledger info ({}) does not match number of transactions \
+             in accumulator ({}).",
+            version + 1,
+            num_txns_in_speculative_accumulator,
+        );
+
+        // Skip txns that are already committed to allow failures in state sync process.
+        let num_txns_in_batch = block_batch
+            .blocks
+            .iter()
+            .map(|b| b.transactions.len())
+            .sum::<usize>() as u64;
+        let batch_first_version = version + 1 - num_txns_in_batch;
+        let num_committed_txns = self
+            .committed_trees
+            .lock()
+            .unwrap()
+            .txn_accumulator()
+            .num_leaves();
+        assert!(
+            batch_first_version <= num_committed_txns,
+            "first_version in commit_block_batch cannot exceed # of committed txns."
+        );
+
+        let num_txns_to_skip = num_committed_txns - batch_first_version;
+        if num_txns_to_skip != 0 {
+            info!(
+                "Skipping the first {} transactions when committing",
+                num_txns_to_skip
+            );
+        }
+
         // All transactions that need to go to storage. In the above example, this means all the
         // transactions in A, B and C whose status == TransactionStatus::Keep.
         let mut txns_to_commit = vec![];
@@ -382,6 +570,7 @@ where
         for block in &block_batch.blocks {
             for (txn, txn_data) in
                 itertools::zip_eq(&block.transactions, block.output.transaction_data())
+                    .skip(num_txns_to_skip as usize)
             {
                 if let TransactionStatus::Keep(_) = txn_data.status() {
                     txns_to_commit.push(TransactionToCommit::new(
@@ -396,40 +585,18 @@ where
             }
         }
 
-        let last_block = block_batch
-            .blocks
-            .last()
-            .expect("CommittableBlockBatch has at least 1 block.");
-
-        // Check that the version in ledger info (computed by consensus) matches the version
-        // computed by us. TODO: we should also verify signatures and check that timestamp is
-        // strictly increasing.
-        let ledger_info_with_sigs = block_batch.finality_proof;
-        let version = ledger_info_with_sigs.ledger_info().version();
-        let num_txns_in_accumulator = last_block
-            .output
-            .executed_trees()
-            .txn_accumulator()
-            .num_leaves();
-        assert_eq!(
-            version + 1,
-            num_txns_in_accumulator as Version,
-            "Number of transactions in ledger info ({}) does not match number of transactions \
-             in accumulator ({}).",
-            version + 1,
-            num_txns_in_accumulator,
-        );
-
         let num_txns_to_commit = txns_to_commit.len() as u64;
+
         {
             let _timer = OP_COUNTERS.timer("storage_save_transactions_time_s");
             OP_COUNTERS.observe(
                 "storage_save_transactions.count",
                 txns_to_commit.len() as f64,
             );
+            let first_version = version + 1 - num_txns_to_commit;
             self.storage_write_client.save_transactions(
                 txns_to_commit,
-                version + 1 - num_txns_to_commit, /* first_version */
+                first_version,
                 Some(ledger_info_with_sigs.clone()),
             )?;
         }
@@ -470,6 +637,7 @@ where
 
     fn execute_block(&mut self, executable_block: ExecutableBlock) -> Result<ProcessedVMOutput> {
         // Construct a StateView and pass the transactions to VM.
+
         let state_view = {
             let committed_trees = self.committed_trees.lock().unwrap();
             VerifiedStateView::new(
@@ -495,7 +663,10 @@ where
             .cloned()
             .collect();
         if !status.is_empty() {
-            debug!("Execution status: {:?}", status);
+            debug!(
+                "Block Id is {:?}, Parent Block Id is {:?}, Execution status: {:?}",
+                executable_block.id, executable_block.parent_id, status
+            );
         }
 
         let (account_to_btree, account_to_proof) = state_view.into();
@@ -545,6 +716,7 @@ where
                     vm_output.events().iter().map(CryptoHash::hash).collect();
                 InMemoryAccumulator::<EventAccumulatorHasher>::from_leaves(&event_hashes)
             };
+            let mut txn_info_hash = None;
 
             match vm_output.status() {
                 TransactionStatus::Keep(status) => {
@@ -561,7 +733,10 @@ where
                         vm_output.gas_used(),
                         status.major_status,
                     );
-                    txn_info_hashes.push(txn_info.hash());
+
+                    let real_txn_info_hash = txn_info.hash();
+                    txn_info_hashes.push(real_txn_info_hash);
+                    txn_info_hash = Some(real_txn_info_hash);
                 }
                 TransactionStatus::Discard(_) => {
                     ensure!(
@@ -583,6 +758,7 @@ where
                 Arc::new(event_tree),
                 vm_output.gas_used(),
                 num_accounts_created,
+                txn_info_hash,
             ));
             current_state_tree = state_tree;
 
@@ -646,7 +822,7 @@ where
                     // should not reach this code path. The exception is genesis transaction (and
                     // maybe other FTVM transactions).
                     match transaction.as_signed_user_txn()?.payload() {
-                        TransactionPayload::Program(_)
+                        TransactionPayload::Program
                         | TransactionPayload::Module(_)
                         | TransactionPayload::Script(_)
                         | TransactionPayload::Channel(_) => {

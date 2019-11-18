@@ -1,3 +1,6 @@
+// Copyright (c) The Libra Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::trusted_peers::{deserialize_key, serialize_key};
 use libra_crypto::{
     ed25519::*,
@@ -119,6 +122,10 @@ impl NetworkKeyPairs {
     /// Beware, this destroys the private key from this NodeConfig
     pub fn take_network_signing_private(&mut self) -> Option<Ed25519PrivateKey> {
         self.network_signing_private_key.take()
+    }
+
+    pub fn get_network_signing_public_key(&self) -> Ed25519PublicKey {
+        self.network_signing_public_key.clone()
     }
 
     pub fn get_network_identity_private(&self) -> X25519StaticPrivateKey {

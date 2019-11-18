@@ -84,8 +84,11 @@ pub const DISCOVERY_PROTOCOL_NAME: &[u8] = b"/libra/discovery/0.1.0";
 
 /// The actor running the discovery protocol.
 pub struct Discovery<TTicker, TSubstream> {
-    /// Note for self.
-    self_note: Note,
+    /// Note for self, which is prefixed with an underscore as this is not used but is in
+    /// preparation for logic that changes the advertised Note while the validator is running.
+    _note: Note,
+    /// PeerId for self.
+    peer_id: PeerId,
     /// Validator for verifying signatures on messages.
     trusted_peers: Arc<RwLock<HashMap<PeerId, NetworkPublicKeys>>>,
     /// Current state, maintaining the most recent Note for each peer, alongside parsed PeerInfo.
@@ -107,6 +110,7 @@ pub struct Discovery<TTicker, TSubstream> {
     msg_timeout: Duration,
     /// Random-number generator.
     rng: SmallRng,
+    is_public: bool,
 }
 
 impl<TTicker, TSubstream> Discovery<TTicker, TSubstream>
@@ -125,6 +129,7 @@ where
         peer_mgr_notifs_rx: channel::Receiver<PeerManagerNotification<TSubstream>>,
         conn_mgr_reqs_tx: channel::Sender<ConnectivityRequest>,
         msg_timeout: Duration,
+        is_public: bool,
     ) -> Self {
         // TODO(philiphayes): wire through config
         let dns_seed_addr = b"example.com";
@@ -140,12 +145,13 @@ where
 
         let known_peers = vec![(
             self_peer_id,
-            verify_note(&self_note, &trusted_peers).expect("The note is not valid"),
+            verify_note(&self_note, &trusted_peers, is_public).expect("The note is not valid"),
         )]
         .into_iter()
         .collect();
         Self {
-            self_note,
+            _note: self_note,
+            peer_id: self_peer_id,
             seed_peers,
             trusted_peers,
             known_peers,
@@ -156,6 +162,7 @@ where
             conn_mgr_reqs_tx,
             msg_timeout,
             rng: SmallRng::from_entropy(),
+            is_public,
         }
     }
 
@@ -163,8 +170,7 @@ where
     // list.
     async fn connect_to_seed_peers(&mut self) {
         debug!("Connecting to seed peers");
-        let self_peer_id =
-            PeerId::try_from(self.self_note.peer_id.clone()).expect("PeerId parsing failed");
+        let self_peer_id = self.peer_id;
         for (peer_id, peer_info) in self
             .seed_peers
             .iter()
@@ -290,6 +296,7 @@ where
                         peer_id,
                         substream,
                         self.msg_timeout,
+                        self.is_public,
                     )
                     .boxed(),
                 );
@@ -323,7 +330,7 @@ where
         // If a peer is previously unknown, or has a newer epoch number, we update its
         // corresponding entry in the map.
         let self_peer_id =
-            PeerId::try_from(self.self_note.peer_id.clone()).expect("PeerId parsing fails");
+            PeerId::try_from(self._note.peer_id.clone()).expect("PeerId parsing fails");
         for note in remote_notes {
             match self.known_peers.get_mut(&note.peer_id) {
                 // If we know about this peer, and receive the same or an older epoch, we do
@@ -340,13 +347,14 @@ where
                 }
                 _ => {
                     info!(
-                        "Received updated note for peer: {} from peer: {}",
+                        "Received updated note for peer: {} from peer: {} myself is: {}",
                         note.peer_id.short_str(),
-                        remote_peer.short_str()
+                        remote_peer.short_str(),
+                        self_peer_id.short_str(),
                     );
                     // We can never receive a note with a higher epoch number on us than what we
                     // ourselves have broadcasted.
-                    assert_ne!(note.peer_id, self_peer_id);
+                    assert_ne!(note.peer_id, self.peer_id);
                     // Update internal state of the peer with new Note.
                     self.known_peers.insert(note.peer_id, note.clone());
 
@@ -453,6 +461,7 @@ async fn handle_inbound_substream<TSubstream>(
     peer_id: PeerId,
     substream: NegotiatedSubstream<TSubstream>,
     timeout: Duration,
+    is_public: bool,
 ) -> (PeerId, Result<Vec<VerifiedNote>, NetworkError>)
 where
     TSubstream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
@@ -469,7 +478,7 @@ where
     let res_notes: Result<Vec<VerifiedNote>, NetworkError> = res_msg.and_then(|msg| {
         let mut verified_notes = vec![];
         msg.notes.iter().try_for_each(|note| {
-            verify_note(&note, &trusted_peers)
+            verify_note(&note, &trusted_peers, is_public)
                 .and_then(|verified_note| {
                     verified_notes.push(verified_note);
                     Ok(())
@@ -498,6 +507,7 @@ where
 fn verify_note(
     note: &Note,
     trusted_peers: &RwLock<HashMap<PeerId, NetworkPublicKeys>>,
+    is_public: bool,
 ) -> Result<VerifiedNote, NetworkError> {
     // validate PeerId
 
@@ -517,6 +527,7 @@ fn verify_note(
         peer_id,
         &peer_info_signature,
         &peer_info_bytes,
+        is_public,
     )?;
 
     let peer_info = PeerInfo::decode(peer_info_bytes)?;
@@ -534,6 +545,7 @@ fn verify_note(
             peer_id,
             &signed_full_node_payload.signature,
             &signed_full_node_payload.payload,
+            is_public,
         )?;
 
         let _ = FullNodePayload::decode(&signed_full_node_payload.payload)?;
@@ -560,25 +572,28 @@ fn verify_signature(
     signer: PeerId,
     signature: &[u8],
     msg: &[u8],
+    is_public: bool,
 ) -> Result<(), NetworkError> {
-    let verifier = SignatureValidator::new_with_quorum_voting_power(
-        trusted_peers
-            .read()
-            .unwrap()
-            .iter()
-            .map(|(peer_id, network_public_keys)| {
-                (
-                    *peer_id,
-                    SignatureInfo::new(network_public_keys.signing_public_key.clone(), 1),
-                )
-            })
-            .collect(),
-        1, /* quorum size */
-    )
-    .expect("Quorum size should be valid.");
-    let signature = Ed25519Signature::try_from(signature)
-        .map_err(|err| err.context(NetworkErrorKind::SignatureError))?;
-    verifier.verify_signature(signer, get_hash(msg), &signature)?;
+    if !is_public {
+        let verifier = SignatureValidator::new_with_quorum_voting_power(
+            trusted_peers
+                .read()
+                .unwrap()
+                .iter()
+                .map(|(peer_id, network_public_keys)| {
+                    (
+                        *peer_id,
+                        SignatureInfo::new(network_public_keys.signing_public_key.clone(), 1),
+                    )
+                })
+                .collect(),
+            1, /* quorum size */
+        )
+        .expect("Quorum size should be valid.");
+        let signature = Ed25519Signature::try_from(signature)
+            .map_err(|err| err.context(NetworkErrorKind::SignatureError))?;
+        verifier.verify_signature(signer, get_hash(msg), &signature)?;
+    }
     Ok(())
 }
 

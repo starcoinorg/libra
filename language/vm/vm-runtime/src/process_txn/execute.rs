@@ -1,3 +1,7 @@
+// Copyright (c) The Libra Core Contributors
+// SPDX-License-Identifier: Apache-2.0
+
+use crate::txn_executor::convert_txn_args;
 use crate::{
     code_cache::module_cache::ModuleCache,
     process_txn::verify::{VerTxn, VerifiedTransaction, VerifiedTransactionState},
@@ -51,79 +55,8 @@ where
         .into_raw_transaction()
         .into_payload()
     {
-        TransactionPayload::Program(program) => {
-            let VerifiedTransactionState {
-                mut txn_executor,
-                verified_txn,
-            } = txn_state.expect("program-based transactions should always have associated state");
-            let (main, modules) = match verified_txn {
-                VerTxn::Program(ver_program) => (ver_program.main, ver_program.modules),
-                _ => unreachable!("TransactionPayload::Program expects VerTxn::Program"),
-            };
-
-            let (_, args, module_bytes) = program.into_inner();
-
-            // Add modules to the cache and prepare for publishing.
-            let mut publish_modules = vec![];
-
-            for (module, raw_bytes) in modules.into_iter().zip(module_bytes) {
-                let module_id = module.self_id();
-
-                // Make sure that there is not already a module with this name published
-                // under the transaction sender's account.
-                // Note: although this reads from the "module cache", `get_loaded_module`
-                // will read through the cache to fetch the module from the global storage
-                // if it is not already cached.
-                match txn_executor.module_cache().get_loaded_module(&module_id) {
-                    Ok(None) => (), // No module with this name exists. safe to publish one
-                    Err(ref err) if err.is(StatusType::InvariantViolation) => {
-                        error!(
-                            "[VM] VM internal error while checking for duplicate module {:?}: {:?}",
-                            module_id, err
-                        );
-                        return ExecutedTransaction::discard_error_output(err.clone());
-                    }
-                    Ok(Some(_)) | Err(_) => {
-                        // A module with this name already exists (the error case is when the module
-                        // couldn't be verified, but it still exists so we should fail similarly).
-                        // It is not safe to publish another one; it would clobber the old module.
-                        // This would break code that links against the module and make published
-                        // resources from the old module inaccessible (or worse, accessible and not
-                        // typesafe).
-                        //
-                        // We are currently developing a versioning scheme for safe updates of
-                        // modules and resources.
-                        warn!("[VM] VM error duplicate module {:?}", module_id);
-                        return txn_executor.failed_transaction_cleanup(Err(vm_error(
-                            Location::default(),
-                            StatusCode::DUPLICATE_MODULE_NAME,
-                        )));
-                    }
-                }
-
-                txn_executor.module_cache().cache_module(module);
-
-                // `publish_modules` is initally empty, a single element is pushed per loop
-                // iteration and the number of iterations is bound to the max size
-                // of `modules`
-                assume!(publish_modules.len() < usize::max_value());
-                publish_modules.push((module_id, raw_bytes));
-            }
-
-            // Run main.
-            match txn_executor.interpeter_entrypoint(main, args) {
-                Ok(_) => txn_executor.transaction_cleanup(publish_modules),
-                Err(err) => match err.status_type() {
-                    StatusType::InvariantViolation => {
-                        error!("[VM] VM error running script: {:?}", err);
-                        ExecutedTransaction::discard_error_output(err)
-                    }
-                    _ => {
-                        warn!("[VM] User error running script: {:?}", err);
-                        txn_executor.failed_transaction_cleanup(Err(err))
-                    }
-                },
-            }
+        TransactionPayload::Program => {
+            ExecutedTransaction::discard_error_output(VMStatus::new(StatusCode::MALFORMED))
         }
         // WriteSet transaction. Just proceed and use the writeset as output.
         TransactionPayload::WriteSet(write_set) => TransactionOutput::new(
@@ -144,37 +77,24 @@ where
             let module_id = ver_module.self_id();
             // Make sure that there is not already a module with this name published
             // under the transaction sender's account.
-            // Note: although this reads from the "module cache", `get_loaded_module`
-            // will read through the cache to fetch the module from the global storage
-            // if it is not already cached.
-            match txn_executor.module_cache().get_loaded_module(&module_id) {
-                Ok(None) => (), // No module with this name exists. safe to publish one
-                Err(ref err) if err.is(StatusType::InvariantViolation) => {
-                    error!(
-                        "[VM] VM internal error while checking for duplicate module {:?}: {:?}",
-                        module_id, err
-                    );
-                    return ExecutedTransaction::discard_error_output(err.clone());
-                }
-                Ok(Some(_)) | Err(_) => {
-                    // A module with this name already exists (the error case is when the module
-                    // couldn't be verified, but it still exists so we should fail similarly).
-                    // It is not safe to publish another one; it would clobber the old module.
-                    // This would break code that links against the module and make published
-                    // resources from the old module inaccessible (or worse, accessible and not
-                    // typesafe).
-                    //
-                    // We are currently developing a versioning scheme for safe updates of
-                    // modules and resources.
-                    warn!("[VM] VM error duplicate module {:?}", module_id);
-                    return txn_executor.failed_transaction_cleanup(Err(vm_error(
-                        Location::default(),
-                        StatusCode::DUPLICATE_MODULE_NAME,
-                    )));
-                }
-            }
+            // Note: `exists_module` will fetch the module from either the
+            //       global storage or from the local data cache (which means that this module is
+            //       published within the same block).
+            if txn_executor.exists_module(&module_id) {
+                return txn_executor.failed_transaction_cleanup(Err(vm_error(
+                    Location::default(),
+                    StatusCode::DUPLICATE_MODULE_NAME,
+                )));
+            };
             let module_bytes = module.into_inner();
-            txn_executor.transaction_cleanup(vec![(module_id, module_bytes)])
+            let output = txn_executor.transaction_cleanup(vec![(module_id, module_bytes)]);
+            match output.status() {
+                TransactionStatus::Keep(status) if status.major_status == StatusCode::EXECUTED => {
+                    txn_executor.module_cache().cache_module(*ver_module);
+                }
+                _ => (),
+            };
+            output
         }
         TransactionPayload::Script(script) => {
             let VerifiedTransactionState {
@@ -242,6 +162,44 @@ where
                         script_output.events().to_vec(),
                         script_output.gas_used(),
                         script_output.status().clone(),
+                    )
+                }
+                ChannelTransactionPayloadBody::Action(action_body) => {
+                    let VerifiedTransactionState {
+                        mut txn_executor,
+                        verified_txn,
+                    } = txn_state
+                        .expect("script-based transactions should always have associated state");
+                    match verified_txn {
+                        VerTxn::ScriptAction() => {}
+                        _ => unreachable!("expects TransactionPayload::ScriptAction"),
+                    };
+                    //TODO use txn_executor.interpeter_entrypoint
+                    let action_output = match txn_executor.execute_function(
+                        action_body.action().module(),
+                        action_body.action().function(),
+                        convert_txn_args(action_body.action().args().to_vec()),
+                    ) {
+                        Ok(_) => txn_executor.transaction_cleanup(vec![]),
+                        Err(err) => match err.status_type() {
+                            StatusType::InvariantViolation => {
+                                error!("[VM] VM error running script: {:?}", err);
+                                ExecutedTransaction::discard_error_output(err)
+                            }
+                            _ => {
+                                warn!("[VM] User error running script: {:?}", err);
+                                txn_executor.failed_transaction_cleanup(Err(err))
+                            }
+                        },
+                    };
+                    let merged_write_set =
+                        WriteSet::merge(&action_body.write_set, action_output.write_set());
+                    //TODO(jole) eliminate clone
+                    TransactionOutput::new(
+                        merged_write_set,
+                        action_output.events().to_vec(),
+                        action_output.gas_used(),
+                        action_output.status().clone(),
                     )
                 }
             }

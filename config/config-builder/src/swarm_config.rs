@@ -7,7 +7,7 @@ use failure::prelude::*;
 use libra_config::{
     config::{
         BaseConfig, ConsensusConfig, NetworkConfig, NodeConfig, NodeConfigHelpers,
-        PersistableConfig, RoleType, VMPublishingOption,
+        PersistableConfig, RoleType, SafetyRulesBackend, SafetyRulesConfig, VMPublishingOption,
     },
     keys::{ConsensusKeyPair, NetworkKeyPairs},
     seed_peers::{SeedPeersConfig, SeedPeersConfigHelpers},
@@ -94,6 +94,7 @@ impl SwarmConfig {
             network_keypairs: NetworkKeyPairs::default(),
             network_peers: template_network.network_peers.clone(),
             seed_peers: template_network.seed_peers.clone(),
+            is_public_network: false,
         };
         let (mut private_keys, mut network_peers_config) =
             ConfigHelpers::gen_full_nodes(num_nodes, key_seed);
@@ -296,6 +297,14 @@ impl SwarmConfig {
             consensus_keys_file_name = format!("{}.node.consensus.keys.toml", node_id.to_string());
             consenus_keypair.save_config(&output_dir.join(&consensus_keys_file_name));
         }
+        // Prepare safety rules
+        let mut safety_rules_config = SafetyRulesConfig::default();
+        if role == RoleType::Validator {
+            safety_rules_config.backend = SafetyRulesBackend::OnDiskStorage {
+                default: true,
+                path: PathBuf::from(format!("{}.node.safety_rules.toml", node_id.to_string())),
+            }
+        }
         // Save network keys.
         let network_keys_file_name = format!("{}.node.network.keys.toml", node_id.to_string());
         network_keypairs.save_config(&output_dir.join(&network_keys_file_name));
@@ -336,6 +345,7 @@ impl SwarmConfig {
             network_keypairs: NetworkKeyPairs::default(),
             network_peers: template_network.network_peers.clone(),
             seed_peers: template_network.seed_peers.clone(),
+            is_public_network: false,
         };
         let consensus_config = ConsensusConfig {
             max_block_size: template.consensus.max_block_size,
@@ -348,6 +358,8 @@ impl SwarmConfig {
             // Dummy values - will be loaded from corresponding files.
             consensus_keypair: ConsensusKeyPair::default(),
             consensus_peers: template.consensus.consensus_peers.clone(),
+            safety_rules: safety_rules_config,
+            consensus_type: template.consensus.consensus_type.clone(),
         };
         let mut config = NodeConfig {
             base: base_config,
@@ -362,7 +374,6 @@ impl SwarmConfig {
             state_sync: template.state_sync.clone(),
             log_collector: template.log_collector.clone(),
             vm_config: template.vm_config.clone(),
-            secret_service: template.secret_service.clone(),
         };
         NodeConfigHelpers::randomize_config_ports(&mut config);
         config.vm_config.publishing_options = VMPublishingOption::Open;

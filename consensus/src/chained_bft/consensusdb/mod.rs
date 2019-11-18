@@ -5,8 +5,11 @@
 mod consensusdb_test;
 mod schema;
 
+pub use schema::block_index::BlockIndex;
+
 use crate::chained_bft::consensusdb::schema::{
     block::{BlockSchema, SchemaBlock},
+    block_index::BlockIndexSchema,
     quorum_certificate::QCSchema,
     single_entry::{SingleEntryKey, SingleEntrySchema},
 };
@@ -14,14 +17,13 @@ use consensus_types::{block::Block, common::Payload, quorum_cert::QuorumCert};
 use failure::prelude::*;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
-use schema::{BLOCK_CF_NAME, QC_CF_NAME, SINGLE_ENTRY_CF_NAME};
+use schema::{BLOCK_CF_NAME, BLOCK_INDEX_CF_NAME, QC_CF_NAME, SINGLE_ENTRY_CF_NAME};
 use schemadb::{
     ColumnFamilyOptions, ColumnFamilyOptionsMap, ReadOptions, SchemaBatch, DB, DEFAULT_CF_NAME,
 };
 use std::{collections::HashMap, iter::Iterator, path::Path, time::Instant};
 
 type HighestTimeoutCertificate = Vec<u8>;
-type ConsensusStateData = Vec<u8>;
 type VoteMsgData = Vec<u8>;
 
 pub struct ConsensusDB {
@@ -38,6 +40,7 @@ impl ConsensusDB {
             (BLOCK_CF_NAME, ColumnFamilyOptions::default()),
             (QC_CF_NAME, ColumnFamilyOptions::default()),
             (SINGLE_ENTRY_CF_NAME, ColumnFamilyOptions::default()),
+            (BLOCK_INDEX_CF_NAME, ColumnFamilyOptions::default()),
         ]
         .iter()
         .cloned()
@@ -61,13 +64,11 @@ impl ConsensusDB {
     pub fn get_data<T: Payload>(
         &self,
     ) -> Result<(
-        Option<ConsensusStateData>,
         Option<VoteMsgData>,
         Option<HighestTimeoutCertificate>,
         Vec<Block<T>>,
         Vec<QuorumCert>,
     )> {
-        let consensus_state = self.get_state()?;
         let last_vote_msg_data = self.get_last_vote_msg_data()?;
         let highest_timeout_certificate = self.get_highest_timeout_certificate()?;
         let consensus_blocks = self
@@ -81,7 +82,6 @@ impl ConsensusDB {
             .map(|(_block_hash, qc)| qc)
             .collect::<Vec<_>>();
         Ok((
-            consensus_state,
             last_vote_msg_data,
             highest_timeout_certificate,
             consensus_blocks,
@@ -101,9 +101,8 @@ impl ConsensusDB {
         self.commit(batch)
     }
 
-    pub fn save_state(&self, state: ConsensusStateData, last_vote: VoteMsgData) -> Result<()> {
+    pub fn save_state(&self, last_vote: VoteMsgData) -> Result<()> {
         let mut batch = SchemaBatch::new();
-        batch.put::<SingleEntrySchema>(&SingleEntryKey::ConsensusState, &state)?;
         batch.put::<SingleEntrySchema>(&SingleEntryKey::LastVoteMsg, &last_vote)?;
         self.commit(batch)
     }
@@ -162,12 +161,6 @@ impl ConsensusDB {
             .get::<SingleEntrySchema>(&SingleEntryKey::HighestTimeoutCertificate)
     }
 
-    /// Get latest consensus state (we only store the latest state).
-    fn get_state(&self) -> Result<Option<Vec<u8>>> {
-        self.db
-            .get::<SingleEntrySchema>(&SingleEntryKey::ConsensusState)
-    }
-
     /// Get latest vote message data (if available)
     fn get_last_vote_msg_data(&self) -> Result<Option<Vec<u8>>> {
         self.db
@@ -187,5 +180,41 @@ impl ConsensusDB {
         let mut iter = self.db.iter::<QCSchema>(ReadOptions::default())?;
         iter.seek_to_first();
         iter.collect::<Result<HashMap<HashValue, QuorumCert>>>()
+    }
+
+    /// Get block by hash
+    pub fn get_block_by_hash<T: Payload>(&self, hash: &HashValue) -> Option<Block<T>> {
+        match self.db.get::<BlockSchema<T>>(&hash) {
+            Ok(block) => match block {
+                Some(b) => Some(b.borrow_into_block().clone()),
+                None => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Get blocks by hashs
+    pub fn get_blocks_by_hashs<T: Payload>(&self, hashs: Vec<HashValue>) -> Option<Vec<Block<T>>> {
+        let mut blocks = vec![];
+        for hash in hashs {
+            match self.get_block_by_hash(&hash) {
+                Some(b) => blocks.push(b),
+                None => return None,
+            }
+        }
+
+        return Some(blocks);
+    }
+
+    /// Insert BlockIndex
+    pub fn insert_block_index(&self, height: &u64, block_index: &BlockIndex) -> Result<()> {
+        let mut batch = SchemaBatch::new();
+        batch.put::<BlockIndexSchema>(&height, &block_index)?;
+        self.commit(batch)
+    }
+
+    /// Load BlockIndex
+    pub fn _load_block_index(&self) -> Result<Vec<BlockIndex>> {
+        unimplemented!()
     }
 }

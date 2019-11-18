@@ -17,13 +17,20 @@ mod mempool {
 mod state_synchronizer {
     include!(concat!(env!("OUT_DIR"), "/state_synchronizer.rs"));
 }
+mod health_checker {
+    include!(concat!(env!("OUT_DIR"), "/health_checker.rs"));
+}
 
 use ::libra_types::proto::types;
 
 pub use self::{
     consensus::{
         consensus_msg::Message as ConsensusMsg_oneof, Block, ConsensusMsg, Proposal, RequestBlock,
-        RespondBlock, SyncInfo, VoteMsg, VoteProposal,
+        RequestEpoch, RespondBlock, SyncInfo, VoteMsg, VoteProposal, BlockPayloadExt
+    },
+    health_checker::{
+        health_checker_msg::Message as HealthCheckerMsg_oneof, HealthCheckerMsg, Ping as Ping2,
+        Pong as Pong2,
     },
     mempool::MempoolSyncMsg,
     network::{

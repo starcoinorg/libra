@@ -66,6 +66,7 @@ use libra_types::{
 use schemadb::{ColumnFamilyOptions, ColumnFamilyOptionsMap, DB, DEFAULT_CF_NAME};
 use std::{convert::TryInto, iter::Iterator, path::Path, sync::Arc, time::Instant};
 use storage_proto::StartupInfo;
+use storage_proto::TreeState;
 
 lazy_static! {
     static ref OP_COUNTER: OpMetrics = OpMetrics::new_and_registered("storage");
@@ -105,6 +106,7 @@ impl LibraDB {
                 /* LedgerInfo CF = */ DEFAULT_CF_NAME,
                 ColumnFamilyOptions::default(),
             ),
+            (EPOCH_BY_VERSION_CF_NAME, ColumnFamilyOptions::default()),
             (EVENT_ACCUMULATOR_CF_NAME, ColumnFamilyOptions::default()),
             (EVENT_BY_KEY_CF_NAME, ColumnFamilyOptions::default()),
             (EVENT_CF_NAME, ColumnFamilyOptions::default()),
@@ -112,6 +114,7 @@ impl LibraDB {
                 JELLYFISH_MERKLE_NODE_CF_NAME,
                 ColumnFamilyOptions::default(),
             ),
+            (LEDGER_HISTORY_CF_NAME, ColumnFamilyOptions::default()),
             (LEDGER_COUNTERS_CF_NAME, ColumnFamilyOptions::default()),
             (STALE_NODE_INDEX_CF_NAME, ColumnFamilyOptions::default()),
             (TRANSACTION_CF_NAME, ColumnFamilyOptions::default()),
@@ -456,7 +459,7 @@ impl LibraDB {
     ) -> Result<(
         Vec<ResponseItem>,
         LedgerInfoWithSignatures,
-        Vec<ValidatorChangeEventWithProof>,
+        ValidatorChangeEventWithProof,
         AccumulatorConsistencyProof,
     )> {
         error_if_too_many_requested(request_items.len() as u64, MAX_REQUEST_ITEMS)?;
@@ -544,7 +547,7 @@ impl LibraDB {
         Ok((
             response_items,
             ledger_info_with_sigs,
-            vec![], /* TODO: validator_change_events */
+            ValidatorChangeEventWithProof::new(vec![]),
             ledger_consistency_proof,
         ))
     }
@@ -576,19 +579,80 @@ impl LibraDB {
         };
         let ledger_info = ledger_info_with_sigs.ledger_info().clone();
 
-        let (latest_version, txn_info) = self.ledger_store.get_latest_transaction_info()?;
+        let latest_tree_state = {
+            let latest_version = ledger_info.version();
+            let txn_info = self.ledger_store.get_transaction_info(latest_version)?;
+            let account_state_root_hash = txn_info.state_root_hash();
+            let ledger_frozen_subtree_hashes = self
+                .ledger_store
+                .get_ledger_frozen_subtree_hashes(latest_version)?;
+            TreeState::new(
+                latest_version,
+                ledger_frozen_subtree_hashes,
+                account_state_root_hash,
+            )
+        };
+        assert!(latest_tree_state.version >= ledger_info.version());
+
+        let startup_info = if latest_tree_state.version != ledger_info.version() {
+            // We synced to some version ahead of the version of the latest ledger info. Thus, we are still in sync mode.
+            let committed_version = ledger_info.version();
+            let committed_txn_info = self.ledger_store.get_transaction_info(committed_version)?;
+            let committed_account_state_root_hash = committed_txn_info.state_root_hash();
+            let committed_ledger_frozen_subtree_hashes = self
+                .ledger_store
+                .get_ledger_frozen_subtree_hashes(committed_version)?;
+            StartupInfo {
+                ledger_info,
+                committed_tree_state: TreeState::new(
+                    committed_version,
+                    committed_ledger_frozen_subtree_hashes,
+                    committed_account_state_root_hash,
+                ),
+                synced_tree_state: Some(latest_tree_state),
+            }
+        } else {
+            // The version of the latest ledger info matches other data. So the storage is not in sync mode.
+            StartupInfo {
+                ledger_info,
+                committed_tree_state: latest_tree_state,
+                synced_tree_state: None,
+            }
+        };
+
+        Ok(Some(startup_info))
+    }
+
+    /// Get for pre compute
+    pub fn get_history_startup_info_by_block_id(
+        &self,
+        block_id: &HashValue,
+    ) -> Result<Option<StartupInfo>> {
+        let ledger_info_with_sigs = match self.ledger_store.get_ledger_info_by_block_id(block_id) {
+            Ok(x) => x,
+            Err(err) => {
+                warn!("err:{:?}", err);
+                return Ok(None);
+            }
+        };
+        let ledger_info = ledger_info_with_sigs.ledger_info().clone();
+
+        let version = ledger_info.version();
+        let txn_info = self.ledger_store.get_transaction_info(version)?;
 
         let account_state_root_hash = txn_info.state_root_hash();
 
         let ledger_frozen_subtree_hashes = self
             .ledger_store
-            .get_ledger_frozen_subtree_hashes(latest_version)?;
-
+            .get_ledger_frozen_subtree_hashes(version)?;
         Ok(Some(StartupInfo {
             ledger_info,
-            latest_version,
-            account_state_root_hash,
-            ledger_frozen_subtree_hashes,
+            committed_tree_state : TreeState::new(
+                version,
+                ledger_frozen_subtree_hashes,
+                account_state_root_hash,
+            ),
+            synced_tree_state: None,
         }))
     }
 
@@ -717,6 +781,13 @@ impl LibraDB {
             events,
             proof,
         })
+    }
+
+    pub fn rollback_by_block_id(&self, block_id: &HashValue) -> Result<()> {
+        let mut cs = ChangeSet::new();
+        self.ledger_store.rollback_by_block_id(block_id, &mut cs)?;
+        let sealed_cs = SealedChangeSet { batch: cs.batch };
+        self.commit(sealed_cs)
     }
 }
 
