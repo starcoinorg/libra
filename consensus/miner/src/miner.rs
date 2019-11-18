@@ -85,7 +85,6 @@ impl MineClient {
     pub async fn start(&self) {
         let mut ctx_stream = MineCtxStream::new(self.rpc_client.clone());
         while let Some(ctx) = ctx_stream.next().await {
-            println!("the ctx is {:?}", ctx);
             let proof = mine(&ctx.header, ctx.nonce, MAX_EDGE, CYCLE_LENGTH);
             if let Some(proof) = proof {
                 let req = MinedBlockRequest {
