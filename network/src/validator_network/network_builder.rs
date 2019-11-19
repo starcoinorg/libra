@@ -17,13 +17,11 @@ use crate::{
     peer_manager::{PeerManager, PeerManagerRequestSender},
     proto::PeerInfo,
     protocols::{
-        direct_send::DirectSend,
-        discovery::{Discovery, DISCOVERY_PROTOCOL_NAME},
-        health_checker::{HealthChecker, PING_PROTOCOL_NAME},
-        identity::Identity,
-        rpc::Rpc,
+        direct_send::DirectSend, discovery::Discovery, health_checker::HealthChecker,
+        identity::Identity, rpc::Rpc,
     },
     transport::*,
+    validator_network::{DISCOVERY_DIRECT_SEND_PROTOCOL, HEALTH_CHECKER_RPC_PROTOCOL},
     ProtocolId,
 };
 use channel;
@@ -102,6 +100,7 @@ pub struct NetworkBuilder {
     max_connection_delay_ms: u64,
     signing_keys: Option<(Ed25519PrivateKey, Ed25519PublicKey)>,
     is_permissioned: bool,
+    health_checker_enabled: bool,
     is_public: bool,
 }
 
@@ -122,8 +121,8 @@ impl NetworkBuilder {
             seed_peers: HashMap::new(),
             trusted_peers: Arc::new(RwLock::new(HashMap::new())),
             channel_size: NETWORK_CHANNEL_SIZE,
-            direct_send_protocols: vec![],
-            rpc_protocols: vec![],
+            direct_send_protocols: vec![ProtocolId::from_static(DISCOVERY_DIRECT_SEND_PROTOCOL)],
+            rpc_protocols: vec![ProtocolId::from_static(HEALTH_CHECKER_RPC_PROTOCOL)],
             transport: TransportType::Memory,
             discovery_interval_ms: DISCOVERY_INTERVAL_MS,
             discovery_msg_timeout_ms: DISOVERY_MSG_TIMEOUT_MS,
@@ -139,6 +138,7 @@ impl NetworkBuilder {
             max_connection_delay_ms: MAX_CONNECTION_DELAY_MS,
             signing_keys: None,
             is_permissioned: true,
+            health_checker_enabled: true,
             is_public: false,
         }
     }
@@ -276,12 +276,16 @@ impl NetworkBuilder {
     /// Set the protocol IDs that DirectSend actor subscribes.
     pub fn direct_send_protocols(&mut self, protocols: Vec<ProtocolId>) -> &mut Self {
         self.direct_send_protocols = protocols;
+        self.direct_send_protocols
+            .push(ProtocolId::from_static(DISCOVERY_DIRECT_SEND_PROTOCOL));
         self
     }
 
     /// Set the protocol IDs that RPC actor subscribes.
     pub fn rpc_protocols(&mut self, protocols: Vec<ProtocolId>) -> &mut Self {
         self.rpc_protocols = protocols;
+        self.rpc_protocols
+            .push(ProtocolId::from_static(HEALTH_CHECKER_RPC_PROTOCOL));
         self
     }
 
@@ -297,19 +301,30 @@ impl NetworkBuilder {
     }
 
     fn supported_protocols(&self) -> Vec<ProtocolId> {
-        let mut supported_protocols: Vec<ProtocolId> = self
-            .direct_send_protocols
+        self.direct_send_protocols
             .iter()
             .chain(&self.rpc_protocols)
-            .chain(&vec![ProtocolId::from_static(PING_PROTOCOL_NAME)])
             .cloned()
-            .collect();
-        // TODO: This check is performed at 2 places to modify how protocols are setup. Ideally we
-        // should do it at only 1 place.
-        if self.is_permissioned {
-            supported_protocols.push(ProtocolId::from_static(DISCOVERY_PROTOCOL_NAME));
+            .collect()
+    }
+
+    /// Enable or disable the health checker protocol in this network instance.
+    // TODO(philiphayes): remember to remove this
+    #[allow(dead_code)]
+    fn health_checker_enabled(&mut self, enabled: bool) -> &mut Self {
+        self.health_checker_enabled = enabled;
+        let health_checker_protocol = ProtocolId::from_static(HEALTH_CHECKER_RPC_PROTOCOL);
+        if enabled {
+            self.rpc_protocols.push(health_checker_protocol);
+        } else {
+            // TODO(philiphayes): replace with `Vec::remove_item` when it's stable.
+            let maybe_idx = self
+                .rpc_protocols
+                .iter()
+                .position(|x| *x == health_checker_protocol);
+            maybe_idx.map(|idx| self.rpc_protocols.remove(idx));
         }
-        supported_protocols
+        self
     }
 
     /// Create the configured `NetworkBuilder`
@@ -421,30 +436,9 @@ impl NetworkBuilder {
         self.executor.spawn(rpc.start());
         debug!("Started RPC actor");
 
-        // Initialize and start HealthChecker.
-        let (pm_ping_notifs_tx, pm_ping_notifs_rx) = channel::new(
-            self.channel_size,
-            &counters::PENDING_PEER_MANAGER_PING_NOTIFICATIONS,
-        );
-        protocol_handlers.insert(
-            ProtocolId::from_static(PING_PROTOCOL_NAME),
-            pm_ping_notifs_tx.clone(),
-        );
-        peer_event_handlers.push(pm_ping_notifs_tx);
-        let health_checker = HealthChecker::new(
-            Interval::new_interval(Duration::from_millis(self.ping_interval_ms)).fuse(),
-            PeerManagerRequestSender::new(pm_reqs_tx.clone()),
-            pm_ping_notifs_rx,
-            Duration::from_millis(self.ping_timeout_ms),
-            self.ping_failures_tolerated,
-        );
-        self.executor.spawn(health_checker.start());
-        debug!("Started health checker");
-
-        let mut net_conn_mgr_reqs_tx = None;
-
-        // We start the discovery and connectivity_manager module only if the network is
+        // We start the connectivity_manager module only if the network is
         // permissioned.
+        let mut net_conn_mgr_reqs_tx = None;
         if self.is_permissioned || self.is_public {
             // Initialize and start connectivity manager.
             let (conn_mgr_reqs_tx, conn_mgr_reqs_rx) = channel::new(
@@ -470,39 +464,6 @@ impl NetworkBuilder {
             );
             self.executor.spawn(conn_mgr.start());
             debug!("Started connection manager");
-
-            // Initialize and start Discovery actor.
-            let (pm_discovery_notifs_tx, pm_discovery_notifs_rx) = channel::new(
-                self.channel_size,
-                &counters::PENDING_PEER_MANAGER_DISCOVERY_NOTIFICATIONS,
-            );
-            protocol_handlers.insert(
-                ProtocolId::from_static(DISCOVERY_PROTOCOL_NAME),
-                pm_discovery_notifs_tx.clone(),
-            );
-            peer_event_handlers.push(pm_discovery_notifs_tx);
-            let (signing_private_key, _signing_public_key) =
-                self.signing_keys.take().expect("Signing keys not set");
-            // Setup signer from keys.
-            let signer = ValidatorSigner::new(self.peer_id, signing_private_key);
-            let discovery = Discovery::new(
-                self.peer_id,
-                vec![self
-                    .advertised_address
-                    .clone()
-                    .unwrap_or_else(|| self.addr.clone())],
-                signer,
-                self.seed_peers.clone(),
-                self.trusted_peers.clone(),
-                Interval::new_interval(Duration::from_millis(self.discovery_interval_ms)).fuse(),
-                PeerManagerRequestSender::new(pm_reqs_tx.clone()),
-                pm_discovery_notifs_rx,
-                conn_mgr_reqs_tx.clone(),
-                Duration::from_millis(self.discovery_msg_timeout_ms),
-                self.is_public,
-            );
-            self.executor.spawn(discovery.start());
-            debug!("Started discovery protocol actor");
         }
 
         let pm_net_reqs_tx = pm_reqs_tx.clone();
@@ -529,14 +490,14 @@ impl NetworkBuilder {
         // Setup communication channels.
         let (network_reqs_tx, network_reqs_rx) =
             channel::new(self.channel_size, &counters::PENDING_NETWORK_REQUESTS);
-        let validator_network = NetworkProvider::new(
+        let mut network_provider = NetworkProvider::new(
             pm_net_reqs_tx,
             pm_net_notifs_rx,
             rpc_reqs_tx,
             rpc_net_notifs_rx,
             ds_reqs_tx,
             ds_net_notifs_rx,
-            net_conn_mgr_reqs_tx,
+            net_conn_mgr_reqs_tx.clone(),
             network_reqs_rx,
             network_reqs_tx,
             self.max_concurrent_network_reqs,
@@ -544,6 +505,53 @@ impl NetworkBuilder {
             self.channel_size,
             peer_ids,
         );
-        (listen_addr, Box::new(validator_network))
+
+        if self.health_checker_enabled {
+            // Initialize and start HealthChecker.
+            let (hc_network_tx, hc_network_rx) = network_provider
+                .add_health_checker(vec![ProtocolId::from_static(HEALTH_CHECKER_RPC_PROTOCOL)]);
+            let health_checker = HealthChecker::new(
+                Interval::new_interval(Duration::from_millis(self.ping_interval_ms)).fuse(),
+                hc_network_tx,
+                hc_network_rx,
+                Duration::from_millis(self.ping_timeout_ms),
+                self.ping_failures_tolerated,
+            );
+            self.executor.spawn(health_checker.start());
+            debug!("Started health checker");
+        }
+
+        // We start the discovery module only if the network is permissioned.
+        // Note: We use the `is_permissioned` flag as a proxy for whether we need to run the
+        // discovery module or not. We should make this more explicit eventually.
+        if self.is_permissioned {
+            // Initialize and start Discovery actor.
+            let (signing_private_key, _signing_public_key) =
+                self.signing_keys.take().expect("Signing keys not set");
+            // Setup signer from keys.
+            let signer = ValidatorSigner::new(self.peer_id, signing_private_key);
+            // Get handles for network events and sender.
+            let (discovery_network_tx, discovery_network_rx) = network_provider.add_discovery(
+                vec![ProtocolId::from_static(DISCOVERY_DIRECT_SEND_PROTOCOL)],
+            );
+            let discovery = Discovery::new(
+                self.peer_id,
+                vec![self
+                    .advertised_address
+                    .clone()
+                    .unwrap_or_else(|| self.addr.clone())],
+                signer,
+                self.seed_peers.clone(),
+                self.trusted_peers.clone(),
+                Interval::new_interval(Duration::from_millis(self.discovery_interval_ms)).fuse(),
+                discovery_network_tx,
+                discovery_network_rx,
+                net_conn_mgr_reqs_tx.take().unwrap(),
+                Duration::from_millis(self.discovery_msg_timeout_ms),
+            );
+            self.executor.spawn(discovery.start());
+            debug!("Started discovery protocol actor");
+        }
+        (listen_addr, Box::new(network_provider))
     }
 }

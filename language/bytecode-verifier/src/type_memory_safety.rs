@@ -226,18 +226,6 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
         idx: StructDefinitionIndex,
         type_actuals_idx: LocalsSignatureIndex,
     ) -> VMResult<()> {
-        self.check_borrow_global(state, offset, mut_, idx, type_actuals_idx, false)
-    }
-
-    fn check_borrow_global(
-        &mut self,
-        state: &mut AbstractState,
-        offset: usize,
-        mut_: bool,
-        idx: StructDefinitionIndex,
-        type_actuals_idx: LocalsSignatureIndex,
-        is_channel: bool,
-    ) -> VMResult<()> {
         let struct_definition = self.module().struct_def_at(idx);
         if !StructDefinitionView::new(self.module(), struct_definition).is_nominal_resource() {
             return Err(err_at_offset(
@@ -250,14 +238,12 @@ impl<'a> TypeAndMemorySafetyAnalysis<'a> {
         let struct_type =
             SignatureToken::Struct(struct_definition.struct_handle, type_actuals.clone());
         SignatureTokenView::new(self.module(), &struct_type).kind(self.type_formals());
-        if !is_channel {
-            let operand = self.stack.pop().unwrap();
-            if operand.signature != SignatureToken::Address {
-                return Err(err_at_offset(
-                    StatusCode::BORROWFIELD_TYPE_MISMATCH_ERROR,
-                    offset,
-                ));
-            }
+        let operand = self.stack.pop().unwrap();
+        if operand.signature != SignatureToken::Address {
+            return Err(err_at_offset(
+                StatusCode::BORROWFIELD_TYPE_MISMATCH_ERROR,
+                offset,
+            ));
         }
 
         if let Some(nonce) = state.borrow_global_value(mut_, idx) {

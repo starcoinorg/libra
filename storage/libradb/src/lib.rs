@@ -305,18 +305,13 @@ impl LibraDB {
             .version())
     }
 
-    /// Returns the latest ledger infos per epoch starting with the given epoch num:
-    /// - the latest ledger info of the current epoch is just the last ledger info in the system
-    /// - the latest ledger infos of previous epochs contain reconfiguration validator sets.
-    /// Returns error in case `start_epoch` is higher than the currently known epoch.
-    /// The returned vector is not necessarily sorted: the client should make sure to sort it
-    /// by epoch number.
-    pub fn get_latest_ledger_infos_per_epoch(
+    /// Returns ledger infos reflecting epoch bumps starting with the given epoch.
+    pub fn get_epoch_change_ledger_infos(
         &self,
         start_epoch: u64,
     ) -> Result<Vec<LedgerInfoWithSignatures>> {
         self.ledger_store
-            .get_latest_ledger_infos_per_epoch(start_epoch)
+            .get_epoch_change_ledger_infos(start_epoch, self.get_latest_version()?)
     }
 
     /// Persist transactions. Called by the executor module when either syncing nodes or committing
@@ -466,7 +461,8 @@ impl LibraDB {
 
         // Get the latest ledger info and signatures
         let ledger_info_with_sigs = self.ledger_store.get_latest_ledger_info()?;
-        let ledger_version = ledger_info_with_sigs.ledger_info().version();
+        let ledger_info = ledger_info_with_sigs.ledger_info();
+        let ledger_version = ledger_info.version();
 
         // Fulfill all request items
         let response_items = request_items
@@ -540,6 +536,20 @@ impl LibraDB {
             })
             .collect::<Result<Vec<_>>>()?;
 
+        // TODO: cache last epoch change version to avoid a DB access in most cases.
+        let client_epoch = self.ledger_store.get_epoch(client_known_version)?;
+        let current_epoch = if ledger_info.next_validator_set().is_some() {
+            ledger_info.epoch() + 1
+        } else {
+            ledger_info.epoch()
+        };
+        let validator_change_proof = if client_epoch < current_epoch {
+            self.ledger_store
+                .get_epoch_change_ledger_infos(client_epoch, ledger_info.version())?
+        } else {
+            Vec::new()
+        };
+
         let ledger_consistency_proof = self
             .ledger_store
             .get_consistency_proof(client_known_version, ledger_version)?;
@@ -547,7 +557,7 @@ impl LibraDB {
         Ok((
             response_items,
             ledger_info_with_sigs,
-            ValidatorChangeEventWithProof::new(vec![]),
+            ValidatorChangeEventWithProof::new(validator_change_proof),
             ledger_consistency_proof,
         ))
     }
@@ -577,11 +587,9 @@ impl LibraDB {
             Some(x) => x,
             None => return Ok(None),
         };
-        let ledger_info = ledger_info_with_sigs.ledger_info().clone();
 
         let latest_tree_state = {
-            let latest_version = ledger_info.version();
-            let txn_info = self.ledger_store.get_transaction_info(latest_version)?;
+            let (latest_version, txn_info) = self.ledger_store.get_latest_transaction_info()?;
             let account_state_root_hash = txn_info.state_root_hash();
             let ledger_frozen_subtree_hashes = self
                 .ledger_store
@@ -592,18 +600,19 @@ impl LibraDB {
                 account_state_root_hash,
             )
         };
-        assert!(latest_tree_state.version >= ledger_info.version());
+        let li_version = ledger_info_with_sigs.ledger_info().version();
+        assert!(latest_tree_state.version >= li_version);
 
-        let startup_info = if latest_tree_state.version != ledger_info.version() {
+        let startup_info = if latest_tree_state.version != li_version {
             // We synced to some version ahead of the version of the latest ledger info. Thus, we are still in sync mode.
-            let committed_version = ledger_info.version();
+            let committed_version = li_version;
             let committed_txn_info = self.ledger_store.get_transaction_info(committed_version)?;
             let committed_account_state_root_hash = committed_txn_info.state_root_hash();
             let committed_ledger_frozen_subtree_hashes = self
                 .ledger_store
                 .get_ledger_frozen_subtree_hashes(committed_version)?;
             StartupInfo {
-                ledger_info,
+                ledger_info: ledger_info_with_sigs,
                 committed_tree_state: TreeState::new(
                     committed_version,
                     committed_ledger_frozen_subtree_hashes,
@@ -614,46 +623,13 @@ impl LibraDB {
         } else {
             // The version of the latest ledger info matches other data. So the storage is not in sync mode.
             StartupInfo {
-                ledger_info,
+                ledger_info: ledger_info_with_sigs,
                 committed_tree_state: latest_tree_state,
                 synced_tree_state: None,
             }
         };
 
         Ok(Some(startup_info))
-    }
-
-    /// Get for pre compute
-    pub fn get_history_startup_info_by_block_id(
-        &self,
-        block_id: &HashValue,
-    ) -> Result<Option<StartupInfo>> {
-        let ledger_info_with_sigs = match self.ledger_store.get_ledger_info_by_block_id(block_id) {
-            Ok(x) => x,
-            Err(err) => {
-                warn!("err:{:?}", err);
-                return Ok(None);
-            }
-        };
-        let ledger_info = ledger_info_with_sigs.ledger_info().clone();
-
-        let version = ledger_info.version();
-        let txn_info = self.ledger_store.get_transaction_info(version)?;
-
-        let account_state_root_hash = txn_info.state_root_hash();
-
-        let ledger_frozen_subtree_hashes = self
-            .ledger_store
-            .get_ledger_frozen_subtree_hashes(version)?;
-        Ok(Some(StartupInfo {
-            ledger_info,
-            committed_tree_state : TreeState::new(
-                version,
-                ledger_frozen_subtree_hashes,
-                account_state_root_hash,
-            ),
-            synced_tree_state: None,
-        }))
     }
 
     // ======================= State Synchronizer Internal APIs ===================================

@@ -1,7 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::chained_bft::block_storage::BlockStore;
+use crate::chained_bft::block_storage::{BlockReader, BlockStore};
 use crate::chained_bft::chained_bft_smr::ChainedBftSMRConfig;
 use crate::chained_bft::event_processor::EventProcessor;
 use crate::chained_bft::liveness::multi_proposer_election::MultiProposer;
@@ -91,12 +91,13 @@ impl<T: Payload> EpochManager<T> {
     /// Create a proposer election handler based on proposers
     fn create_proposer_election(
         &self,
+        epoch: u64,
         validators: &ValidatorVerifier,
     ) -> Box<dyn ProposerElection<T> + Send + Sync> {
         let proposers = validators.get_ordered_account_addresses();
         match self.config.proposer_type {
             ConsensusProposerType::MultipleOrderedProposers => {
-                Box::new(MultiProposer::new(proposers, 2))
+                Box::new(MultiProposer::new(epoch, proposers, 2))
             }
             ConsensusProposerType::RotatingProposer => Box::new(RotatingProposer::new(
                 proposers,
@@ -203,7 +204,7 @@ impl<T: Payload> EpochManager<T> {
                 }
             }
         };
-        let safety_rules = SafetyRules::new(safety_rules_storage, signer);
+        let mut safety_rules = SafetyRules::new(safety_rules_storage, signer);
 
         let block_store = Arc::new(block_on(BlockStore::new(
             Arc::clone(&self.storage),
@@ -211,6 +212,8 @@ impl<T: Payload> EpochManager<T> {
             Arc::clone(&self.state_computer),
             self.config.max_pruned_blocks_in_mem,
         )));
+
+        safety_rules.start_new_epoch(block_store.highest_quorum_cert().as_ref());
 
         // txn manager is required both by proposal generator (to pull the proposers)
         // and by event processor (to update their status).
@@ -225,7 +228,7 @@ impl<T: Payload> EpochManager<T> {
         let pacemaker =
             self.create_pacemaker(self.time_service.clone(), self.timeout_sender.clone());
 
-        let proposer_election = self.create_proposer_election(&validators);
+        let proposer_election = self.create_proposer_election(self.epoch, &validators);
         let network_sender = NetworkSender::new(
             author,
             self.network_sender.clone(),

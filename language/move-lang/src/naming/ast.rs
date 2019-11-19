@@ -214,7 +214,8 @@ pub enum Exp_ {
     Block(Sequence),
 
     Assign(AssignList, Box<Exp>),
-    Mutate(ExpDotted, Box<Exp>),
+    FieldMutate(ExpDotted, Box<Exp>),
+    Mutate(Box<Exp>, Box<Exp>),
 
     Return(Box<Exp>),
     Abort(Box<Exp>),
@@ -354,7 +355,7 @@ impl BaseType_ {
             Param(tp) => tp.debug.value.to_string(),
             Var(id) => match subst.get(id) {
                 Some(t) => t.value.subst_format(subst),
-                None => format!("#{}", id.0),
+                None => "_".to_string(),
             },
             Anything => "_".to_string(),
         }

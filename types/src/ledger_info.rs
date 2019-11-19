@@ -92,11 +92,6 @@ impl LedgerInfo {
         self.commit_info.version()
     }
 
-    /// A ledger info is nominal if it's not certifying any real version.
-    pub fn is_zero(&self) -> bool {
-        self.version() == 0
-    }
-
     pub fn timestamp_usecs(&self) -> u64 {
         self.commit_info.timestamp_usecs()
     }
@@ -115,6 +110,7 @@ impl LedgerInfo {
     }
 
     /// To bootstrap the system until we execute and commit the genesis txn before start.
+    #[cfg(any(test, feature = "fuzzing"))]
     pub fn genesis() -> Self {
         Self::new(BlockInfo::genesis(), HashValue::zero())
     }
@@ -225,10 +221,6 @@ impl<Sig: Signature> LedgerInfoWithSignatures<Sig> {
         &self,
         validator: &ValidatorVerifier<Sig::VerifyingKeyMaterial>,
     ) -> ::std::result::Result<(), VerifyError> {
-        if self.ledger_info.is_zero() {
-            // We're not trying to verify nominal ledger info that does not carry any information.
-            return Ok(());
-        }
         let ledger_hash = self.ledger_info().hash();
         validator.batch_verify_aggregated_signature(ledger_hash, self.signatures())
     }

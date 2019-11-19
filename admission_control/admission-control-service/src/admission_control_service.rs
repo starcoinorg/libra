@@ -21,11 +21,6 @@ use libra_types::proto::types::{UpdateToLatestLedgerRequest, UpdateToLatestLedge
 use std::convert::TryFrom;
 use std::sync::Arc;
 use storage_client::StorageRead;
-use crate::UpstreamProxyData;
-use libra_mempool::core_mempool_client::CoreMemPoolClient;
-use vm_validator::vm_validator::VMValidator;
-use crate::upstream_proxy::submit_transaction;
-use tokio::runtime::TaskExecutor;
 
 /// Struct implementing trait (service handle) AdmissionControlService.
 #[derive(Clone)]
@@ -80,7 +75,7 @@ impl AdmissionControlService {
         &self,
         executor: TaskExecutor,
         proxy: UpstreamProxyData<CoreMemPoolClient, VMValidator>,
-        req: SubmitTransactionRequest
+        req: SubmitTransactionRequest,
     ) -> Result<SubmitTransactionResponse> {
         let (req_sender, res_receiver) = oneshot::channel();
 

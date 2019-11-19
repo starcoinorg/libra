@@ -3,6 +3,7 @@
 
 use crate::{transaction::Version, validator_set::ValidatorSet};
 use libra_crypto::hash::HashValue;
+#[cfg(any(test, feature = "fuzzing"))]
 use libra_crypto::hash::ACCUMULATOR_PLACEHOLDER_HASH;
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
@@ -80,6 +81,7 @@ impl BlockInfo {
         }
     }
 
+    #[cfg(any(test, feature = "fuzzing"))]
     pub fn genesis() -> Self {
         Self {
             epoch: 0,
