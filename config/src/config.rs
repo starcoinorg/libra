@@ -401,6 +401,7 @@ pub struct ConsensusConfig {
     pub consensus_peers_file: PathBuf,
     pub safety_rules: SafetyRulesConfig,
     pub consensus_type: String,
+    pub miner_rpc_address: String,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -423,6 +424,7 @@ impl Default for ConsensusConfig {
             consensus_peers_file: PathBuf::from("consensus_peers.config.toml"),
             safety_rules: SafetyRulesConfig::default(),
             consensus_type: "pow".to_string(),
+            miner_rpc_address: "127.0.0.1:4251".to_string(),
         }
     }
 }
@@ -501,6 +503,10 @@ impl ConsensusConfig {
 
     pub fn safety_rules(&self) -> &SafetyRulesConfig {
         &self.safety_rules
+    }
+
+    pub fn miner_rpc_address(&self) -> String {
+        String::from(&self.miner_rpc_address)
     }
 }
 
@@ -806,6 +812,8 @@ impl NodeConfigHelpers {
         config.execution.port = get_available_port();
         config.mempool.mempool_service_port = get_available_port();
         config.storage.port = get_available_port();
+        config.consensus.miner_rpc_address =
+            format!("127.0.0.1:{}", get_available_port()).to_string();
     }
 }
 

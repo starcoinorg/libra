@@ -5,10 +5,12 @@ use crate::{
 };
 use executor::Executor;
 use failure::prelude::*;
+use grpcio::Server;
 use libra_config::config::NodeConfig;
 use libra_logger::prelude::*;
 use libra_mempool::proto::mempool::MempoolClient;
 use libra_types::account_address::AccountAddress;
+use miner::{server::setup_minerproxy_service, types::MineStateManager};
 use network::validator_network::{ConsensusNetworkEvents, ConsensusNetworkSender};
 use state_synchronizer::StateSyncClient;
 use std::convert::TryFrom;
@@ -19,6 +21,7 @@ use vm_runtime::MoveVM;
 pub struct PowConsensusProvider {
     runtime: tokio::runtime::Runtime,
     event_handle: Option<EventProcessor>,
+    miner_proxy: Option<Server>,
 }
 
 impl PowConsensusProvider {
@@ -47,6 +50,13 @@ impl PowConsensusProvider {
         let author = AccountAddress::try_from(peer_id_str.clone())
             .expect("Failed to parse peer id of a validator");
 
+        let mine_state = MineStateManager::new();
+        let miner_rpc_addr = String::from(&node_config.consensus.miner_rpc_address);
+        let mut miner_proxy = setup_minerproxy_service(mine_state.clone(), miner_rpc_addr);
+        miner_proxy.start();
+        for &(ref host, port) in miner_proxy.bind_addrs() {
+            println!("listening on {}:{}", host, port);
+        }
         let event_handle = EventProcessor::new(
             network_sender,
             network_events,
@@ -55,10 +65,12 @@ impl PowConsensusProvider {
             author,
             node_config.get_storage_dir(),
             rollback_flag,
+            mine_state,
         );
         Self {
             runtime,
             event_handle: Some(event_handle),
+            miner_proxy: Some(miner_proxy),
         }
     }
 
@@ -102,6 +114,9 @@ impl ConsensusProvider for PowConsensusProvider {
         //TODO
         // 1. stop mint
         // 2. stop process event
-        //unimplemented!()
+        // Stop Miner proxy
+        if let Some(miner_proxy) = self.miner_proxy.take() {
+            drop(miner_proxy);
+        }
     }
 }

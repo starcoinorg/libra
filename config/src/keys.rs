@@ -11,7 +11,6 @@ use libra_crypto::{
 use mirai_annotations::verify_unreachable;
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize, Serializer};
-
 #[derive(Debug)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Clone))]
 enum PrivateKeyContainer<T> {

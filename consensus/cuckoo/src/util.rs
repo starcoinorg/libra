@@ -1,4 +1,5 @@
 pub use blake2b_rs::{Blake2b, Blake2bBuilder};
+use byteorder::{ByteOrder, LittleEndian};
 
 pub const BLAKE2B_LEN: usize = 32;
 pub const HASH_PERSONALIZATION: &[u8] = b"ckb-default-hash";
@@ -26,6 +27,13 @@ fn inner_blake2b_256<T: AsRef<[u8]>>(s: T) -> [u8; 32] {
     blake2b.update(s.as_ref());
     blake2b.finalize(&mut result);
     result
+}
+
+pub fn pow_input(header_hash: &[u8], nonce: u64) -> [u8; 40] {
+    let mut input = [0; 40];
+    input[8..40].copy_from_slice(&header_hash[..32]);
+    LittleEndian::write_u64(&mut input, nonce);
+    input
 }
 
 #[test]

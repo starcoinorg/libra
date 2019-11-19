@@ -36,3 +36,5 @@ mod counters;
 mod state_computer;
 mod state_replication;
 mod txn_manager;
+
+pub use miner::MineClient;

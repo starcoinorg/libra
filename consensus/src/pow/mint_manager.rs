@@ -4,7 +4,6 @@ use crate::pow::event_processor::EventProcessor;
 use crate::pow::payload_ext::BlockPayloadExt;
 use crate::state_replication::{StateComputer, TxnManager};
 use atomic_refcell::AtomicRefCell;
-use libra_types::block_info::BlockInfo;
 use consensus_types::{block::Block, quorum_cert::QuorumCert, vote_data::VoteData};
 use cuckoo::consensus::PowService;
 use libra_crypto::hash::CryptoHash;
@@ -12,9 +11,12 @@ use libra_crypto::hash::GENESIS_BLOCK_ID;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
+use libra_types::block_info::BlockInfo;
 use libra_types::crypto_proxies::ValidatorSigner;
 use libra_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use libra_types::transaction::SignedTransaction;
+use miner::types::{MineCtx, MineState, MineStateManager};
+
 use network::{
     proto::{
         Block as BlockProto, ConsensusMsg,
@@ -26,9 +28,9 @@ use rand::Rng;
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::sync::Arc;
-use tokio::runtime::TaskExecutor;
-use std::time::Duration;
 use std::thread::sleep;
+use std::time::Duration;
+use tokio::runtime::TaskExecutor;
 
 pub struct MintManager {
     txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
@@ -39,6 +41,7 @@ pub struct MintManager {
     block_store: Arc<ConsensusDB>,
     pow_srv: Arc<dyn PowService>,
     chain_manager: Arc<AtomicRefCell<ChainManager>>,
+    mine_state: MineStateManager,
 }
 
 impl MintManager {
@@ -51,6 +54,7 @@ impl MintManager {
         block_store: Arc<ConsensusDB>,
         pow_srv: Arc<dyn PowService>,
         chain_manager: Arc<AtomicRefCell<ChainManager>>,
+        mine_state: MineStateManager,
     ) -> Self {
         MintManager {
             txn_manager,
@@ -61,6 +65,7 @@ impl MintManager {
             block_store,
             pow_srv,
             chain_manager,
+            mine_state,
         }
     }
 
@@ -71,9 +76,8 @@ impl MintManager {
         let mint_author = self.author;
         let mut self_sender = self.self_sender.clone();
         let block_db = self.block_store.clone();
-        let pow_srv = self.pow_srv.clone();
         let chain_manager = self.chain_manager.clone();
-
+        let mut mine_state = self.mine_state.clone();
         let mint_fut = async move {
             let chain_manager_clone = chain_manager.clone();
             loop {
@@ -127,7 +131,10 @@ impl MintManager {
                                         parent_li.timestamp_usecs(),
                                         v_s.clone(),
                                     );
-                                    let vote_data = VoteData::new(current_block_info.clone(), parent_block_info);
+                                    let vote_data = VoteData::new(
+                                        current_block_info.clone(),
+                                        parent_block_info,
+                                    );
                                     let li = LedgerInfo::new(current_block_info, state_id);
                                     let signer = ValidatorSigner::genesis(); //TODO:change signer
                                     let signature = signer
@@ -142,11 +149,13 @@ impl MintManager {
 
                                     //mint
                                     let nonce = generate_nonce();
-                                    let proof = pow_srv.solve(li.hash().as_ref(), nonce);
-                                    let solve = match proof {
-                                        Some(proof) => proof.solve,
-                                        None => vec![10],
-                                    };
+
+                                    let (rx, _tx) = mine_state.mine_block(MineCtx {
+                                        header: li.hash().to_vec(),
+                                        nonce,
+                                    });
+
+                                    let solve = rx.recv().await.unwrap();
                                     let mint_data = BlockPayloadExt { txns, nonce, solve };
 
                                     //block data

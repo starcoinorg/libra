@@ -9,7 +9,7 @@ use std::fmt;
 pub struct BlockPayloadExt {
     pub txns: Vec<SignedTransaction>,
     pub nonce: u64,
-    pub solve: Vec<u32>,
+    pub solve: Vec<u8>,
 }
 
 impl BlockPayloadExt {
