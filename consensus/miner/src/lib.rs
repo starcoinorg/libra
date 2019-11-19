@@ -1,6 +1,6 @@
-pub mod types;
-pub mod server;
 pub mod miner;
+pub mod server;
+pub mod types;
 pub use miner::MineClient;
 #[cfg(test)]
 mod tests {

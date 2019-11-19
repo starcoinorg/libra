@@ -504,7 +504,7 @@ impl ConsensusConfig {
     pub fn safety_rules(&self) -> &SafetyRulesConfig {
         &self.safety_rules
     }
-    
+
     pub fn miner_rpc_address(&self) -> String {
         String::from(&self.miner_rpc_address)
     }
@@ -812,7 +812,8 @@ impl NodeConfigHelpers {
         config.execution.port = get_available_port();
         config.mempool.mempool_service_port = get_available_port();
         config.storage.port = get_available_port();
-        config.consensus.miner_rpc_address = format!("127.0.0.1:{}", get_available_port()).to_string();
+        config.consensus.miner_rpc_address =
+            format!("127.0.0.1:{}", get_available_port()).to_string();
     }
 }
 

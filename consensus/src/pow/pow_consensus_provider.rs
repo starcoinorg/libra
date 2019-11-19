@@ -5,18 +5,18 @@ use crate::{
 };
 use executor::Executor;
 use failure::prelude::*;
+use grpcio::Server;
 use libra_config::config::NodeConfig;
 use libra_logger::prelude::*;
 use libra_mempool::proto::mempool::MempoolClient;
 use libra_types::account_address::AccountAddress;
+use miner::{server::setup_minerproxy_service, types::MineStateManager};
 use network::validator_network::{ConsensusNetworkEvents, ConsensusNetworkSender};
 use state_synchronizer::StateSyncClient;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::runtime::{self, TaskExecutor};
 use vm_runtime::MoveVM;
-use miner::{server::setup_minerproxy_service, types::MineStateManager};
-use grpcio::Server;
 
 pub struct PowConsensusProvider {
     runtime: tokio::runtime::Runtime,

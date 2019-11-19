@@ -29,7 +29,6 @@ fn inner_blake2b_256<T: AsRef<[u8]>>(s: T) -> [u8; 32] {
     result
 }
 
-
 pub fn pow_input(header_hash: &[u8], nonce: u64) -> [u8; 40] {
     let mut input = [0; 40];
     input[8..40].copy_from_slice(&header_hash[..32]);

@@ -1,5 +1,5 @@
-use crate::Cuckoo;
 use crate::util::pow_input;
+use crate::Cuckoo;
 use byteorder::{ByteOrder, LittleEndian};
 
 pub trait PowService: Send + Sync {

@@ -1,17 +1,17 @@
-use grpcio;
-use std::{sync::Arc, pin::Pin, thread};
-use grpcio::{ChannelBuilder, EnvBuilder};
-use proto::miner::{MineCtxRequest, MinedBlockRequest, MinerProxyClient, MineCtx as MineCtxRpc};
+use crate::types::{MineCtx, CYCLE_LENGTH, DUMMY_INPUT, MAX_EDGE};
 use async_std::{
-    task,
-    stream::Stream,
     prelude::*,
+    stream::Stream,
+    task,
     task::{Context, Poll},
 };
-use crate::types::{MineCtx, MAX_EDGE, CYCLE_LENGTH, DUMMY_INPUT};
-use std::{task::Waker, sync::Mutex};
 use byteorder::{ByteOrder, LittleEndian};
 use cuckoo::util::blake2b_256;
+use grpcio;
+use grpcio::{ChannelBuilder, EnvBuilder};
+use proto::miner::{MineCtx as MineCtxRpc, MineCtxRequest, MinedBlockRequest, MinerProxyClient};
+use std::{pin::Pin, sync::Arc, thread};
+use std::{sync::Mutex, task::Waker};
 
 struct MineCtxStream {
     client: MinerProxyClient,
@@ -32,10 +32,7 @@ impl MineCtxStream {
                 }
             }
         });
-        MineCtxStream {
-            client,
-            waker,
-        }
+        MineCtxStream { client, waker }
     }
 }
 
@@ -47,7 +44,10 @@ impl Stream for MineCtxStream {
         match self.client.get_mine_ctx(&MineCtxRequest {}) {
             Ok(resp) => {
                 if let Some(mine_ctx) = resp.mine_ctx {
-                    let ctx = MineCtx { header: mine_ctx.header, nonce: mine_ctx.nonce };
+                    let ctx = MineCtx {
+                        header: mine_ctx.header,
+                        nonce: mine_ctx.nonce,
+                    };
                     Poll::Ready(Some(ctx))
                 } else {
                     *waker = Some(cx.waker().clone());
@@ -63,7 +63,7 @@ impl Stream for MineCtxStream {
 }
 
 pub struct MineClient {
-    rpc_client: MinerProxyClient
+    rpc_client: MinerProxyClient,
 }
 
 impl Default for MineClient {
@@ -77,9 +77,7 @@ impl MineClient {
         let env = Arc::new(EnvBuilder::new().build());
         let ch = ChannelBuilder::new(env).connect(&miner_server);
         let rpc_client = MinerProxyClient::new(ch);
-        MineClient {
-            rpc_client
-        }
+        MineClient { rpc_client }
     }
 
     pub async fn start(&self) {
@@ -96,7 +94,6 @@ impl MineClient {
                 };
                 let resp = self.rpc_client.mined(&req);
                 println!("mined{:?}", resp);
-
             } else {
                 thread::sleep(std::time::Duration::from_secs(1));
             }
@@ -116,7 +113,12 @@ fn pow_input(header_hash: &[u8], nonce: u64) -> [u8; 40] {
     input
 }
 
-pub fn mine(header_hash: &[u8], nonce: u64, max_edge_bits: u8, cycle_length: usize) -> Option<Vec<u8>> {
+pub fn mine(
+    header_hash: &[u8],
+    nonce: u64,
+    max_edge_bits: u8,
+    cycle_length: usize,
+) -> Option<Vec<u8>> {
     unsafe {
         let _pow_input = pow_input(header_hash, nonce);
         //let input = blake2b_256(&pow_input.as_ref());
@@ -138,7 +140,6 @@ pub fn mine(header_hash: &[u8], nonce: u64, max_edge_bits: u8, cycle_length: usi
         return None;
     }
 }
-
 
 #[cfg(test)]
 mod test {
