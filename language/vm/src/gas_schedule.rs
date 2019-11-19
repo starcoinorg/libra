@@ -246,19 +246,6 @@ pub fn instruction_key(instruction: &Bytecode) -> u8 {
         MoveToSender(_, _) => Opcodes::MOVE_TO,
         GetTxnSequenceNumber => Opcodes::GET_TXN_SEQUENCE_NUMBER,
         GetTxnPublicKey => Opcodes::GET_TXN_PUBLIC_KEY,
-        IsOffchain => Opcodes::IS_OFFCHAIN,
-        GetTxnReceiverAddress => Opcodes::GET_TXN_RECEIVER,
-        ExistSenderChannel(_, _) => Opcodes::EXIST_SENDER_CHANNEL,
-        ExistReceiverChannel(_, _) => Opcodes::EXIST_RECEIVER_CHANNEL,
-        BorrowSenderChannel(_, _) => Opcodes::BORROW_SENDER_CHANNEL,
-        BorrowReceiverChannel(_, _) => Opcodes::BORROW_RECEIVER_CHANNEL,
-        MoveFromSenderChannel(_, _) => Opcodes::MOVE_FROM_SENDER_CHANNEL,
-        MoveFromReceiverChannel(_, _) => Opcodes::MOVE_FROM_RECEIVER_CHANNEL,
-        MoveToSenderChannel(_, _) => Opcodes::MOVE_TO_SENDER_CHANNEL,
-        MoveToReceiverChannel(_, _) => Opcodes::MOVE_TO_RECEIVER_CHANNEL,
-        IsChannelTxn => Opcodes::IS_CHANNEL_TXN,
-        GetTxnReceiverPublicKey => Opcodes::GET_TXN_RECEIVER_PUBLIC_KEY,
-        GetTxnChannelSequenceNumber => Opcodes::GET_TXN_CHANNEL_SEQUENCE_NUMBER,
     };
     opcode as u8
 }
@@ -310,12 +297,7 @@ impl CostTable {
         // NB: instruction keys are 1-indexed. This means that their location in the cost array
         // will be the key - 1.
         let key = instruction_key(instr);
-        //TODO(jole) remove this after refactor channel builtin method.
-        let zero_cost = GasCost::new(0, 0);
-        let cost = self
-            .instruction_table
-            .get((key - 1) as usize)
-            .or(Some(&zero_cost));
+        let cost = self.instruction_table.get((key - 1) as usize);
         assume!(cost.is_some());
         let good_cost = cost.unwrap();
         GasCost {
@@ -416,43 +398,6 @@ impl CostTable {
                 Pack(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS),
                 GasCost::new(0, 0),
             ),
-            (IsOffchain, GasCost::new(0, 0)),
-            (GetTxnReceiverAddress, GasCost::new(0, 0)),
-            (
-                ExistSenderChannel(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS),
-                GasCost::new(0, 0),
-            ),
-            (
-                ExistReceiverChannel(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS),
-                GasCost::new(0, 0),
-            ),
-            (
-                BorrowSenderChannel(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS),
-                GasCost::new(0, 0),
-            ),
-            (
-                BorrowReceiverChannel(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS),
-                GasCost::new(0, 0),
-            ),
-            (
-                MoveFromSenderChannel(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS),
-                GasCost::new(0, 0),
-            ),
-            (
-                MoveFromReceiverChannel(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS),
-                GasCost::new(0, 0),
-            ),
-            (
-                MoveToSenderChannel(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS),
-                GasCost::new(0, 0),
-            ),
-            (
-                MoveToReceiverChannel(StructDefinitionIndex::new(0), NO_TYPE_ACTUALS),
-                GasCost::new(0, 0),
-            ),
-            (IsChannelTxn, GasCost::new(0, 0)),
-            (GetTxnReceiverPublicKey, GasCost::new(0, 0)),
-            (GetTxnChannelSequenceNumber, GasCost::new(0, 0)),
         ];
         CostTable::new(instrs)
     }

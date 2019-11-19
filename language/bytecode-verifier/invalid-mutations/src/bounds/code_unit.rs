@@ -349,43 +349,11 @@ impl<'a> ApplyCodeUnitBoundsContext<'a> {
                     ),
                     // List out the other options explicitly so there's a compile error if a new
                     // bytecode gets added.
-                    FreezeRef
-                    | Pop
-                    | Ret
-                    | LdConst(_)
-                    | LdTrue
-                    | LdFalse
-                    | ReadRef
-                    | WriteRef
-                    | Add
-                    | Sub
-                    | Mul
-                    | Mod
-                    | Div
-                    | BitOr
-                    | BitAnd
-                    | Xor
-                    | Or
-                    | And
-                    | Not
-                    | Eq
-                    | Neq
-                    | Lt
-                    | Gt
-                    | Le
-                    | Ge
-                    | Abort
-                    | GetTxnGasUnitPrice
-                    | GetTxnMaxGasUnits
-                    | GetGasRemaining
-                    | GetTxnSenderAddress
-                    | GetTxnSequenceNumber
-                    | GetTxnPublicKey
-                    | IsOffchain
-                    | GetTxnReceiverAddress
-                    | IsChannelTxn
-                    | GetTxnReceiverPublicKey
-                    | GetTxnChannelSequenceNumber => {
+                    FreezeRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse | ReadRef | WriteRef
+                    | Add | Sub | Mul | Mod | Div | BitOr | BitAnd | Xor | Or | And | Not | Eq
+                    | Neq | Lt | Gt | Le | Ge | Abort | GetTxnGasUnitPrice | GetTxnMaxGasUnits
+                    | GetGasRemaining | GetTxnSenderAddress | GetTxnSequenceNumber
+                    | GetTxnPublicKey => {
                         panic!("Bytecode has no internal index: {:?}", code[bytecode_idx])
                     }
                 };
@@ -424,53 +392,11 @@ fn is_interesting(bytecode: &Bytecode) -> bool {
         | MutBorrowLoc(_)
         | ImmBorrowLoc(_) => true,
 
-        ExistSenderChannel(_, _)
-        | ExistReceiverChannel(_, _)
-        | BorrowSenderChannel(_, _)
-        | BorrowReceiverChannel(_, _)
-        | MoveFromSenderChannel(_, _)
-        | MoveFromReceiverChannel(_, _)
-        | MoveToSenderChannel(_, _)
-        | MoveToReceiverChannel(_, _) => true,
-
         // List out the other options explicitly so there's a compile error if a new
         // bytecode gets added.
-        FreezeRef
-        | Pop
-        | Ret
-        | LdConst(_)
-        | LdTrue
-        | LdFalse
-        | ReadRef
-        | WriteRef
-        | Add
-        | Sub
-        | Mul
-        | Mod
-        | Div
-        | BitOr
-        | BitAnd
-        | Xor
-        | Or
-        | And
-        | Not
-        | Eq
-        | Neq
-        | Lt
-        | Gt
-        | Le
-        | Ge
-        | Abort
-        | GetTxnGasUnitPrice
-        | GetTxnMaxGasUnits
-        | GetGasRemaining
-        | GetTxnSenderAddress
-        | GetTxnSequenceNumber
-        | GetTxnPublicKey
-        | IsOffchain
-        | GetTxnReceiverAddress
-        | IsChannelTxn
-        | GetTxnReceiverPublicKey
-        | GetTxnChannelSequenceNumber => false,
+        FreezeRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse | ReadRef | WriteRef | Add | Sub
+        | Mul | Mod | Div | BitOr | BitAnd | Xor | Or | And | Not | Eq | Neq | Lt | Gt | Le
+        | Ge | Abort | GetTxnGasUnitPrice | GetTxnMaxGasUnits | GetGasRemaining
+        | GetTxnSenderAddress | GetTxnSequenceNumber | GetTxnPublicKey => false,
     }
 }

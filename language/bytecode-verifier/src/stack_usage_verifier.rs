@@ -173,19 +173,6 @@ impl<'a> StackUsageVerifier<'a> {
                 let num_fields = u32::from(field_count);
                 (1, num_fields)
             }
-
-            Bytecode::IsOffchain
-            | Bytecode::GetTxnReceiverAddress
-            | Bytecode::IsChannelTxn
-            | Bytecode::GetTxnReceiverPublicKey
-            | Bytecode::GetTxnChannelSequenceNumber => (0, 1),
-
-            Bytecode::ExistSenderChannel(_, _) | Bytecode::ExistReceiverChannel(_, _) => (0, 1),
-            Bytecode::BorrowSenderChannel(_, _) | Bytecode::BorrowReceiverChannel(_, _) => (0, 1),
-            Bytecode::MoveFromSenderChannel(_, _) | Bytecode::MoveFromReceiverChannel(_, _) => {
-                (0, 1)
-            }
-            Bytecode::MoveToSenderChannel(_, _) | Bytecode::MoveToReceiverChannel(_, _) => (1, 0),
         }
     }
 }
