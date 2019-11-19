@@ -181,42 +181,46 @@ impl EventProcessor {
                                         solve: payload.solve.clone(),
                                     },
                                 );
-                                assert!(verify==true);
-                                if self_peer_id != peer_id {
-                                    let (height, block_index) =
-                                        chain_manager.borrow().chain_height_and_root().await;
-                                    if height < block.round() && block.parent_id() != block_index.id
-                                    {
-                                        if let Err(err) = sync_signal_sender
-                                            .clone()
-                                            .send((peer_id, (block.round(), block.id())))
-                                            .await
+
+                                if verify {
+                                    if self_peer_id != peer_id {
+                                        let (height, block_index) =
+                                            chain_manager.borrow().chain_height_and_root().await;
+                                        if height < block.round() && block.parent_id() != block_index.id
                                         {
-                                            error!("send sync signal err: {:?}", err);
+                                            if let Err(err) = sync_signal_sender
+                                                .clone()
+                                                .send((peer_id, (block.round(), block.id())))
+                                                .await
+                                            {
+                                                error!("send sync signal err: {:?}", err);
+                                            }
                                         }
+
+                                        //broadcast new block
+                                        let block_pb = TryInto::<BlockProto>::try_into(block.clone())
+                                            .expect("parse block err.");
+
+                                        // send block
+                                        let msg = ConsensusMsg {
+                                            message: Some(ConsensusMsg_oneof::NewBlock(block_pb)),
+                                        };
+                                        Self::broadcast_consensus_msg_but(
+                                            &mut network_sender,
+                                            false,
+                                            self_peer_id,
+                                            &mut self_sender,
+                                            msg,
+                                            vec![peer_id],
+                                        )
+                                            .await;
                                     }
 
-                                    //broadcast new block
-                                    let block_pb = TryInto::<BlockProto>::try_into(block.clone())
-                                        .expect("parse block err.");
-
-                                    // send block
-                                    let msg = ConsensusMsg {
-                                        message: Some(ConsensusMsg_oneof::NewBlock(block_pb)),
-                                    };
-                                    Self::broadcast_consensus_msg_but(
-                                        &mut network_sender,
-                                        false,
-                                        self_peer_id,
-                                        &mut self_sender,
-                                        msg,
-                                        vec![peer_id],
-                                    )
-                                        .await;
-                                }
-
-                                if let Err(err) = (&mut block_cache_sender).send(block).await {
-                                    error!("send new block err: {:?}", err);
+                                    if let Err(err) = (&mut block_cache_sender).send(block).await {
+                                        error!("send new block err: {:?}", err);
+                                    }
+                                } else {
+                                    warn!("block : {:?} from : {:?} verify fail.", block.id(), peer_id);
                                 }
                             }
                             ConsensusMsg_oneof::RequestBlock(req_block) => {

@@ -76,7 +76,6 @@ impl MintManager {
         let mint_author = self.author;
         let mut self_sender = self.self_sender.clone();
         let block_db = self.block_store.clone();
-        let pow_srv = self.pow_srv.clone();
         let chain_manager = self.chain_manager.clone();
         let mut mine_state = self.mine_state.clone();
         let mint_fut = async move {
@@ -148,7 +147,7 @@ impl MintManager {
                                         //mint
                                         let nonce = generate_nonce();
 
-                                        let (rx, tx) = mine_state.mine_block(MineCtx {
+                                        let (rx, _tx) = mine_state.mine_block(MineCtx {
                                             header: li.hash().to_vec(),
                                             nonce,
                                         });

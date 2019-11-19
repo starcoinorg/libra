@@ -94,7 +94,6 @@ impl MineClient {
                     }),
                     proof,
                 };
-                thread::sleep(std::time::Duration::from_secs(10));
                 let resp = self.rpc_client.mined(&req);
                 println!("mined{:?}", resp);
 
