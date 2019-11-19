@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, hash_map};
+use std::collections::{HashMap, HashSet};
 use libra_crypto::HashValue;
 use executor::ProcessedVMOutput;
 use failure::prelude::*;
@@ -42,10 +42,33 @@ impl BlockTree {
         }
     }
 
+    fn add_block_info_inner(&mut self, new_block_info: BlockInfo, new_root: bool) -> Result<()> {
+        let id = new_block_info.id();
+        let parent_id = new_block_info.parent_id();
+
+        //4. update height and root
+        if new_root {
+            self.height = new_block_info.height();
+            self.root = id.clone();
+        }
+
+        //5. update parent
+        self.id_to_block.get_mut(parent_id).expect("parent block not exist in block tree.").append_children(id);
+
+        //6. update heads
+        self.heads.remove(parent_id);
+        self.heads.insert(id.clone());
+
+        //7. add new block info
+        self.id_to_block.insert(id.clone(), new_block_info);
+
+        Ok(())
+    }
+
     pub fn add_block_info(&mut self, id: &HashValue, parent_id: &HashValue, vm_output: ProcessedVMOutput) -> Result<()> {
         //1. new_block_info not exist
         let id_exist = self.id_to_block.contains_key(id);
-        ensure!(id_exist, "block already exist in block tree.");
+        ensure!(!id_exist, "block already exist in block tree.");
 
         //2. parent exist
         let parent_height = self.id_to_block.get(parent_id).expect("parent block not exist in block tree.").height();
@@ -58,37 +81,56 @@ impl BlockTree {
         };
 
         let new_block_info = BlockInfo::new(id, parent_id, height, vm_output);
+        self.add_block_info_inner(new_block_info, new_root)
+    }
 
-        //4. add new block info
-        self.id_to_block.insert(id.clone(), new_block_info);
+    fn remove_branch(&mut self, head: &HashValue) {
+        let parent_id = &self.id_to_block.get(head).expect("head not exist.").parent_id().clone();
+        let children_len_by_parent = self.id_to_block.get(parent_id).expect("parent not exist.").children.len();
+        if children_len_by_parent == 1 {
+            self.id_to_block.remove(head);
+            self.remove_branch(parent_id);
+        }
+    }
 
-        //5. update height and root
-        if new_root {
-            self.height = height;
-            self.root = id.clone();
+    fn remove_tail(&mut self) {
+        let tail_block_info = self.id_to_block.get(&self.tail).expect("tail block not exist.");
+        if (self.height - tail_block_info.height) > 100 {
+            if tail_block_info.children.len() == 1 {
+                let mut new_tail = None;
+                for children in &tail_block_info.children {
+                    new_tail = Some(children.clone())
+                }
+
+                self.id_to_block.remove(&self.tail);
+                self.tail = new_tail.expect("new_tail is none.");
+                self.remove_tail()
+            }
+        }
+    }
+
+    fn prune(&mut self) {
+        //1. prune begin with heads
+        if self.heads.len() > 0 {
+            for head in &self.heads.clone() {
+                let head_block_info = self.id_to_block.get(head).expect("head is none.");
+                if (self.height - head_block_info.height()) > 100 {
+                    self.heads.remove(head);
+                    self.remove_branch(head);
+                }
+            }
         }
 
-        //6. update heads
-        self.heads.remove(parent_id);
-        self.heads.insert(id.clone());
-
-        //7. update parent
-        self.id_to_block.get_mut(parent_id).expect("parent block not exist in block tree.").append_children(id);
-
-        Ok(())
+        //2. prune begin with tail
+        self.remove_tail();
     }
 
-    fn prune(&self) {
-        //1. prune from begin
-        unimplemented!()
-    }
-
-    fn height(&self) -> u64 {
+    pub fn height(&self) -> u64 {
         self.height
     }
 
-    fn root(&self) -> HashValue {
-        self.root
+    fn root(&self) -> &HashValue {
+        &self.root
     }
 
     pub fn find_output_by_id(&self, id: HashValue) -> Option<BlockInfo> {
@@ -144,3 +186,75 @@ impl BlockInfo {
     }
 }
 
+#[cfg(any(test, feature = "fuzzing"))]
+impl BlockTree {
+
+    pub fn add_block_info_for_test(&mut self, id: &HashValue, parent_id: &HashValue) -> Result<()> {
+        //1. new_block_info not exist
+        let id_exist = self.id_to_block.contains_key(id);
+        ensure!(!id_exist, "block already exist in block tree.");
+
+        //2. parent exist
+        let parent_height = self.id_to_block.get(parent_id).expect("parent block not exist in block tree.").height();
+
+        //3. is new root
+        let (height, new_root) = if parent_height == self.height {// new root
+            (self.height + 1, true)
+        } else {
+            (parent_height + 1, false)
+        };
+
+        let new_block_info = BlockInfo::new_for_test(id, parent_id, height);
+        self.add_block_info_inner(new_block_info, new_root)
+    }
+}
+
+#[cfg(any(test, feature = "fuzzing"))]
+impl BlockInfo {
+    fn new_for_test(id: &HashValue, parent_id : &HashValue, height: u64) -> Self {
+        BlockInfo {
+            id: id.clone(),
+            parent_id: parent_id.clone(),
+            height,
+            children: HashSet::new(),
+            vm_output: None
+        }
+    }
+}
+
+#[test]
+fn test_block_tree_add_block_info() {
+    let mut block_tree = BlockTree::new();
+    for i in 0..2 {
+        let height = block_tree.height() + 1;
+        let parent_id = block_tree.root();
+        block_tree.add_block_info_for_test(&HashValue::random(), parent_id);
+        if (height % 3) == 0 {
+            for j in 0..2 {
+                block_tree.add_block_info_for_test(&HashValue::random(), parent_id);
+            }
+        }
+    }
+
+    assert_eq!(block_tree.height(), 3)
+}
+
+#[test]
+fn test_block_tree_prune() {
+    let mut block_tree = BlockTree::new();
+    for i in 0..200 {
+        let height = block_tree.height() + 1;
+        let parent_id = block_tree.root();
+        block_tree.add_block_info_for_test(&HashValue::random(), parent_id);
+        if (height % 3) == 0 {
+            for j in 0..2 {
+                block_tree.add_block_info_for_test(&HashValue::random(), parent_id);
+            }
+        }
+    }
+
+    block_tree.prune();
+
+    let tmp = block_tree.height() - block_tree.id_to_block.get(&block_tree.tail).expect("err.").height();
+    assert_eq!(tmp, 100)
+}
