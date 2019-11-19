@@ -106,7 +106,7 @@ pub fn run_service() {
     }
     task::spawn(async move {
         for i in 0..100 as u64 {
-            let (rx, tx) = mine_state.mine_block(MineCtx {
+            let (rx, _tx) = mine_state.mine_block(MineCtx {
                 header: vec![2; 32],
                 nonce: i,
             });
@@ -115,7 +115,7 @@ pub fn run_service() {
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
     });
-    let (tx, _rx) = oneshot::channel();
+    let (tx, rx) = oneshot::channel();
 
     task::spawn(async {
         println!("Press enter to exit...");
