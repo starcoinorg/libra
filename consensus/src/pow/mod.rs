@@ -5,4 +5,4 @@ mod event_processor;
 mod mint_manager;
 mod payload_ext;
 mod sync_manager;
-mod block_tree;
+pub(crate) mod block_tree;

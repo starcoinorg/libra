@@ -17,6 +17,7 @@ use libra_types::PeerId;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tokio::runtime::TaskExecutor;
+use crate::pow::block_tree::BlockTree;
 
 pub struct ChainManager {
     block_cache_receiver: Option<mpsc::Receiver<Block<BlockPayloadExt>>>,
@@ -24,6 +25,7 @@ pub struct ChainManager {
     txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
     state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
     block_chain: Arc<RwLock<BlockChain>>,
+    block_tree: Arc<RwLock<BlockTree>>,
     orphan_blocks: Arc<Mutex<HashMap<HashValue, Vec<HashValue>>>>, //key -> parent_block_id, value -> block_id
     rollback_flag: bool,
     author: AccountAddress,
@@ -59,12 +61,15 @@ impl ChainManager {
         };
         let block_chain = Arc::new(RwLock::new(init_block_chain));
         let orphan_blocks = Arc::new(Mutex::new(HashMap::new()));
+
+        let block_tree = Arc::new(RwLock::new(BlockTree::new()));
         ChainManager {
             block_cache_receiver,
             block_store,
             txn_manager,
             state_computer,
             block_chain,
+            block_tree,
             orphan_blocks,
             rollback_flag,
             author,
@@ -87,6 +92,7 @@ impl ChainManager {
         let state_computer = self.state_computer.clone();
         let rollback_flag = self.rollback_flag;
         let author = self.author.clone();
+        let mut block_tree = self.block_tree.clone();
         let chain_fut = async move {
             loop {
                 ::futures::select! {
