@@ -36,8 +36,10 @@ lazy_static! {
         make_module_definition!("../modules/transaction_fee_distribution.mvir");
     static ref EVENT_MODULE: ModuleDefinition = make_module_definition!("../modules/event.mvir");
     static ref GAS_SCHEDULE: ModuleDefinition = make_module_definition!("../modules/gas_schedule.mvir");
-    static ref CHANNEL_MODULE: ModuleDefinition =
+    static ref CHANNEL_ACCOUNT_MODULE: ModuleDefinition =
         make_module_definition!("../modules/channel_account.mvir");
+    static ref CHANNEL_TXN_MODULE: ModuleDefinition =
+        make_module_definition!("../modules/channel_transaction.mvir");
     static ref MODULE_DEFS: Vec<&'static ModuleDefinition> = {
         // Note: a module can depend on earlier modules in the list, but not vice versa. Don't try
         // to rearrange without considering this!
@@ -52,10 +54,11 @@ lazy_static! {
             &*VALIDATOR_CONFIG_MODULE,
             &*GAS_SCHEDULE, // depends on Vector
             &*EVENT_MODULE, // depends on AddressUtil, BytearrayUtil, Hash, U64Util
+            &*CHANNEL_TXN_MODULE,
             &*ACCOUNT_MODULE, // depends on LibraCoin, Event, AddressUtil, BytearrayUtil, U64Util
             &*LIBRA_SYSTEM_MODULE, // depends on LibraAccount, ValidatorConfig
             &*TRANSACTION_FEE_DISTRIBUTION_MODULE, // depends on Block, ValidatorSet, LibraCoin, LibraAccount,
-            &*CHANNEL_MODULE,
+            &*CHANNEL_ACCOUNT_MODULE,
         ]
     };
 }
@@ -104,6 +107,10 @@ pub fn module_defs() -> &'static [&'static ModuleDefinition] {
     &*MODULE_DEFS
 }
 
-pub fn channel_module() -> ModuleDefinition {
-    CHANNEL_MODULE.clone()
+pub fn channel_account_module() -> ModuleDefinition {
+    CHANNEL_ACCOUNT_MODULE.clone()
+}
+
+pub fn channel_txn_module() -> ModuleDefinition {
+    CHANNEL_TXN_MODULE.clone()
 }
