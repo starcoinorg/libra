@@ -516,17 +516,6 @@ impl BoundsCheck<(&CompiledModuleMut, &FunctionSignature)> for CodeUnit {
                         }
                     }
 
-                    ExistSenderChannel(idx, _)
-                    | ExistReceiverChannel(idx, _)
-                    | BorrowSenderChannel(idx, _)
-                    | BorrowReceiverChannel(idx, _)
-                    | MoveFromSenderChannel(idx, _)
-                    | MoveFromReceiverChannel(idx, _)
-                    | MoveToSenderChannel(idx, _)
-                    | MoveToReceiverChannel(idx, _) => {
-                        check_code_unit_bounds_impl(&module.struct_defs, bytecode_offset, *idx)
-                    }
-
                     // List out the other options explicitly so there's a compile error if a new
                     // bytecode gets added.
                     FreezeRef | Pop | Ret | LdConst(_) | LdTrue | LdFalse | ReadRef | WriteRef
@@ -534,13 +523,6 @@ impl BoundsCheck<(&CompiledModuleMut, &FunctionSignature)> for CodeUnit {
                     | Neq | Lt | Gt | Le | Ge | Abort | GetTxnGasUnitPrice | GetTxnMaxGasUnits
                     | GetGasRemaining | GetTxnSenderAddress | GetTxnSequenceNumber
                     | GetTxnPublicKey => vec![],
-
-                    //TODO merge to above.
-                    IsOffchain
-                    | GetTxnReceiverAddress
-                    | IsChannelTxn
-                    | GetTxnReceiverPublicKey
-                    | GetTxnChannelSequenceNumber => vec![],
                 }
             })
             .collect()

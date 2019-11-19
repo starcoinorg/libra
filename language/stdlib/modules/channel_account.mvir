@@ -27,7 +27,7 @@ module ChannelAccount {
         let receiver_account: Self.T;
 
         sender = get_txn_sender();
-        receiver = get_txn_receiver();
+        receiver = ChannelTransaction.native_get_txn_receiver();
 
         sender_coin = LibraAccount.withdraw_from_sender(copy(sender_amount));
         receiver_coin = LibraAccount.withdraw_from_receiver(copy(receiver_amount));
@@ -35,8 +35,8 @@ module ChannelAccount {
         sender_account = T {balance:move(sender_coin), channel_sequence_number:0, closed: false, participant: copy(receiver)};
         receiver_account = T {balance:move(receiver_coin), channel_sequence_number:0, closed: false, participant: copy(sender)};
 
-        move_to_sender_channel<T>(move(sender_account));
-        move_to_receiver_channel<T>(move(receiver_account));
+        Self.move_to_channel_sender<Self.T>(move(sender_account));
+        Self.move_to_channel_receiver<Self.T>(move(receiver_account));
         return;
     }
 
@@ -48,7 +48,7 @@ module ChannelAccount {
         let receiver_coin: LibraCoin.T;
 
         sender = get_txn_sender();
-        receiver = get_txn_receiver();
+        receiver = ChannelTransaction.native_get_txn_receiver();
 
         sender_coin = LibraAccount.withdraw_from_sender(copy(sender_amount));
         receiver_coin = LibraAccount.withdraw_from_receiver(copy(receiver_amount));
@@ -67,9 +67,9 @@ module ChannelAccount {
         assert(copy(deposit_value) > 0, 7);
 
         if(copy(is_sender)){
-            to_account_ref = borrow_sender_channel<T>();
+            to_account_ref = Self.native_borrow_channel<Self.T>(true);
         }else{
-            to_account_ref = borrow_receiver_channel<T>();
+            to_account_ref = Self.native_borrow_channel<Self.T>(false);
         }
         // Deposit the `to_deposit` coin
         LibraCoin.deposit(&mut copy(to_account_ref).balance, move(to_deposit));
@@ -94,7 +94,7 @@ module ChannelAccount {
        let receiver_coin: LibraCoin.T;
 
        sender = get_txn_sender();
-       receiver = get_txn_receiver();
+       receiver = ChannelTransaction.native_get_txn_receiver();
 
        sender_coin = Self.withdraw_from_sender(copy(sender_amount));
        receiver_coin = Self.withdraw_from_receiver(copy(receiver_amount));
@@ -108,9 +108,9 @@ module ChannelAccount {
         let withdraw_coin: LibraCoin.T;
 
         if(copy(is_sender)){
-            from_account_ref = borrow_sender_channel<T>();
+            from_account_ref = Self.native_borrow_channel<Self.T>(true);
         }else{
-            from_account_ref = borrow_receiver_channel<T>();
+            from_account_ref = Self.native_borrow_channel<Self.T>(false);
         }
         // Deposit the `to_deposit` coin
         withdraw_coin = LibraCoin.withdraw(&mut copy(from_account_ref).balance, copy(amount));
@@ -138,9 +138,9 @@ module ChannelAccount {
        let account_ref: &Self.T;
 
        if(copy(is_sender)){
-           account_ref = freeze(borrow_sender_channel<T>());
+           account_ref = freeze(Self.native_borrow_channel<Self.T>(true));
        }else{
-           account_ref = freeze(borrow_receiver_channel<T>());
+           account_ref = freeze(Self.native_borrow_channel<Self.T>(false));
        }
        return LibraCoin.value(&move(account_ref).balance);
     }
@@ -157,9 +157,9 @@ module ChannelAccount {
       let account_ref: &Self.T;
 
       if(copy(is_sender)){
-          account_ref = freeze(borrow_sender_channel<T>());
+          account_ref = freeze(Self.native_borrow_channel<Self.T>(true));
       }else{
-          account_ref = freeze(borrow_receiver_channel<T>());
+          account_ref = freeze(Self.native_borrow_channel<Self.T>(false));
       }
       return *&move(account_ref).channel_sequence_number;
     }
@@ -176,9 +176,9 @@ module ChannelAccount {
         let account_ref: &Self.T;
 
         if(copy(is_sender)){
-            account_ref = freeze(borrow_sender_channel<T>());
+            account_ref = freeze(Self.native_borrow_channel<Self.T>(true));
         }else{
-            account_ref = freeze(borrow_receiver_channel<T>());
+            account_ref = freeze(Self.native_borrow_channel<Self.T>(false));
         }
         return *&move(account_ref).closed;
     }
@@ -195,9 +195,9 @@ module ChannelAccount {
         let account_ref: &mut Self.T;
 
         if(copy(is_sender)){
-            account_ref = borrow_sender_channel<T>();
+            account_ref = Self.native_borrow_channel<Self.T>(true);
         }else{
-            account_ref = borrow_receiver_channel<T>();
+            account_ref = Self.native_borrow_channel<Self.T>(false);
         }
         *(&mut move(account_ref).closed) = true;
         return;
@@ -219,11 +219,11 @@ module ChannelAccount {
 
         // sequence_number 0 should be open channel txn.
         if(copy(transaction_channel_sequence_number_value) == 0){
-            assert(!exist_sender_channel<T>(), 400);
-            assert(!exist_receiver_channel<T>(), 401);
+            assert(!Self.exist_channel_sender<Self.T>(), 400);
+            assert(!Self.exist_channel_receiver<Self.T>(), 401);
         }else{
-            assert(exist_sender_channel<T>(), 400);
-            assert(exist_receiver_channel<T>(), 401);
+            assert(Self.exist_channel_sender<Self.T>(), 400);
+            assert(Self.exist_channel_receiver<Self.T>(), 401);
             sender_sequence_number_value = Self.sender_sequence_number();
             receiver_sequence_number_value = Self.receiver_sequence_number();
             assert(copy(sender_sequence_number_value) == copy(receiver_sequence_number_value), 402);
@@ -240,9 +240,9 @@ module ChannelAccount {
        let account_ref: &mut Self.T;
 
        if(copy(is_sender)){
-           account_ref = borrow_sender_channel<T>();
+           account_ref = Self.native_borrow_channel<Self.T>(true);
        }else{
-           account_ref = borrow_receiver_channel<T>();
+           account_ref = Self.native_borrow_channel<Self.T>(false);
        }
        *(&mut move(account_ref).channel_sequence_number) = move(sequence_number);
        return;
