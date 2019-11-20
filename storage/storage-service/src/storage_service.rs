@@ -188,26 +188,18 @@ impl StorageRead for StorageService {
         async { Ok(info.info) }.boxed()
     }
 
-    fn get_latest_ledger_infos_per_epoch(
+    fn get_epoch_change_ledger_infos(
         &self,
-        start_epoch: u64,
+        _start_epoch: u64,
     ) -> Result<Vec<LedgerInfoWithSignatures>> {
-        block_on(self.get_latest_ledger_infos_per_epoch_async(start_epoch))
+        unimplemented!()
     }
 
-    fn get_latest_ledger_infos_per_epoch_async(
+    fn get_epoch_change_ledger_infos_async(
         &self,
-        start_epoch: u64,
+        _start_epoch: u64,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<LedgerInfoWithSignatures>>> + Send>> {
-        let req = storage_proto::GetLatestLedgerInfosPerEpochRequest::new(start_epoch);
-        let resp = self
-            .get_latest_ledger_infos_per_epoch_inner(req.try_into().unwrap())
-            .expect("get_latest_ledger_infos_per_epoch_async response err.");
-        async {
-            let response = storage_proto::GetLatestLedgerInfosPerEpochResponse::try_from(resp)?;
-            Ok(response.into())
-        }
-            .boxed()
+        unimplemented!()
     }
 }
 

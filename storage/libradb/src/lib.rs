@@ -632,6 +632,39 @@ impl LibraDB {
         Ok(Some(startup_info))
     }
 
+    /// Get for pre compute
+    pub fn get_history_startup_info_by_block_id(
+        &self,
+        block_id: &HashValue,
+    ) -> Result<Option<StartupInfo>> {
+        let ledger_info_with_sigs = match self.ledger_store.get_ledger_info_by_block_id(block_id) {
+            Ok(x) => x,
+            Err(err) => {
+                warn!("err:{:?}", err);
+                return Ok(None);
+            }
+        };
+        let ledger_info = ledger_info_with_sigs.ledger_info().clone();
+
+        let version = ledger_info.version();
+        let txn_info = self.ledger_store.get_transaction_info(version)?;
+
+        let account_state_root_hash = txn_info.state_root_hash();
+
+        let ledger_frozen_subtree_hashes = self
+            .ledger_store
+            .get_ledger_frozen_subtree_hashes(version)?;
+        Ok(Some(StartupInfo {
+            ledger_info: ledger_info_with_sigs,
+            committed_tree_state: TreeState::new(
+                version,
+                ledger_frozen_subtree_hashes,
+                account_state_root_hash,
+            ),
+            synced_tree_state: None,
+        }))
+    }
+
     // ======================= State Synchronizer Internal APIs ===================================
     /// Gets a batch of transactions for the purpose of synchronizing state to another node.
     ///

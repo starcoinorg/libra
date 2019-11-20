@@ -318,10 +318,9 @@ where
                 }
                 _ => {
                     info!(
-                        "Received updated note for peer: {} from peer: {} myself is: {}",
+                        "Received updated note for peer: {} from peer: {}",
                         note.peer_id.short_str(),
-                        remote_peer.short_str(),
-                        self_peer_id.short_str(),
+                        remote_peer.short_str()
                     );
                     // We can never receive a note with a higher epoch number on us than what we
                     // ourselves have broadcasted.

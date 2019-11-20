@@ -156,7 +156,7 @@ impl LedgerStore {
 
     /// Get latest transaction info together with its version. Note that during node syncing, this
     /// version can be greater than what's in the latest LedgerInfo.
-    pub fn _get_latest_transaction_info(&self) -> Result<(Version, TransactionInfo)> {
+    pub fn get_latest_transaction_info(&self) -> Result<(Version, TransactionInfo)> {
         self.get_latest_transaction_info_option()?
             .ok_or_else(|| LibraDbError::NotFound(String::from("Genesis TransactionInfo.")).into())
     }

@@ -30,8 +30,9 @@ use std::{pin::Pin, sync::Arc};
 use storage_proto::{
     proto::storage::{GetStartupInfoRequest, StorageClient},
     GetAccountStateWithProofByVersionRequest, GetAccountStateWithProofByVersionResponse,
-    GetEpochChangeLedgerInfosRequest, GetEpochChangeLedgerInfosResponse, GetStartupInfoResponse,
-    GetTransactionsRequest, GetTransactionsResponse, SaveTransactionsRequest, StartupInfo,
+    GetEpochChangeLedgerInfosRequest, GetEpochChangeLedgerInfosResponse,
+    GetHistoryStartupInfoByBlockIdRequest, GetStartupInfoResponse, GetTransactionsRequest,
+    GetTransactionsResponse, RollbackRequest, SaveTransactionsRequest, StartupInfo,
 };
 
 pub use crate::state_view::VerifiedStateView;

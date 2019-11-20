@@ -28,14 +28,10 @@ use std::{
 };
 use storage_proto::proto::storage::{
     create_storage, GetAccountStateWithProofByVersionRequest,
-    GetAccountStateWithProofByVersionResponse, GetAccountStateWithProofByVersionResponse,
-    GetEpochChangeLedgerInfosRequest, GetEpochChangeLedgerInfosResponse,
-    GetHistoryStartupInfoByBlockIdRequest, GetLatestLedgerInfosPerEpochRequest,
-    GetLatestLedgerInfosPerEpochResponse, GetStartupInfoRequest, GetStartupInfoRequest,
-    GetStartupInfoResponse, GetStartupInfoResponse, GetTransactionsRequest, GetTransactionsRequest,
-    GetTransactionsResponse, GetTransactionsResponse, RollbackRequest, RollbackResponse,
-    SaveTransactionsRequest, SaveTransactionsRequest, SaveTransactionsResponse,
-    SaveTransactionsResponse, Storage, Storage,
+    GetAccountStateWithProofByVersionResponse, GetEpochChangeLedgerInfosRequest,
+    GetEpochChangeLedgerInfosResponse, GetHistoryStartupInfoByBlockIdRequest,
+    GetStartupInfoRequest, GetStartupInfoResponse, GetTransactionsRequest, GetTransactionsResponse,
+    RollbackRequest, RollbackResponse, SaveTransactionsRequest, SaveTransactionsResponse, Storage,
 };
 
 /// Starts storage service according to config.
@@ -311,6 +307,18 @@ impl Storage for StorageService {
         provide_grpc_response(resp, ctx, sink);
     }
 
+    fn get_epoch_change_ledger_infos(
+        &mut self,
+        ctx: grpcio::RpcContext,
+        req: GetEpochChangeLedgerInfosRequest,
+        sink: grpcio::UnarySink<GetEpochChangeLedgerInfosResponse>,
+    ) {
+        debug!("[GRPC] Storage::get_epoch_change_ledger_infos");
+        let _timer = SVC_COUNTERS.req(&ctx);
+        let resp = self.get_epoch_change_ledger_infos_inner(req);
+        provide_grpc_response(resp, ctx, sink);
+    }
+
     fn get_history_startup_info_by_block_id(
         &mut self,
         ctx: grpcio::RpcContext,
@@ -322,18 +330,6 @@ impl Storage for StorageService {
         let resp = self.get_history_startup_info_by_block_id_inner(
             &HashValue::from_slice(req.block_id.as_ref()).expect("parse err."),
         );
-        provide_grpc_response(resp, ctx, sink);
-    }
-
-    fn get_epoch_change_ledger_infos(
-        &mut self,
-        ctx: grpcio::RpcContext,
-        req: GetEpochChangeLedgerInfosRequest,
-        sink: grpcio::UnarySink<GetEpochChangeLedgerInfosResponse>,
-    ) {
-        debug!("[GRPC] Storage::get_epoch_change_ledger_infos");
-        let _timer = SVC_COUNTERS.req(&ctx);
-        let resp = self.get_epoch_change_ledger_infos_inner(req);
         provide_grpc_response(resp, ctx, sink);
     }
 
