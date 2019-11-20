@@ -135,7 +135,9 @@ impl NodeConfig {
     /// Paths used in the config are either absolute or relative to the config location
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
         let mut config = Self::load_config(&path);
+        config.consensus.load(path.as_ref())?;
         let mut validator_count = 0;
+        let is_public = config.consensus.consensus_type == ConsensusType::POW;
         for network in &mut config.networks {
             // We use provided peer id for validator role. Otherwise peer id is generated using
             // network identity key.
@@ -149,8 +151,9 @@ impl NodeConfig {
             } else {
                 network.load(path.as_ref())?;
             }
+            network.is_public_network = is_public;
         }
-        config.consensus.load(path.as_ref())?;
+
         Ok(config)
     }
 

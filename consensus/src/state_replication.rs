@@ -8,6 +8,8 @@ use failure::Result;
 use futures::Future;
 use libra_types::crypto_proxies::{LedgerInfoWithSignatures, ValidatorChangeEventWithProof};
 use std::{pin::Pin, sync::Arc};
+use libra_crypto::HashValue;
+use libra_types::block_metadata::BlockMetadata;
 
 /// Retrieves and updates the status of transactions on demand (e.g., via talking with Mempool)
 pub trait TxnManager: Send + Sync {
@@ -50,12 +52,51 @@ pub trait StateComputer: Send + Sync {
         executed_trees: ExecutedTrees,
     ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>>;
 
+    /// How to execute a sequence of transactions and obtain the next state. While some of the
+    /// transactions succeed, some of them can fail.
+    /// In case all the transactions are failed, new_state_id is equal to the previous state id.
+    fn compute_by_hash(
+        &self,
+        // The id of a grandpa block
+        grandpa_block_id: HashValue,
+        // The id of a parent block
+        parent_block_id: HashValue,
+        // The id of a current block.
+        block_id: HashValue,
+        // Transactions to execute.
+        transactions: (&BlockMetadata, &Self::Payload),
+    ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>>;
+
+    ///
+    fn compute_with_meta_data(
+        &self,
+        // The id of a parent block
+        parent_block_id: HashValue,
+        // The id of a current block.
+        block_id: HashValue,
+        // The executed trees after executing the parent block.
+        parent_executed_trees: ExecutedTrees,
+        // Transactions to execute.
+        transactions: (&BlockMetadata, &Self::Payload),
+    ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>>;
+
     /// Send a successful commit. A future is fulfilled when the state is finalized.
     fn commit(
         &self,
         blocks: Vec<&ExecutedBlock<Self::Payload>>,
         finality_proof: LedgerInfoWithSignatures,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+
+    /// Send a successful commit. A future is fulfilled when the state is finalized.
+    fn commit_with_meta_data(
+        &self,
+        meta_data_txn: &BlockMetadata,
+        block: (Self::Payload, Arc<ProcessedVMOutput>),
+        finality_proof: LedgerInfoWithSignatures,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+
+    /// Rollback
+    fn rollback(&self, block_id: HashValue) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 
     /// Best effort state synchronization to the given target LedgerInfo.
     /// In case of success (`Result::Ok`) the LI of storage is at the given target.

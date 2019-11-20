@@ -28,6 +28,8 @@ pub struct ConsensusConfig {
     pub consensus_peers: ConsensusPeersConfig,
     pub consensus_peers_file: PathBuf,
     pub safety_rules: SafetyRulesConfig,
+    pub consensus_type: ConsensusType,
+    pub miner_rpc_address: String,
 }
 
 impl Default for ConsensusConfig {
@@ -43,6 +45,8 @@ impl Default for ConsensusConfig {
             consensus_peers: ConsensusPeersConfig::default(),
             consensus_peers_file: PathBuf::from("consensus_peers.config.toml"),
             safety_rules: SafetyRulesConfig::default(),
+            consensus_type: ConsensusType::POW,
+            miner_rpc_address: "127.0.0.1:4251".to_string(),
         }
     }
 }
@@ -56,6 +60,13 @@ pub enum ConsensusProposerType {
     RotatingProposer,
     // Multiple ordered proposers per round (primary, secondary, etc.)
     MultipleOrderedProposers,
+}
+
+#[derive(Debug, Eq, PartialEq, Deserialize, Serialize, Clone, Copy)]
+#[serde(rename_all = "snake_case")]
+pub enum ConsensusType {
+    PBFT,
+    POW,
 }
 
 impl ConsensusConfig {

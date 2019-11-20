@@ -548,6 +548,7 @@ impl NetworkBuilder {
                 discovery_network_rx,
                 net_conn_mgr_reqs_tx.take().unwrap(),
                 Duration::from_millis(self.discovery_msg_timeout_ms),
+                self.is_public,
             );
             self.executor.spawn(discovery.start());
             debug!("Started discovery protocol actor");

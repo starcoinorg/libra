@@ -139,6 +139,7 @@ impl NetworkConfig {
             .unwrap()
             .to_string();
         }
+
         Ok(())
     }
 }

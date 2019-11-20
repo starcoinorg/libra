@@ -318,7 +318,7 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> LibraHandle {
 
         // Initialize and start consensus.
         instant = Instant::now();
-        let mut consensus_provider = match node_config.consensus.get_consensus_type() {
+        let mut consensus_provider = match node_config.consensus.consensus_type {
             POW => make_pow_consensus_provider(
                 node_config,
                 consensus_network_sender,

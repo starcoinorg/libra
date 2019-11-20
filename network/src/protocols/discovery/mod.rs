@@ -252,7 +252,7 @@ where
                         self.connected_peers.remove(&peer_id);
                     }
                     Event::Message((peer_id, msg)) => {
-                        match handle_discovery_msg(msg, self.trusted_peers.clone(), peer_id) {
+                        match handle_discovery_msg(msg, self.trusted_peers.clone(), peer_id, self.is_public) {
                             Ok(verified_notes) => {
                                 self.reconcile(peer_id, verified_notes).await;
                             }
@@ -429,12 +429,13 @@ fn handle_discovery_msg(
     msg: DiscoveryMsg,
     trusted_peers: Arc<RwLock<HashMap<PeerId, NetworkPublicKeys>>>,
     peer_id: PeerId,
+    is_public: bool,
 ) -> Result<Vec<VerifiedNote>, NetworkError> {
     // Check that all received `Note`s are valid -- reject the whole message
     // if any `Note` is invalid.
     let mut verified_notes = vec![];
     msg.notes.iter().try_for_each(|note| {
-        verify_note(&note, &trusted_peers)
+        verify_note(&note, &trusted_peers, is_public)
             .and_then(|verified_note| {
                 verified_notes.push(verified_note);
                 Ok(())

@@ -158,6 +158,35 @@ where
         info!("GENESIS transaction is committed.")
     }
 
+    /// Rollback
+    pub fn rollback(&mut self, block_id: HashValue) -> Result<()> {
+        // 1. rollback
+        self.storage_write_client.rollback_by_block_id(block_id);
+
+        // 2. get StartInfo
+        let startup_info = self
+            .storage_read_client
+            .get_startup_info()
+            .expect("Failed to read startup info from storage.")
+            .expect("block not exist err.");
+
+        // 3. Reset ExecutedTrees
+        let state_tree = Arc::new(SparseMerkleTree::new(startup_info.committed_tree_state.account_state_root_hash));
+        let transaction_accumulator = Arc::new(
+            InMemoryAccumulator::new(
+                startup_info.committed_tree_state.ledger_frozen_subtree_hashes,
+                startup_info.committed_tree_state.version + 1,
+            )
+                .expect("The startup info read from storage should be valid."),
+        );
+        self.committed_trees
+            .lock()
+            .unwrap()
+            .reset(state_tree, transaction_accumulator);
+
+        Ok(())
+    }
+
     /// Keeps processing blocks until the command sender is disconnected.
     pub fn run(&mut self) {
         loop {
@@ -219,6 +248,25 @@ where
                 self.blocks_to_execute
                     .push_back((executable_block, resp_sender));
             }
+            Command::ExecuteBlockById {
+                transactions,
+                grandpa_id,
+                parent_id,
+                id,
+                resp_sender,
+            } => {
+                let parent_executed_trees = self.executed_trees_by_id(grandpa_id);
+
+                let executable_block = ExecutableBlock {
+                    transactions,
+                    parent_trees: parent_executed_trees,
+                    parent_id,
+                    id,
+                };
+
+                self.blocks_to_execute
+                    .push_back((executable_block, resp_sender));
+            }
             Command::CommitBlockBatch {
                 committable_block_batch,
                 resp_sender,
@@ -241,7 +289,37 @@ where
                     warn!("Failed to send execute and commit chunk response.");
                 }
             }
+            Command::RollbackBlock {
+                block_id,
+                resp_sender,
+            } => {
+                let res = self.rollback(block_id).map_err(|e| {
+                    security_log(SecurityEvent::InvalidBlock)
+                        .error(&e)
+                        .data(block_id)
+                        .log();
+                    e
+                });
+                resp_sender
+                    .send(res)
+                    .expect("Failed to send rollback response.");
+            }
         }
+    }
+
+    /// Query from storage
+    fn executed_trees_by_id(&self, id: HashValue) -> ExecutedTrees {
+        let info = self
+            .storage_read_client
+            .get_history_startup_info_by_block_id(id)
+            .expect("Failed to read startup info from storage.")
+            .expect("startup info is none.");
+
+        ExecutedTrees::new(
+            info.committed_tree_state.account_state_root_hash,
+            info.committed_tree_state.ledger_frozen_subtree_hashes,
+            info.committed_tree_state.version + 1,
+        )
     }
 
     /// Verifies the transactions based on the provided proofs and ledger info. If the transactions
@@ -759,6 +837,7 @@ where
                     match transaction.as_signed_user_txn()?.payload() {
                         TransactionPayload::Program
                         | TransactionPayload::Module(_)
+                        | TransactionPayload::Channel(_)
                         | TransactionPayload::Script(_) => {
                             bail!("Write set should be a subset of read set.")
                         }
