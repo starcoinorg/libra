@@ -36,9 +36,9 @@ use parity_multiaddr::Multiaddr;
 use std::{collections::HashMap, fmt::Debug, time::Duration};
 
 pub use crate::peer_manager::PeerManagerError;
-use std::sync::Arc;
 use futures::lock::Mutex;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 pub const CONSENSUS_INBOUND_MSG_TIMEOUT_MS: u64 = 10 * 1000; // 10 seconds
 pub const MEMPOOL_INBOUND_MSG_TIMEOUT_MS: u64 = 10 * 1000; // 10 seconds

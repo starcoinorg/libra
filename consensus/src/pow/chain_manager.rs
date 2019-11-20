@@ -10,9 +10,11 @@ use libra_crypto::hash::{GENESIS_BLOCK_ID, PRE_GENESIS_BLOCK_ID};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
+use libra_types::account_config::association_address;
+use libra_types::block_metadata::BlockMetadata;
 use libra_types::transaction::SignedTransaction;
 use libra_types::PeerId;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tokio::runtime::TaskExecutor;
 use libra_types::block_metadata::BlockMetadata;
@@ -204,75 +206,135 @@ impl ChainManager {
                             write_lock.insert(block_index.parent_block_id, vec![block_index.id]);
                         }
 
-                        if save_flag {
-                            //save index
-                            let (orphan_flag, old) = chain_lock.connect_block(block_index.clone());
+                                            // 4. call pre_compute
+                                            let block_meta_data = BlockMetadata::new(parent_block_id.clone(), block.timestamp_usecs(), BTreeMap::new(), association_address());
+                                            match state_computer.compute_by_hash(pre_compute_grandpa_block_id, parent_block_id.clone(), block.id(), (&block_meta_data, &payload)).await {
+                                                Ok(processed_vm_output) => {
+                                                    let executed_trees = processed_vm_output.executed_trees();
+                                                    let state_id = executed_trees.state_root();
+                                                    let txn_accumulator_hash = executed_trees.txn_accumulator().root_hash();
+                                                    let txn_len = executed_trees.version().expect("version err.");
 
-                            if !orphan_flag {
-                                match old {
-                                    Some(old_root) => {//update main chain
-                                        let mut main_chain_indexes:Vec<&HashValue> = Vec::new();
-                                        let height = chain_lock.longest_chain_height();
-
-                                        if (rollback_flag && height > 2) || old_root != parent_block_id {//rollback
-                                            let (rollback_vec, mut commit_vec) = if rollback_flag {
-                                                (vec![&old_root], vec![&old_root])
-                                            } else {
-                                                chain_lock.find_ancestor(&old_root, &parent_block_id).expect("find ancestor err.")
-                                            };
-                                            let rollback_len = rollback_vec.len();
-                                            let ancestor_block_id = chain_lock.find_index_by_block_hash(rollback_vec.get(rollback_len - 1).expect("latest_block_id err.")).expect("block index is none err.").parent_block_id;
-                                            let ancestor_block_id = chain_lock.find_index_by_block_hash(&ancestor_block_id).expect("block index is none err.").parent_block_id;
-                                            //1. reset executor
-                                            state_computer.rollback(ancestor_block_id).await.expect("rollback failed.");
-                                            info!("rollback[ old root : {:?} , ancestor block id : {:?}]", old_root, ancestor_block_id);
-
-                                            //2. add txn to mempool
-
-                                            //3. commit
-                                            for commit in commit_vec.iter().rev() {
-                                                // 1. query block
-                                                let commit_block = block_db.get_block_by_hash::<BlockPayloadExt>(commit).expect("block not find in database err.");
-                                                let grandpa_block_id = chain_lock.find_index_by_block_hash(&commit_block.parent_id()).expect("block index is none err.").parent_block_id;
-                                                // 2. commit block
-                                                Self::execut_and_commit_block(block_db.clone(), grandpa_block_id, commit_block, txn_manager.clone(), state_computer.clone()).await;
+                                                    if txn_accumulator_hash == block.quorum_cert().ledger_info().ledger_info().transaction_accumulator_hash() && state_id == block.quorum_cert().ledger_info().ledger_info().consensus_data_hash() {
+                                                        save_flag = true;
+                                                    } else {
+                                                        warn!("Peer id {:?}, Drop block {:?}, parent_block_id {:?}, grandpa_block_id {:?}", author, block.id(), parent_block_id, pre_compute_grandpa_block_id);
+                                                    }
+                                                }
+                                                Err(e) => {error!("{:?}", e)},
                                             }
 
-                                            // 4. update main chain
-                                            main_chain_indexes.append(&mut commit_vec);
+
+                //                            let mut commit_txn_vec = Vec::<SignedTransaction>::new();
+                //                            // 2. find ancestors
+                //                            let (ancestors, pre_block_index) = chain_lock.find_ancestor_until_main_chain(&parent_block_id).expect("find ancestors err.");
+                //
+                //                            // 3. find blocks
+                //                            let blocks = block_db.get_blocks_by_hashs::<BlockPayloadExt>(ancestors).expect("find blocks err.");
+                //
+                //                            for b in blocks {
+                //                                let mut tmp_txns = match b.payload() {
+                //                                    Some(t) => t.get_txns(),
+                //                                    None => vec![],
+                //                                };
+                //                                commit_txn_vec.append(&mut tmp_txns);
+                //                            }
+                //
+                //                            let pre_compute_grandpa_block_id = pre_block_index.parent_block_id;
+                //                            let pre_compute_parent_block_id = pre_block_index.id;
+                //                            commit_txn_vec.append(&mut payload);
+                //
+                //                            // 4. call pre_compute
+                //                            match state_computer.compute_by_hash(pre_compute_grandpa_block_id, pre_compute_parent_block_id, block.id(), &commit_txn_vec).await {
+                //                                Ok(processed_vm_output) => {
+                //                                    let executed_trees = processed_vm_output.executed_trees();
+                //                                    let state_id = executed_trees.state_root();
+                //                                    let txn_accumulator_hash = executed_trees.txn_accumulator().root_hash();
+                //                                    let txn_len = executed_trees.version().expect("version err.");
+                //
+                //                                    if txn_accumulator_hash == block.quorum_cert().ledger_info().ledger_info().transaction_accumulator_hash() && state_id == block.quorum_cert().ledger_info().ledger_info().consensus_data_hash() {
+                //                                        save_flag = true;
+                //                                    } else {
+                //                                        warn!("Peer id {:?}, Drop block {:?}, parent_block_id {:?}, grandpa_block_id {:?}", author, block.id(), pre_compute_parent_block_id, pre_compute_grandpa_block_id);
+                //                                    }
+                //                                }
+                //                                Err(e) => {error!("{:?}", e)},
+                //                            }
+                                        } else {
+                                            //save orphan block
+                                            let mut write_lock = orphan_blocks.lock().compat().await.unwrap();
+                                            write_lock.insert(block_index.parent_block_id, vec![block_index.id]);
                                         }
 
-                                        //4.save latest block
-                                        let id = block.id();
-                                        let grandpa_block_id = chain_lock.find_index_by_block_hash(&block.parent_id()).expect("block index is none err.").parent_block_id;
-                                        Self::execut_and_commit_block(block_db.clone(), grandpa_block_id, block.clone(), txn_manager.clone(), state_computer.clone()).await;
+                                        if save_flag {
+                                            //save index
+                                            let (orphan_flag, old) = chain_lock.connect_block(block_index.clone());
 
-                                        //5. update main chain
-                                        main_chain_indexes.append(&mut vec![&id].to_vec());
-                                        for hash in main_chain_indexes {
-                                            let (h, b_i) = chain_lock.find_height_and_block_index(hash);
-                                            chain_lock.update_main_chain(h, b_i);
-                                            block_db.insert_block_index(h, b_i).expect("insert_block_index err.");
+                                            if !orphan_flag {
+                                                match old {
+                                                    Some(old_root) => {//update main chain
+                                                        let mut main_chain_indexes:Vec<&HashValue> = Vec::new();
+                                                        let height = chain_lock.longest_chain_height();
+
+                                                        if (rollback_flag && height > 2) || old_root != parent_block_id {//rollback
+                                                            let (rollback_vec, mut commit_vec) = if rollback_flag {
+                                                                (vec![&old_root], vec![&old_root])
+                                                            } else {
+                                                                chain_lock.find_ancestor(&old_root, &parent_block_id).expect("find ancestor err.")
+                                                            };
+                                                            let rollback_len = rollback_vec.len();
+                                                            let ancestor_block_id = chain_lock.find_index_by_block_hash(rollback_vec.get(rollback_len - 1).expect("latest_block_id err.")).expect("block index is none err.").parent_block_id;
+                                                            let ancestor_block_id = chain_lock.find_index_by_block_hash(&ancestor_block_id).expect("block index is none err.").parent_block_id;
+                                                            //1. reset executor
+                                                            state_computer.rollback(ancestor_block_id).await.expect("rollback failed.");
+                                                            info!("rollback[ old root : {:?} , ancestor block id : {:?}]", old_root, ancestor_block_id);
+
+                                                            //2. add txn to mempool
+
+                                                            //3. commit
+                                                            for commit in commit_vec.iter().rev() {
+                                                                // 1. query block
+                                                                let commit_block = block_db.get_block_by_hash::<BlockPayloadExt>(commit).expect("block not find in database err.");
+                                                                let grandpa_block_id = chain_lock.find_index_by_block_hash(&commit_block.parent_id()).expect("block index is none err.").parent_block_id;
+                                                                // 2. commit block
+                                                                Self::execut_and_commit_block(block_db.clone(), grandpa_block_id, commit_block, txn_manager.clone(), state_computer.clone()).await;
+                                                            }
+
+                                                            // 4. update main chain
+                                                            main_chain_indexes.append(&mut commit_vec);
+                                                        }
+
+                                                        //4.save latest block
+                                                        let id = block.id();
+                                                        let grandpa_block_id = chain_lock.find_index_by_block_hash(&block.parent_id()).expect("block index is none err.").parent_block_id;
+                                                        Self::execut_and_commit_block(block_db.clone(), grandpa_block_id, block.clone(), txn_manager.clone(), state_computer.clone()).await;
+
+                                                        //5. update main chain
+                                                        main_chain_indexes.append(&mut vec![&id].to_vec());
+                                                        for hash in main_chain_indexes {
+                                                            let (h, b_i) = chain_lock.find_height_and_block_index(hash);
+                                                            chain_lock.update_main_chain(h, b_i);
+                                                            block_db.insert_block_index(h, b_i).expect("insert_block_index err.");
+                                                        }
+
+                                                        chain_lock.print_block_chain_root(author);
+                                                    }
+                                                    None => {
+                                                        // save block, not commit
+                                                        let mut blocks: Vec<Block<BlockPayloadExt>> = Vec::new();
+                                                        blocks.push(block.clone());
+                                                        let mut qcs = Vec::new();
+                                                        qcs.push(block.quorum_cert().clone());
+                                                        block_db.save_blocks_and_quorum_certificates(blocks, qcs).expect("save_blocks err.");
+                                                    }
+                                                }
+                                            }
+
+                                            drop(chain_lock);
+                                            debug!("save block drop chain lock");
                                         }
-
-                                        chain_lock.print_block_chain_root(author);
-                                    }
-                                    None => {
-                                        // save block, not commit
-                                        let mut blocks: Vec<Block<BlockPayloadExt>> = Vec::new();
-                                        blocks.push(block.clone());
-                                        let mut qcs = Vec::new();
-                                        qcs.push(block.quorum_cert().clone());
-                                        block_db.save_blocks_and_quorum_certificates(blocks, qcs).expect("save_blocks err.");
                                     }
                                 }
-                            }
-
-                            drop(chain_lock);
-                            debug!("save block drop chain lock");
-                        }
-                    }
-                }
             }
         };
 
@@ -293,9 +355,19 @@ impl ChainManager {
         };
 
         // 3. Query data from db
-        let block_meta_data = BlockMetadata::new(block.parent_id(), block.timestamp_usecs(), BTreeMap::new(), association_address());
+        let block_meta_data = BlockMetadata::new(
+            block.parent_id(),
+            block.timestamp_usecs(),
+            BTreeMap::new(),
+            association_address(),
+        );
         let processed_vm_output = state_computer
-            .compute_by_hash(grandpa_block_id, block.parent_id().clone(), block.id(), (&block_meta_data, &payload))
+            .compute_by_hash(
+                grandpa_block_id,
+                block.parent_id().clone(),
+                block.id(),
+                (&block_meta_data, &payload),
+            )
             .await
             .expect("compute block err.");
 

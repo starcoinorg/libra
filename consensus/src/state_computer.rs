@@ -9,6 +9,7 @@ use failure::Result;
 use futures::{Future, FutureExt};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
+use libra_types::block_metadata::BlockMetadata;
 use libra_types::crypto_proxies::ValidatorChangeEventWithProof;
 use libra_types::{
     crypto_proxies::LedgerInfoWithSignatures,
@@ -127,6 +128,7 @@ impl StateComputer for ExecutionProxy {
             parent_block_id,
             block_id,
         );
+
         async move {
             match execute_future.await {
                 Ok(Ok(output)) => {

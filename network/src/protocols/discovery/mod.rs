@@ -252,7 +252,12 @@ where
                         self.connected_peers.remove(&peer_id);
                     }
                     Event::Message((peer_id, msg)) => {
-                        match handle_discovery_msg(msg, self.trusted_peers.clone(), peer_id, self.is_public) {
+                        match handle_discovery_msg(
+                            msg,
+                            self.trusted_peers.clone(),
+                            peer_id,
+                            self.is_public,
+                        ) {
                             Ok(verified_notes) => {
                                 self.reconcile(peer_id, verified_notes).await;
                             }
