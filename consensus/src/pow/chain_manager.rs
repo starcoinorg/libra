@@ -144,7 +144,6 @@ impl ChainManager {
                             pre_compute_grandpa_block_id = b.parent_id();
                         }
 
-
                                         // 4. call pre_compute
                                         let block_meta_data = BlockMetadata::new(parent_block_id.clone(), block.timestamp_usecs(), BTreeMap::new(), association_address());
                                         match state_computer.compute_by_hash(pre_compute_grandpa_block_id, parent_block_id.clone(), block.id(), (&block_meta_data, &payload)).await {
