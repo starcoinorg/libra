@@ -1,8 +1,9 @@
 use crate::pow::event_processor::EventProcessor;
 use crate::{
     consensus_provider::ConsensusProvider, state_computer::ExecutionProxy,
-    txn_manager::MempoolProxy,
+    txn_manager::MempoolProxy, MineClient,
 };
+use async_std::task;
 use executor::Executor;
 use failure::prelude::*;
 use grpcio::Server;
@@ -17,7 +18,6 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::runtime::{self, TaskExecutor};
 use vm_runtime::MoveVM;
-
 pub struct PowConsensusProvider {
     runtime: tokio::runtime::Runtime,
     event_handle: Option<EventProcessor>,
@@ -49,13 +49,21 @@ impl PowConsensusProvider {
             .clone();
         let author = AccountAddress::try_from(peer_id_str.clone())
             .expect("Failed to parse peer id of a validator");
-
+        //Start miner proxy server
         let mine_state = MineStateManager::new();
         let miner_rpc_addr = String::from(&node_config.consensus.miner_rpc_address);
         let mut miner_proxy = setup_minerproxy_service(mine_state.clone(), miner_rpc_addr);
         miner_proxy.start();
         for &(ref host, port) in miner_proxy.bind_addrs() {
-            println!("listening on {}:{}", host, port);
+            info!("listening on {}:{}", host, port);
+        }
+        // Start miner client.
+        if node_config.consensus.miner_client_enable {
+            let miner_rpc_addr = node_config.consensus.miner_rpc_address();
+            task::spawn(async move {
+                let mine_client = MineClient::new(miner_rpc_addr);
+                mine_client.start().await
+            });
         }
         let event_handle = EventProcessor::new(
             network_sender,

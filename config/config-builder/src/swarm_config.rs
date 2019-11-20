@@ -361,6 +361,7 @@ impl SwarmConfig {
             safety_rules: safety_rules_config,
             consensus_type: template.consensus.consensus_type.clone(),
             miner_rpc_address: String::from(&template.consensus.miner_rpc_address),
+            miner_client_enable: template.consensus.miner_client_enable,
         };
         let mut config = NodeConfig {
             base: base_config,

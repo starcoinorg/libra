@@ -14,7 +14,6 @@ use consensus_types::block_retrieval::{
 use cuckoo::consensus::{PowCuckoo, PowService, Proof};
 use futures::channel::mpsc;
 use futures::{stream::select, SinkExt, StreamExt, TryStreamExt};
-use grpcio::Server;
 use libra_crypto::hash::CryptoHash;
 use libra_crypto::hash::{GENESIS_BLOCK_ID, PRE_GENESIS_BLOCK_ID};
 use libra_crypto::HashValue;
@@ -23,10 +22,7 @@ use libra_prost_ext::MessageExt;
 use libra_types::account_address::AccountAddress;
 use libra_types::transaction::SignedTransaction;
 use libra_types::PeerId;
-use miner::{
-    server::setup_minerproxy_service,
-    types::{MineStateManager, CYCLE_LENGTH, MAX_EDGE},
-};
+use miner::types::{MineStateManager, CYCLE_LENGTH, MAX_EDGE};
 use network::{
     proto::{
         Block as BlockProto, ConsensusMsg,
