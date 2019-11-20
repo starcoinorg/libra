@@ -17,7 +17,6 @@ use libra_types::crypto_proxies::ValidatorSigner;
 use libra_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use libra_types::transaction::SignedTransaction;
 use miner::types::{MineCtx, MineState, MineStateManager};
-use libra_types::account_config::association_address;
 
 use libra_types::block_metadata::BlockMetadata;
 use network::{
@@ -34,7 +33,6 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use tokio::runtime::TaskExecutor;
-use libra_types::block_metadata::BlockMetadata;
 
 pub struct MintManager {
     txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
