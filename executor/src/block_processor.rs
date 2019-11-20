@@ -171,13 +171,17 @@ where
             .expect("block not exist err.");
 
         // 3. Reset ExecutedTrees
-        let state_tree = Arc::new(SparseMerkleTree::new(startup_info.committed_tree_state.account_state_root_hash));
+        let state_tree = Arc::new(SparseMerkleTree::new(
+            startup_info.committed_tree_state.account_state_root_hash,
+        ));
         let transaction_accumulator = Arc::new(
             InMemoryAccumulator::new(
-                startup_info.committed_tree_state.ledger_frozen_subtree_hashes,
+                startup_info
+                    .committed_tree_state
+                    .ledger_frozen_subtree_hashes,
                 startup_info.committed_tree_state.version + 1,
             )
-                .expect("The startup info read from storage should be valid."),
+            .expect("The startup info read from storage should be valid."),
         );
         self.committed_trees
             .lock()
