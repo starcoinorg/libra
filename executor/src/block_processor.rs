@@ -181,7 +181,7 @@ where
                     .ledger_frozen_subtree_hashes,
                 startup_info.committed_tree_state.version + 1,
             )
-                .expect("The startup info read from storage should be valid."),
+            .expect("The startup info read from storage should be valid."),
         );
         self.committed_trees
             .lock()
