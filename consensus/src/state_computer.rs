@@ -23,6 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 use vm_runtime::MoveVM;
+use libra_types::block_metadata::BlockMetadata;
 
 /// Basic communication with the Execution module;
 /// implements StateComputer traits.
@@ -121,9 +122,13 @@ impl StateComputer for ExecutionProxy {
                 .map(|txn| Transaction::UserTransaction(txn.clone())),
         );
 
-        let execute_future =
-            self.executor
-                .execute_block_by_id(txn_vec, grandpa_block_id, parent_block_id, block_id);
+        let execute_future = self.executor.execute_block_by_id(
+            txn_vec,
+            grandpa_block_id,
+            parent_block_id,
+            block_id,
+        );
+
         async move {
             match execute_future.await {
                 Ok(Ok(output)) => {
@@ -175,9 +180,12 @@ impl StateComputer for ExecutionProxy {
                 .map(|txn| Transaction::UserTransaction(txn.clone())),
         );
 
-        let execute_future =
-            self.executor
-                .execute_block(txn_vec, parent_executed_trees, parent_block_id, block_id);
+        let execute_future = self.executor.execute_block(
+            txn_vec,
+            parent_executed_trees,
+            parent_block_id,
+            block_id,
+        );
         async move {
             match execute_future.await {
                 Ok(Ok(output)) => {
@@ -190,7 +198,7 @@ impl StateComputer for ExecutionProxy {
                     } else {
                         counters::BLOCK_EXECUTION_DURATION_S.observe_duration(execution_duration);
                         if let Ok(nanos_per_txn) =
-                            u64::try_from(execution_duration.as_nanos() / num_txns as u128)
+                        u64::try_from(execution_duration.as_nanos() / num_txns as u128)
                         {
                             // TODO: use duration_float once it's stable
                             // Tracking: https://github.com/rust-lang/rust/issues/54361

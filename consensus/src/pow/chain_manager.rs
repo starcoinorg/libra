@@ -17,6 +17,8 @@ use libra_types::PeerId;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tokio::runtime::TaskExecutor;
+use libra_types::block_metadata::BlockMetadata;
+use libra_types::account_config::association_address;
 
 pub struct ChainManager {
     block_cache_receiver: Option<mpsc::Receiver<Block<BlockPayloadExt>>>,
@@ -90,59 +92,119 @@ impl ChainManager {
         let chain_fut = async move {
             loop {
                 ::futures::select! {
-                                    block = block_cache_receiver.select_next_some() => {
-                                        //TODO:Verify block
+                    block = block_cache_receiver.select_next_some() => {
+                        //TODO:Verify block
 
-                                        // 2. compute with state_computer
-                                        let mut payload = match block.payload() {
-                                            Some(p) => p.get_txns(),
-                                            None => vec![],
-                                        };
+                        // 2. compute with state_computer
+                        let mut payload = match block.payload() {
+                            Some(p) => p.get_txns(),
+                            None => vec![],
+                        };
 
-                                        // Pre compute
-                                        // 1. orphan block
-                                        let parent_block_id = block.parent_id();
-                                        let block_index = BlockIndex { id: block.id(), parent_block_id };
-                                        let mut chain_lock = block_chain.write().compat().await.unwrap();
-                                        let mut save_flag = false;
-                                        if chain_lock.block_exist(&parent_block_id) {
-                                            // 2. find ancestors
-                                            let (ancestors, pre_block_index) = chain_lock.find_ancestor_until_main_chain(&parent_block_id).expect("find ancestors err.");
+                        // Pre compute
+                        // 1. orphan block
+                        let parent_block_id = block.parent_id();
+                        let block_index = BlockIndex { id: block.id(), parent_block_id };
+                        let mut chain_lock = block_chain.write().compat().await.unwrap();
+                        let mut save_flag = false;
+                        if chain_lock.block_exist(&parent_block_id) {
+                            // 2. find ancestors
+                            let (ancestors, pre_block_index) = chain_lock.find_ancestor_until_main_chain(&parent_block_id).expect("find ancestors err.");
 
-                                            // 3. find blocks
-                                            let blocks = block_db.get_blocks_by_hashs::<BlockPayloadExt>(ancestors).expect("find blocks err.");
+                            // 3. find blocks
+                            let blocks = block_db.get_blocks_by_hashs::<BlockPayloadExt>(ancestors).expect("find blocks err.");
 
-                                            let mut pre_compute_grandpa_block_id = pre_block_index.parent_block_id;
-                                            let mut pre_executed_trees = None;
-                                            for b in blocks {
-                                                let mut tmp_payload = match block.payload() {
-                                                    Some(p) => p.get_txns(),
-                                                    None => vec![],
-                                                };
+                            let mut pre_compute_grandpa_block_id = pre_block_index.parent_block_id;
+                            let mut pre_executed_trees = None;
+                            for b in blocks {
+                                let mut tmp_payload = match block.payload() {
+                                    Some(p) => p.get_txns(),
+                                    None => vec![],
+                                };
 
-                                                let block_meta_data = BlockMetadata::new(b.parent_id().clone(), b.timestamp_usecs(), BTreeMap::new(), association_address());
+                                let block_meta_data = BlockMetadata::new(b.parent_id().clone(), b.timestamp_usecs(), BTreeMap::new(), association_address());
 
-                                                match pre_executed_trees.clone() {
-                                                    Some(tree) => {
-                                                        match state_computer.compute_with_meta_data(b.parent_id().clone(), b.id(), tree, (&block_meta_data, &tmp_payload)).await {
-                                                            Ok(processed_vm_output) => {
-                                                                pre_executed_trees = Some(processed_vm_output.executed_trees().clone());
-                                                            }
-                                                            Err(e) => {error!("{:?}", e)},
-                                                        }
-                                                    },
-                                                    None => {
-                                                        match state_computer.compute_by_hash(pre_compute_grandpa_block_id, b.parent_id().clone(), b.id(), (&block_meta_data, &tmp_payload)).await {
-                                                            Ok(processed_vm_output) => {
-                                                                pre_executed_trees = Some(processed_vm_output.executed_trees().clone());
-                                                            }
-                                                            Err(e) => {error!("{:?}", e)},
-                                                        }
-                                                    },
-                                                }
-
-                                                pre_compute_grandpa_block_id = b.parent_id();
+                                match pre_executed_trees.clone() {
+                                    Some(tree) => {
+                                        match state_computer.compute_with_meta_data(b.parent_id().clone(), b.id(), tree, (&block_meta_data, &tmp_payload)).await {
+                                            Ok(processed_vm_output) => {
+                                                pre_executed_trees = Some(processed_vm_output.executed_trees().clone());
                                             }
+                                            Err(e) => {error!("{:?}", e)},
+                                        }
+                                    },
+                                    None => {
+                                        match state_computer.compute_by_hash(pre_compute_grandpa_block_id, b.parent_id().clone(), b.id(), (&block_meta_data, &tmp_payload)).await {
+                                            Ok(processed_vm_output) => {
+                                                pre_executed_trees = Some(processed_vm_output.executed_trees().clone());
+                                            }
+                                            Err(e) => {error!("{:?}", e)},
+                                        }
+                                    },
+                                }
+
+                                pre_compute_grandpa_block_id = b.parent_id();
+                            }
+
+                            // 4. call pre_compute
+                            let block_meta_data = BlockMetadata::new(parent_block_id.clone(), block.timestamp_usecs(), BTreeMap::new(), association_address());
+                            match state_computer.compute_by_hash(pre_compute_grandpa_block_id, parent_block_id.clone(), block.id(), (&block_meta_data, &payload)).await {
+                                Ok(processed_vm_output) => {
+                                    let executed_trees = processed_vm_output.executed_trees();
+                                    let state_id = executed_trees.state_root();
+                                    let txn_accumulator_hash = executed_trees.txn_accumulator().root_hash();
+                                    let txn_len = executed_trees.version().expect("version err.");
+
+                                    if txn_accumulator_hash == block.quorum_cert().ledger_info().ledger_info().transaction_accumulator_hash() && state_id == block.quorum_cert().ledger_info().ledger_info().consensus_data_hash() {
+                                        save_flag = true;
+                                    } else {
+                                        warn!("Peer id {:?}, Drop block {:?}, parent_block_id {:?}, grandpa_block_id {:?}", author, block.id(), parent_block_id, pre_compute_grandpa_block_id);
+                                    }
+                                }
+                                Err(e) => {error!("{:?}", e)},
+                            }
+
+
+//                            let mut commit_txn_vec = Vec::<SignedTransaction>::new();
+//                            // 2. find ancestors
+//                            let (ancestors, pre_block_index) = chain_lock.find_ancestor_until_main_chain(&parent_block_id).expect("find ancestors err.");
+//
+//                            // 3. find blocks
+//                            let blocks = block_db.get_blocks_by_hashs::<BlockPayloadExt>(ancestors).expect("find blocks err.");
+//
+//                            for b in blocks {
+//                                let mut tmp_txns = match b.payload() {
+//                                    Some(t) => t.get_txns(),
+//                                    None => vec![],
+//                                };
+//                                commit_txn_vec.append(&mut tmp_txns);
+//                            }
+//
+//                            let pre_compute_grandpa_block_id = pre_block_index.parent_block_id;
+//                            let pre_compute_parent_block_id = pre_block_index.id;
+//                            commit_txn_vec.append(&mut payload);
+//
+//                            // 4. call pre_compute
+//                            match state_computer.compute_by_hash(pre_compute_grandpa_block_id, pre_compute_parent_block_id, block.id(), &commit_txn_vec).await {
+//                                Ok(processed_vm_output) => {
+//                                    let executed_trees = processed_vm_output.executed_trees();
+//                                    let state_id = executed_trees.state_root();
+//                                    let txn_accumulator_hash = executed_trees.txn_accumulator().root_hash();
+//                                    let txn_len = executed_trees.version().expect("version err.");
+//
+//                                    if txn_accumulator_hash == block.quorum_cert().ledger_info().ledger_info().transaction_accumulator_hash() && state_id == block.quorum_cert().ledger_info().ledger_info().consensus_data_hash() {
+//                                        save_flag = true;
+//                                    } else {
+//                                        warn!("Peer id {:?}, Drop block {:?}, parent_block_id {:?}, grandpa_block_id {:?}", author, block.id(), pre_compute_parent_block_id, pre_compute_grandpa_block_id);
+//                                    }
+//                                }
+//                                Err(e) => {error!("{:?}", e)},
+//                            }
+                        } else {
+                            //save orphan block
+                            let mut write_lock = orphan_blocks.lock().compat().await.unwrap();
+                            write_lock.insert(block_index.parent_block_id, vec![block_index.id]);
+                        }
 
                                             // 4. call pre_compute
                                             let block_meta_data = BlockMetadata::new(parent_block_id.clone(), block.timestamp_usecs(), BTreeMap::new(), association_address());

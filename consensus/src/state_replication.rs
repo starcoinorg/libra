@@ -6,10 +6,10 @@ use consensus_types::executed_block::ExecutedBlock;
 use executor::{ExecutedTrees, ProcessedVMOutput, StateComputeResult};
 use failure::Result;
 use futures::Future;
-use libra_crypto::HashValue;
-use libra_types::block_metadata::BlockMetadata;
 use libra_types::crypto_proxies::{LedgerInfoWithSignatures, ValidatorChangeEventWithProof};
 use std::{pin::Pin, sync::Arc};
+use libra_crypto::HashValue;
+use libra_types::block_metadata::BlockMetadata;
 
 /// Retrieves and updates the status of transactions on demand (e.g., via talking with Mempool)
 pub trait TxnManager: Send + Sync {
