@@ -110,15 +110,15 @@ impl<'alloc> VMRuntime<'alloc> {
             ValidationMode::Validating
         };
 
-        let validated_txn =
-            match process_txn.validate(mode, &self.publishing_option, self.vm_mode.clone()) {
-                Ok(validated_txn) => validated_txn,
-                Err(vm_status) => {
-                    let res = Some(vm_status);
-                    report_verification_status(&res);
-                    return res;
-                }
-            };
+        let validated_txn = match process_txn.validate(mode, &self.publishing_option, self.vm_mode)
+        {
+            Ok(validated_txn) => validated_txn,
+            Err(vm_status) => {
+                let res = Some(vm_status);
+                report_verification_status(&res);
+                return res;
+            }
+        };
         let res = match validated_txn.verify(&self.script_cache) {
             Ok(_) => None,
             Err(vm_status) => Some(vm_status),
@@ -151,7 +151,7 @@ impl<'alloc> VMRuntime<'alloc> {
                         &self.script_cache,
                         &mut data_cache,
                         &self.publishing_option,
-                        self.vm_mode.clone(),
+                        self.vm_mode,
                     )?)
                 }
                 TransactionBlock::BlockPrologue(block_metadata) => result.push(

@@ -16,6 +16,7 @@ use libra_types::crypto_proxies::ValidatorSigner;
 use libra_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use libra_types::transaction::SignedTransaction;
 use miner::types::{MineCtx, MineState, MineStateManager};
+use libra_types::account_config::association_address;
 
 use network::{
     proto::{
@@ -31,6 +32,7 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use tokio::runtime::TaskExecutor;
+use libra_types::block_metadata::BlockMetadata;
 
 pub struct MintManager {
     txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
@@ -96,13 +98,14 @@ impl MintManager {
                                     .expect("block not find in database err.");
                                 parent_block.quorum_cert().clone()
                             } else {
-                                QuorumCert::certificate_for_genesis()
+                                QuorumCert::certificate_for_genesis_from_ledger_info(&LedgerInfo::genesis(), *GENESIS_BLOCK_ID)
                             };
 
                             //compute current block state id
                             let tmp_id = HashValue::random();
+                            let block_meta_data = BlockMetadata::new(parent_block_id.clone(), quorum_cert.ledger_info().ledger_info().timestamp_usecs(), BTreeMap::new(), association_address());
                             match mint_state_computer
-                                .compute_by_hash(grandpa_block_id, parent_block_id, tmp_id, &txns)
+                                .compute_by_hash(grandpa_block_id, parent_block_id, tmp_id, (&block_meta_data, &txns))
                                 .await
                             {
                                 Ok(processed_vm_output) => {

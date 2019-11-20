@@ -80,7 +80,7 @@ impl AdmissionControlService {
         &self,
         executor: TaskExecutor,
         proxy: UpstreamProxyData<CoreMemPoolClient, VMValidator>,
-        req: SubmitTransactionRequest
+        req: SubmitTransactionRequest,
     ) -> Result<SubmitTransactionResponse> {
         let (req_sender, res_receiver) = oneshot::channel();
 

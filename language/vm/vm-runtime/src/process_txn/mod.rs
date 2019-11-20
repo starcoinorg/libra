@@ -7,7 +7,6 @@ use libra_types::transaction::SignatureCheckedTransaction;
 use std::marker::PhantomData;
 use vm::{errors::VMResult, gas_schedule::CostTable};
 
-pub mod balance_checker;
 pub mod execute;
 pub mod validate;
 pub mod verify;

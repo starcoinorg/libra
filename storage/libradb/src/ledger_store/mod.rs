@@ -42,6 +42,10 @@ pub(crate) struct LedgerStore {
     latest_ledger_info: ArcSwap<Option<LedgerInfoWithSignatures>>,
 }
 
+// TODO: Either implement an iteration API to allow a very old client to loop through a long history
+// or guarantee that there is always a recent enough waypoint and client knows to boot from there.
+const MAX_NUM_EPOCH_CHANGE_LEDGER_INFO: usize = 100;
+
 impl LedgerStore {
     pub fn new(db: Arc<DB>) -> Self {
         // Upon restart, read the latest ledger info and signatures and cache them in memory.
@@ -62,7 +66,6 @@ impl LedgerStore {
         }
     }
 
-    #[allow(dead_code)]
     pub fn get_epoch(&self, version: Version) -> Result<u64> {
         let mut iter = self
             .db
@@ -82,17 +85,42 @@ impl LedgerStore {
         Ok(epoch)
     }
 
-    /// Return the ledger infos with their least 2f+1 signatures starting from `start_epoch` to
-    /// the most recent one.
-    /// Note: ledger infos and signatures are only available at the last version of each earlier
-    /// epoch and at the latest version of current epoch.
-    pub fn get_latest_ledger_infos_per_epoch(
+    /// Return the ledger infos reflecting epoch bumps with their least 2f+1 signatures starting
+    /// from `start_epoch` to the most recent one.
+    /// Note: ledger infos and signatures are available at the last version of each earlier epoch
+    /// and at the latest version of current epoch, we filter out the latter.
+    pub fn get_epoch_change_ledger_infos(
         &self,
         start_epoch: u64,
+        ledger_version: Version,
     ) -> Result<Vec<LedgerInfoWithSignatures>> {
         let mut iter = self.db.iter::<LedgerInfoSchema>(ReadOptions::default())?;
         iter.seek(&start_epoch)?;
-        Ok(iter.map(|kv| Ok(kv?.1)).collect::<Result<Vec<_>>>()?)
+
+        let mut result = Vec::new();
+        for res in iter {
+            let (_epoch, ledger_info_with_sigs) = res?;
+            if ledger_info_with_sigs.ledger_info().version() > ledger_version {
+                break;
+            }
+            if ledger_info_with_sigs
+                .ledger_info()
+                .next_validator_set()
+                .is_none()
+            {
+                break;
+            }
+            if result.len() >= MAX_NUM_EPOCH_CHANGE_LEDGER_INFO {
+                return Err(LibraDbError::TooManyRequested(
+                    MAX_NUM_EPOCH_CHANGE_LEDGER_INFO as u64 + 1,
+                    MAX_NUM_EPOCH_CHANGE_LEDGER_INFO as u64,
+                )
+                .into());
+            }
+            result.push(ledger_info_with_sigs);
+        }
+
+        Ok(result)
     }
 
     pub fn get_latest_ledger_info_option(&self) -> Option<LedgerInfoWithSignatures> {
@@ -128,7 +156,7 @@ impl LedgerStore {
 
     /// Get latest transaction info together with its version. Note that during node syncing, this
     /// version can be greater than what's in the latest LedgerInfo.
-    pub fn _get_latest_transaction_info(&self) -> Result<(Version, TransactionInfo)> {
+    pub fn get_latest_transaction_info(&self) -> Result<(Version, TransactionInfo)> {
         self.get_latest_transaction_info_option()?
             .ok_or_else(|| LibraDbError::NotFound(String::from("Genesis TransactionInfo.")).into())
     }

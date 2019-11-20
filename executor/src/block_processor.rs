@@ -66,10 +66,6 @@ pub(crate) struct BlockProcessor<V> {
     storage_read_client: Arc<dyn StorageRead>,
     storage_write_client: Arc<dyn StorageWrite>,
 
-    /// The current mode. If we are doing state synchronization, we will refuse to serve normal
-    /// execute_block and commit_block requests.
-    mode: Mode,
-
     /// Configuration for the VM. The block processor currently creates a new VM for each block.
     vm_config: VMConfig,
 
@@ -101,13 +97,16 @@ where
             block_batch_to_commit: None,
             storage_read_client,
             storage_write_client,
-            mode: Mode::Normal,
             vm_config,
             phantom: PhantomData,
         };
         processor.init_genesis_if_needed(genesis_txn);
         resp_sender.send(()).expect("cannot fail");
         processor
+    }
+
+    fn sync_mode(&self) -> bool {
+        self.synced_trees.is_some()
     }
 
     /// This is used when we start for the first time and the DB is completely empty. It will write
@@ -178,7 +177,7 @@ where
                 startup_info.committed_tree_state.ledger_frozen_subtree_hashes,
                 startup_info.committed_tree_state.version + 1,
             )
-            .expect("The startup info read from storage should be valid."),
+                .expect("The startup info read from storage should be valid."),
         );
         self.committed_trees
             .lock()
@@ -246,9 +245,6 @@ where
                 executable_block,
                 resp_sender,
             } => {
-                if let Mode::Syncing = self.mode {
-                    info!("execute block {} in sync mode.", executable_block.id);
-                };
                 self.blocks_to_execute
                     .push_back((executable_block, resp_sender));
             }
@@ -268,9 +264,6 @@ where
                     id,
                 };
 
-                if let Mode::Syncing = self.mode {
-                    info!("execute block by id {} in sync mode.", executable_block.id);
-                }
                 self.blocks_to_execute
                     .push_back((executable_block, resp_sender));
             }
@@ -278,17 +271,6 @@ where
                 committable_block_batch,
                 resp_sender,
             } => {
-                let id = committable_block_batch
-                    .finality_proof
-                    .ledger_info()
-                    .consensus_block_id();
-                if let Mode::Syncing = self.mode {
-                    info!(
-                        "Commit block {} in sync mode. Switch back to Normal mode.",
-                        id
-                    );
-                    self.mode = Mode::Normal;
-                };
                 assert!(self
                     .block_batch_to_commit
                     .replace((committable_block_batch, resp_sender))
@@ -354,17 +336,14 @@ where
             return Ok(());
         }
 
-        if let Mode::Normal = self.mode {
-            self.mode = Mode::Syncing;
-            if self.synced_trees.is_none() {
-                self.synced_trees = Some(self.committed_trees.lock().unwrap().clone());
-            }
+        if !self.sync_mode() {
+            self.synced_trees = Some(self.committed_trees.lock().unwrap().clone());
             info!("Start syncing...");
         }
         let synced_trees = self.synced_trees.as_ref().expect("Synced tree must exist.");
 
         info!(
-            "Local version: {}. First transaction version in request: {:?}. \
+            "Local synced version: {}. First transaction version in request: {:?}. \
              Number of transactions in request: {}.",
             synced_trees.txn_accumulator().num_leaves() - 1,
             chunk.txn_list_with_proof.first_transaction_version,
@@ -454,15 +433,21 @@ where
         )?;
 
         self.synced_trees = Some(output.executed_trees().clone());
+        info!(
+            "Synced to version {}.",
+            output
+                .executed_trees()
+                .version()
+                .expect("version must exist"),
+        );
 
         if let Some(ledger_info_with_sigs) = ledger_info_to_commit {
             self.committed_timestamp_usecs = ledger_info_with_sigs.ledger_info().timestamp_usecs();
-            self.mode = Mode::Normal;
-            assert!(self.synced_trees.is_some());
+            assert!(self.sync_mode());
             *self.committed_trees.lock().unwrap() =
                 self.synced_trees.take().expect("synced trees must exist.");
             info!(
-                "Synced to version {}.",
+                "Synced to version {} with ledger info committed.",
                 ledger_info_with_sigs.ledger_info().version()
             );
         }
@@ -513,6 +498,31 @@ where
     /// and only `C` and `E` have signatures, we will send `A`, `B` and `C` in the first batch,
     /// then `D` and `E` later in the another batch.
     fn commit_block_batch(&mut self, block_batch: CommittableBlockBatch) -> Result<()> {
+        // All transactions that need to go to storage. In the above example, this means all the
+        // transactions in A, B and C whose status == TransactionStatus::Keep.
+        // This must be done before calculate potential skipping of transactions in idempotent commit.
+        let mut txns_to_keep = vec![];
+        for (txn, txn_data) in block_batch
+            .blocks
+            .iter()
+            .map(|block| itertools::zip_eq(&block.transactions, block.output.transaction_data()))
+            .flatten()
+        {
+            if let TransactionStatus::Keep(_) = txn_data.status() {
+                txns_to_keep.push((
+                    TransactionToCommit::new(
+                        txn.clone(),
+                        txn_data.account_blobs().clone(),
+                        txn_data.events().to_vec(),
+                        txn_data.gas_used(),
+                        txn_data.status().vm_status().major_status,
+                    ),
+                    txn_data.num_account_created(),
+                ));
+            }
+        }
+        let num_txns_to_keep = txns_to_keep.len() as u64;
+
         let last_block = block_batch
             .blocks
             .last()
@@ -538,70 +548,77 @@ where
         );
 
         // Skip txns that are already committed to allow failures in state sync process.
-        let num_txns_in_batch = block_batch
-            .blocks
-            .iter()
-            .map(|b| b.transactions.len())
-            .sum::<usize>() as u64;
-        let batch_first_version = version + 1 - num_txns_in_batch;
-        let num_committed_txns = self
-            .committed_trees
-            .lock()
-            .unwrap()
-            .txn_accumulator()
-            .num_leaves();
+        let first_version_to_keep = version + 1 - num_txns_to_keep;
+        let num_persistent_txns = if self.sync_mode() {
+            self.synced_trees
+                .as_ref()
+                .expect("synced_trees must exist")
+                .txn_accumulator()
+                .num_leaves()
+        } else {
+            self.committed_trees
+                .lock()
+                .unwrap()
+                .txn_accumulator()
+                .num_leaves()
+        };
         assert!(
-            batch_first_version <= num_committed_txns,
-            "first_version in commit_block_batch cannot exceed # of committed txns."
+            first_version_to_keep <= num_persistent_txns,
+            "first_version {} in commit_block_batch cannot exceed # of committed txns: {}.",
+            first_version_to_keep,
+            num_persistent_txns
         );
 
-        let num_txns_to_skip = num_committed_txns - batch_first_version;
+        let num_txns_to_skip = num_persistent_txns - first_version_to_keep;
+        let first_version_to_commit = first_version_to_keep + num_txns_to_skip;
         if num_txns_to_skip != 0 {
             info!(
-                "Skipping the first {} transactions when committing",
-                num_txns_to_skip
+                "The lastest committed/synced version: {}, the first version to keep in the batch: {}.\
+                 Skipping the first {} transactions and start committing from version {}",
+                num_persistent_txns - 1, /* latest persistent version */
+                first_version_to_keep,
+                num_txns_to_skip,
+                first_version_to_commit
             );
         }
 
-        // All transactions that need to go to storage. In the above example, this means all the
-        // transactions in A, B and C whose status == TransactionStatus::Keep.
-        let mut txns_to_commit = vec![];
-        let mut num_accounts_created = 0;
-        for block in &block_batch.blocks {
-            for (txn, txn_data) in
-                itertools::zip_eq(&block.transactions, block.output.transaction_data())
-                    .skip(num_txns_to_skip as usize)
-            {
-                if let TransactionStatus::Keep(_) = txn_data.status() {
-                    txns_to_commit.push(TransactionToCommit::new(
-                        txn.clone(),
-                        txn_data.account_blobs().clone(),
-                        txn_data.events().to_vec(),
-                        txn_data.gas_used(),
-                        txn_data.status().vm_status().major_status,
-                    ));
-                    num_accounts_created += txn_data.num_account_created();
-                }
-            }
-        }
+        // Skip duplicate txns that are already persistent.
+        let (txns_to_commit, list_num_account_created): (Vec<_>, Vec<_>) = txns_to_keep
+            .into_iter()
+            .skip(num_txns_to_skip as usize)
+            .unzip();
 
         let num_txns_to_commit = txns_to_commit.len() as u64;
 
         {
             let _timer = OP_COUNTERS.timer("storage_save_transactions_time_s");
-            OP_COUNTERS.observe(
-                "storage_save_transactions.count",
-                txns_to_commit.len() as f64,
-            );
-            let first_version = version + 1 - num_txns_to_commit;
+            OP_COUNTERS.observe("storage_save_transactions.count", num_txns_to_commit as f64);
+            assert_eq!(first_version_to_commit, version + 1 - num_txns_to_commit);
             self.storage_write_client.save_transactions(
                 txns_to_commit,
-                first_version,
+                first_version_to_commit,
                 Some(ledger_info_with_sigs.clone()),
             )?;
         }
         // Only bump the counter when the commit succeeds.
-        OP_COUNTERS.inc_by("num_accounts", num_accounts_created);
+        OP_COUNTERS.inc_by("num_accounts", list_num_account_created.into_iter().sum());
+
+        // Change mode back to normal if all the sycned txns are committed by the latest committed ledger info.
+        if self.sync_mode()
+            && self
+                .synced_trees
+                .as_ref()
+                .expect("synced_tress must exist")
+                .txn_accumulator()
+                .num_leaves()
+                <= last_block
+                    .output
+                    .executed_trees()
+                    .txn_accumulator()
+                    .num_leaves()
+        {
+            self.synced_trees = None;
+        }
 
         // Now that the blocks are persisted successfully, we can reply to consensus and update
         // in-memory state.
@@ -637,7 +654,6 @@ where
 
     fn execute_block(&mut self, executable_block: ExecutableBlock) -> Result<ProcessedVMOutput> {
         // Construct a StateView and pass the transactions to VM.
-
         let state_view = {
             let committed_trees = self.committed_trees.lock().unwrap();
             VerifiedStateView::new(
@@ -663,10 +679,7 @@ where
             .cloned()
             .collect();
         if !status.is_empty() {
-            debug!(
-                "Block Id is {:?}, Parent Block Id is {:?}, Execution status: {:?}",
-                executable_block.id, executable_block.parent_id, status
-            );
+            debug!("Execution status: {:?}", status);
         }
 
         let (account_to_btree, account_to_proof) = state_view.into();
@@ -824,8 +837,8 @@ where
                     match transaction.as_signed_user_txn()?.payload() {
                         TransactionPayload::Program
                         | TransactionPayload::Module(_)
-                        | TransactionPayload::Script(_)
-                        | TransactionPayload::Channel(_) => {
+                        | TransactionPayload::Channel(_)
+                        | TransactionPayload::Script(_) => {
                             bail!("Write set should be a subset of read set.")
                         }
                         TransactionPayload::WriteSet(_) => (),

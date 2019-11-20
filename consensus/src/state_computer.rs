@@ -3,6 +3,7 @@
 
 use crate::{counters, state_replication::StateComputer};
 use consensus_types::block::Block;
+use consensus_types::executed_block::ExecutedBlock;
 use executor::{CommittableBlock, ExecutedTrees, Executor, ProcessedVMOutput};
 use failure::Result;
 use futures::{Future, FutureExt};
@@ -21,6 +22,7 @@ use std::{
     time::{Duration, Instant},
 };
 use vm_runtime::MoveVM;
+use libra_types::block_metadata::BlockMetadata;
 
 /// Basic communication with the Execution module;
 /// implements StateComputer traits.
@@ -36,6 +38,18 @@ impl ExecutionProxy {
             synchronizer,
         }
     }
+
+    fn transactions_from_block(block: &Block<Vec<SignedTransaction>>) -> Vec<Transaction> {
+        let mut transactions = vec![Transaction::BlockMetadata(block.into())];
+        transactions.extend(
+            block
+                .payload()
+                .unwrap_or(&vec![])
+                .iter()
+                .map(|txn| Transaction::UserTransaction(txn.clone())),
+        );
+        transactions
+    }
 }
 
 impl StateComputer for ExecutionProxy {
@@ -49,13 +63,9 @@ impl StateComputer for ExecutionProxy {
         parent_executed_trees: ExecutedTrees,
     ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>> {
         let pre_execution_instant = Instant::now();
+        // TODO: figure out error handling for the prologue txn
         let execute_future = self.executor.execute_block(
-            block
-                .payload()
-                .unwrap_or(&Self::Payload::default())
-                .iter()
-                .map(|txn| Transaction::UserTransaction(txn.clone()))
-                .collect(),
+            Self::transactions_from_block(block),
             parent_executed_trees,
             block.parent_id(),
             block.id(),
@@ -99,14 +109,20 @@ impl StateComputer for ExecutionProxy {
         // The id of a current block.
         block_id: HashValue,
         // Transactions to execute.
-        transactions: &Self::Payload,
+        transactions: (&BlockMetadata, &Self::Payload),
     ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>> {
         let pre_execution_instant = Instant::now();
-        let execute_future = self.executor.execute_block_by_id(
+
+        let mut txn_vec = vec![Transaction::BlockMetadata(transactions.0.clone())];
+        txn_vec.extend(
             transactions
+                .1
                 .iter()
-                .map(|txn| Transaction::UserTransaction(txn.clone()))
-                .collect(),
+                .map(|txn| Transaction::UserTransaction(txn.clone())),
+        );
+
+        let execute_future = self.executor.execute_block_by_id(
+            txn_vec,
             grandpa_block_id,
             parent_block_id,
             block_id,
@@ -140,57 +156,67 @@ impl StateComputer for ExecutionProxy {
             .boxed()
     }
 
-    //    fn pre_compute(
-    //        &self,
-    //        // The id of a ancestor block which is main chain block.
-    //        ancestor_id: HashValue,
-    //        // Transactions to execute.
-    //        transactions_vec: Vec<Self::Payload>,
-    //    ) -> Pin<Box<dyn Future<Output = Result<(StateComputeResult, HashValue)>> + Send>> {
-    //        let pre_execution_instant = Instant::now();
-    //        let mut txns = vec![];
-    //        for transactions in transactions_vec {
-    //            txns.push(
-    //                transactions
-    //                    .iter()
-    //                    .map(|txn| Transaction::UserTransaction(txn.clone()))
-    //                    .collect(),
-    //            )
-    //        }
-    //        let execute_future = self.executor.pre_execute_block(txns, ancestor_id);
-    //        async move {
-    //            match execute_future.await {
-    //                Ok(Ok((state_compute_result, state_id))) => {
-    //                    let execution_duration = pre_execution_instant.elapsed();
-    //                    let num_txns = state_compute_result.compute_status.len();
-    //                    if num_txns == 0 {
-    //                        // no txns in that block
-    //                        counters::EMPTY_BLOCK_EXECUTION_DURATION_S
-    //                            .observe_duration(execution_duration);
-    //                    } else {
-    //                        counters::BLOCK_EXECUTION_DURATION_S.observe_duration(execution_duration);
-    //                        if let Ok(nanos_per_txn) =
-    //                            u64::try_from(execution_duration.as_nanos() / num_txns as u128)
-    //                        {
-    //                            // TODO: use duration_float once it's stable
-    //                            // Tracking: https://github.com/rust-lang/rust/issues/54361
-    //                            counters::TXN_EXECUTION_DURATION_S
-    //                                .observe_duration(Duration::from_nanos(nanos_per_txn));
-    //                        }
-    //                    }
-    //                    Ok((state_compute_result, state_id))
-    //                }
-    //                Ok(Err(e)) => Err(e),
-    //                Err(e) => Err(e.into()),
-    //            }
-    //        }
-    //            .boxed()
-    //    }
+    /// Compute by Id
+    fn compute_with_meta_data(
+        &self,
+        // The id of a parent block
+        parent_block_id: HashValue,
+        // The id of a current block.
+        block_id: HashValue,
+        // The executed trees after executing the parent block.
+        parent_executed_trees: ExecutedTrees,
+        // Transactions to execute.
+        transactions: (&BlockMetadata, &Self::Payload),
+    ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>> {
+        let pre_execution_instant = Instant::now();
+
+        let mut txn_vec = vec![Transaction::BlockMetadata(transactions.0.clone())];
+        txn_vec.extend(
+            transactions
+                .1
+                .iter()
+                .map(|txn| Transaction::UserTransaction(txn.clone())),
+        );
+
+        let execute_future = self.executor.execute_block(
+            txn_vec,
+            parent_executed_trees,
+            parent_block_id,
+            block_id,
+        );
+        async move {
+            match execute_future.await {
+                Ok(Ok(output)) => {
+                    let execution_duration = pre_execution_instant.elapsed();
+                    let num_txns = output.transaction_data().len();
+                    if num_txns == 0 {
+                        // no txns in that block
+                        counters::EMPTY_BLOCK_EXECUTION_DURATION_S
+                            .observe_duration(execution_duration);
+                    } else {
+                        counters::BLOCK_EXECUTION_DURATION_S.observe_duration(execution_duration);
+                        if let Ok(nanos_per_txn) =
+                        u64::try_from(execution_duration.as_nanos() / num_txns as u128)
+                        {
+                            // TODO: use duration_float once it's stable
+                            // Tracking: https://github.com/rust-lang/rust/issues/54361
+                            counters::TXN_EXECUTION_DURATION_S
+                                .observe_duration(Duration::from_nanos(nanos_per_txn));
+                        }
+                    }
+                    Ok(output)
+                }
+                Ok(Err(e)) => Err(e),
+                Err(e) => Err(e.into()),
+            }
+        }
+            .boxed()
+    }
 
     /// Send a successful commit. A future is fulfilled when the state is finalized.
     fn commit(
         &self,
-        payload_and_output_list: Vec<(Self::Payload, Arc<ProcessedVMOutput>)>,
+        blocks: Vec<&ExecutedBlock<Self::Payload>>,
         finality_proof: LedgerInfoWithSignatures,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
         let version = finality_proof.ledger_info().version();
@@ -199,16 +225,12 @@ impl StateComputer for ExecutionProxy {
         let pre_commit_instant = Instant::now();
         let synchronizer = Arc::clone(&self.synchronizer);
 
-        let committable_blocks = payload_and_output_list
+        let committable_blocks = blocks
             .into_iter()
-            .map(|payload_and_output| {
+            .map(|executed_block| {
                 CommittableBlock::new(
-                    payload_and_output
-                        .0
-                        .into_iter()
-                        .map(Transaction::UserTransaction)
-                        .collect(),
-                    payload_and_output.1,
+                    Self::transactions_from_block(executed_block.block()),
+                    Arc::clone(executed_block.output()),
                 )
             })
             .collect();
@@ -221,7 +243,7 @@ impl StateComputer for ExecutionProxy {
                 Ok(Ok(())) => {
                     counters::BLOCK_COMMIT_DURATION_S
                         .observe_duration(pre_commit_instant.elapsed());
-                    if let Err(e) = synchronizer.commit(version).await {
+                    if let Err(e) = synchronizer.commit().await {
                         error!("failed to notify state synchronizer: {:?}", e);
                     }
                     Ok(())
@@ -233,34 +255,46 @@ impl StateComputer for ExecutionProxy {
             .boxed()
     }
 
-    //    /// Send a successful commit. A future is fulfilled when the state is finalized.
-    //    fn commit_with_id(
-    //        &self,
-    //        block_id: HashValue,
-    //        commit: LedgerInfoWithSignatures,
-    //    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
-    //        let version = commit.ledger_info().version();
-    //        counters::LAST_COMMITTED_VERSION.set(version as i64);
-    //
-    //        let pre_commit_instant = Instant::now();
-    //        let synchronizer = Arc::clone(&self.synchronizer);
-    //        let commit_future = self.executor.commit_block_with_id(block_id, commit);
-    //        async move {
-    //            match commit_future.await {
-    //                Ok(Ok(())) => {
-    //                    counters::BLOCK_COMMIT_DURATION_S
-    //                        .observe_duration(pre_commit_instant.elapsed());
-    //                    if let Err(e) = synchronizer.commit(version).await {
-    //                        error!("failed to notify state synchronizer: {:?}", e);
-    //                    }
-    //                    Ok(())
-    //                }
-    //                Ok(Err(e)) => Err(e),
-    //                Err(e) => Err(e.into()),
-    //            }
-    //        }
-    //            .boxed()
-    //    }
+    fn commit_with_meta_data(
+        &self,
+        meta_data_txn: &BlockMetadata,
+        block: (Self::Payload, Arc<ProcessedVMOutput>),
+        finality_proof: LedgerInfoWithSignatures,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
+        let version = finality_proof.ledger_info().version();
+        counters::LAST_COMMITTED_VERSION.set(version as i64);
+
+        let pre_commit_instant = Instant::now();
+        let synchronizer = Arc::clone(&self.synchronizer);
+
+        let mut txn_vec = vec![Transaction::BlockMetadata(meta_data_txn.clone())];
+        txn_vec.extend(
+            block
+                .0
+                .iter()
+                .map(|txn| Transaction::UserTransaction(txn.clone())),
+        );
+        let committable_blocks = vec![CommittableBlock::new(txn_vec, block.1)];
+
+        let commit_future = self
+            .executor
+            .commit_blocks(committable_blocks, finality_proof);
+        async move {
+            match commit_future.await {
+                Ok(Ok(())) => {
+                    counters::BLOCK_COMMIT_DURATION_S
+                        .observe_duration(pre_commit_instant.elapsed());
+                    if let Err(e) = synchronizer.commit().await {
+                        error!("failed to notify state synchronizer: {:?}", e);
+                    }
+                    Ok(())
+                }
+                Ok(Err(e)) => Err(e),
+                Err(e) => Err(e.into()),
+            }
+        }
+            .boxed()
+    }
 
     fn rollback(&self, block_id: HashValue) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
         let pre_rollback_instant = Instant::now();

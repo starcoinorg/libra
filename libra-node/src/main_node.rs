@@ -104,12 +104,11 @@ pub fn setup_network(
         .name_prefix("network-")
         .build()
         .expect("Failed to start runtime. Won't be able to start networking.");
-    let role: RoleType = (&config.role).into();
     let mut network_builder = NetworkBuilder::new(
         runtime.executor(),
         peer_id,
         config.listen_address.clone(),
-        role,
+        config.role,
     );
     network_builder
         .permissioned(config.is_permissioned)
@@ -237,7 +236,7 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> LibraHandle {
         ac_network_events.push(ac_events);
 
         let network = &node_config.networks[i];
-        if let RoleType::Validator = (&network.role).into() {
+        if RoleType::Validator == network.role {
             validator_network_provider = Some((peer_id, runtime, network_provider));
             ac_network_sender = Some(ac_sender);
         } else {
@@ -319,7 +318,7 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> LibraHandle {
 
         // Initialize and start consensus.
         instant = Instant::now();
-        let mut consensus_provider = match node_config.consensus.get_consensus_type() {
+        let mut consensus_provider = match node_config.consensus.consensus_type {
             POW => make_pow_consensus_provider(
                 node_config,
                 consensus_network_sender,
