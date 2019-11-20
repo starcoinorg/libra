@@ -281,27 +281,9 @@ lazy_static! {
             ],
             vec![]
         );
-        // LibraAccount
-        add!(m, addr, "LibraAccount", "save_account",
-            |_| {
-                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
-                    "save_account does not have a native implementation".to_string()))
-            },
-            vec![
-                Address,
-                // this is LibraAccount.T which happens to be the first struct handle in the
-                // binary.
-                // TODO: current plan is to rework the description of the native function
-                // by using the binary directly and have functions that fetch the arguments
-                // go through the signature for extra verification. That is the plan if perf
-                // and the model look good.
-                Struct(StructHandleIndex::new(0), vec![]),
-            ],
-            vec![]
-        );
         // Channel Account
         add!(m, addr, "ChannelAccount", "native_move_to_channel",
-            |_| {
+           |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "native_move_to_channel does not have a native implementation"
                                 .to_string()))
@@ -313,7 +295,7 @@ lazy_static! {
             vec![]
         );
         add!(m, addr, "ChannelAccount", "native_exist_channel",
-            |_| {
+          |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "native_exist_channel does not have a native implementation"
                                 .to_string()))
@@ -323,7 +305,7 @@ lazy_static! {
             vec![Bool]
         );
         add!(m, addr, "ChannelAccount", "native_move_from_channel",
-            |_| {
+          |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "native_move_from_channel does not have a native implementation"
                                 .to_string()))
@@ -333,7 +315,7 @@ lazy_static! {
             vec![TypeParameter(0)]
         );
         add!(m, addr, "ChannelAccount", "native_borrow_channel",
-            |_| {
+            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "native_borrow_channel does not have a native implementation"
                                 .to_string()))
@@ -343,7 +325,7 @@ lazy_static! {
             vec![MutableReference(Box::new(TypeParameter(0)))]
         );
         add!(m, addr, "ChannelTransaction", "native_is_offchain",
-            |_| {
+            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "native_is_offchain does not have a native implementation"
                                 .to_string()))
@@ -353,7 +335,7 @@ lazy_static! {
             vec![Bool]
         );
         add!(m, addr, "ChannelTransaction", "native_get_txn_receiver",
-            |_| {
+            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "native_get_txn_receiver does not have a native implementation"
                                 .to_string()))
@@ -363,7 +345,7 @@ lazy_static! {
             vec![Address]
         );
         add!(m, addr, "ChannelTransaction", "native_is_channel_txn",
-            |_| {
+            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "native_is_offchain does not have a native implementation"
                                 .to_string()))
@@ -373,7 +355,7 @@ lazy_static! {
             vec![Bool]
         );
         add!(m, addr, "ChannelTransaction", "native_get_txn_receiver_public_key",
-            |_| {
+            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "native_get_txn_receiver_public_key does not have a native implementation"
                                 .to_string()))
@@ -383,7 +365,7 @@ lazy_static! {
             vec![ByteArray]
         );
         add!(m, addr, "ChannelTransaction", "native_get_txn_channel_sequence_number",
-            |_| {
+            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "native_get_txn_channel_sequence_number does not have a native implementation"
                                 .to_string()))

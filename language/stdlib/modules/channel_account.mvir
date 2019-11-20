@@ -3,7 +3,6 @@ module ChannelAccount {
     import 0x0.LibraAccount;
     import 0x0.LibraCoin;
     import 0x00.Hash;
-    import 0x0.Event;
     import 0x0.U64Util;
     import 0x0.AddressUtil;
     import 0x0.BytearrayUtil;

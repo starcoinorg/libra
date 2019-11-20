@@ -1,7 +1,6 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::process_txn::balance_checker::BalanceChecker;
 use crate::{
     code_cache::{module_cache::ModuleCache, script_cache::ScriptCache},
     data_cache::RemoteCache,
@@ -371,8 +370,9 @@ where
         // balance, then cache the write_set to transaction cache for Move script to use.
         let pre_cache_write_set = match txn.payload() {
             TransactionPayload::Channel(channel_payload) => {
-                let balance_checker = BalanceChecker::new(data_cache, &module_cache);
-                balance_checker.check_balance(channel_payload.write_set())?;
+                //TODO implements write set validate mechanism.
+                //let balance_checker = BalanceChecker::new(data_cache, &module_cache);
+                //balance_checker.check_balance(channel_payload.write_set())?;
                 Some(channel_payload.write_set().clone())
             }
             _ => None,

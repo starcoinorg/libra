@@ -16,7 +16,6 @@ use crate::{
         loaded_module::LoadedModule,
     },
 };
-use libra_config::config::VMMode;
 use libra_logger::prelude::*;
 use libra_types::{
     access_path::AccessPath,
@@ -752,15 +751,21 @@ where
             self.call_save_account(context)
         } else if module_id == *CHANNEL_ACCOUNT_MODULE {
             match function_name.as_str() {
-                "native_move_to_channel" => self.call_native_move_to_channel(type_actual_tags),
-                "native_exist_channel" => self.call_native_exist_channel(type_actual_tags),
-                "native_move_from_channel" => self.call_native_move_from_channel(type_actual_tags),
-                "native_borrow_channel" => self.call_native_borrow_channel(type_actual_tags),
+                "native_move_to_channel" => {
+                    self.call_native_move_to_channel(context, type_actual_tags)
+                }
+                "native_exist_channel" => self.call_native_exist_channel(context, type_actual_tags),
+                "native_move_from_channel" => {
+                    self.call_native_move_from_channel(context, type_actual_tags)
+                }
+                "native_borrow_channel" => {
+                    self.call_native_borrow_channel(context, type_actual_tags)
+                }
                 _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
             }
         } else if module_id == *CHANNEL_TXN_MODULE {
             match function_name.as_str() {
-                "native_is_offchain" => self.call_native_is_offchain(),
+                "native_is_offchain" => self.call_native_is_offchain(context),
                 "native_get_txn_receiver" => self.call_native_get_txn_receiver(),
                 "native_is_channel_txn" => self.call_native_is_channel_txn(),
                 "native_get_txn_receiver_public_key" => {
@@ -798,6 +803,7 @@ where
 
     fn get_channel_resource_ap_and_struct_def(
         &mut self,
+        context: &mut dyn InterpreterContext,
         mut type_actual_tags: Vec<TypeTag>,
         is_sender: bool,
     ) -> VMResult<(AccessPath, StructDef)> {
@@ -837,7 +843,7 @@ where
                 let channel_resource_struct_def = self.module_cache.resolve_struct_def(
                     module,
                     *channel_resource_struct_id,
-                    &self.gas_meter,
+                    context,
                 )?;
 
                 Ok((ap, channel_resource_struct_def))
@@ -848,49 +854,65 @@ where
         }
     }
     /// call `do_move_to_sender`.
-    fn call_native_move_to_channel(&mut self, type_actual_tags: Vec<TypeTag>) -> VMResult<()> {
+    fn call_native_move_to_channel(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
         let to_sender = self.operand_stack.pop_as::<bool>()?;
 
         let res = self.operand_stack.pop_as::<Struct>()?;
 
         let (ap, struct_def) =
-            self.get_channel_resource_ap_and_struct_def(type_actual_tags, to_sender)?;
-        self.data_view.move_resource_to(&ap, struct_def, res)
+            self.get_channel_resource_ap_and_struct_def(context, type_actual_tags, to_sender)?;
+        context.move_resource_to(&ap, struct_def, res)
     }
 
     /// call `native_exist_channel`.
-    fn call_native_exist_channel(&mut self, type_actual_tags: Vec<TypeTag>) -> VMResult<()> {
+    fn call_native_exist_channel(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
         let under_sender = self.operand_stack.pop_as::<bool>()?;
 
         let (ap, struct_def) =
-            self.get_channel_resource_ap_and_struct_def(type_actual_tags, under_sender)?;
-        let (exists, _memsize) = self.data_view.resource_exists(&ap, struct_def)?;
+            self.get_channel_resource_ap_and_struct_def(context, type_actual_tags, under_sender)?;
+        let (exists, _memsize) = context.resource_exists(&ap, struct_def)?;
         self.operand_stack.push(Value::bool(exists))
     }
 
     /// call `native_move_from_channel`.
-    fn call_native_move_from_channel(&mut self, type_actual_tags: Vec<TypeTag>) -> VMResult<()> {
+    fn call_native_move_from_channel(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
         let from_sender = self.operand_stack.pop_as::<bool>()?;
 
         let (ap, struct_def) =
-            self.get_channel_resource_ap_and_struct_def(type_actual_tags, from_sender)?;
-        let resource = self.data_view.move_resource_from(&ap, struct_def)?;
+            self.get_channel_resource_ap_and_struct_def(context, type_actual_tags, from_sender)?;
+        let resource = context.move_resource_from(&ap, struct_def)?;
         self.operand_stack.push(resource)
     }
 
     /// call `native_borrow_channel`.
-    fn call_native_borrow_channel(&mut self, type_actual_tags: Vec<TypeTag>) -> VMResult<()> {
+    fn call_native_borrow_channel(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
         let from_sender = self.operand_stack.pop_as::<bool>()?;
 
         let (ap, struct_def) =
-            self.get_channel_resource_ap_and_struct_def(type_actual_tags, from_sender)?;
-        let resource = self.data_view.borrow_global(&ap, struct_def)?;
+            self.get_channel_resource_ap_and_struct_def(context, type_actual_tags, from_sender)?;
+        let resource = context.borrow_global(&ap, struct_def)?;
         self.operand_stack.push(Value::global_ref(resource))
     }
 
     /// call `native_is_offchain`.
-    fn call_native_is_offchain(&mut self) -> VMResult<()> {
-        let is_offchain = self.vm_mode.is_offchain();
+    fn call_native_is_offchain(&mut self, context: &mut dyn InterpreterContext) -> VMResult<()> {
+        let is_offchain = context.vm_mode().is_offchain();
         self.operand_stack.push(Value::bool(is_offchain))
     }
 
@@ -1218,10 +1240,6 @@ where
         }
         Ok((address, participant))
     }
-
-    pub(crate) fn txn_data(&self) -> &TransactionMetadata {
-        &self.txn_data
-    }
 }
 
 // TODO Determine stack size limits based on gas limit
@@ -1415,25 +1433,6 @@ where
         InterpreterForCostSynthesis {
             interpreter,
             context,
-        }
-    }
-    pub fn new_with_vm_mode(
-        module_cache: P,
-        txn_data: TransactionMetadata,
-        data_view: TransactionDataCache<'txn>,
-        gas_schedule: &'txn CostTable,
-        vm_mode: VMMode,
-    ) -> Self {
-        Interpreter {
-            operand_stack: Stack::new(),
-            call_stack: CallStack::new(),
-            gas_meter: GasMeter::new(txn_data.max_gas_amount(), gas_schedule),
-            txn_data,
-            event_data: vec![],
-            data_view,
-            module_cache,
-            vm_mode,
-            phantom: PhantomData,
         }
     }
 

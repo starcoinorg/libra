@@ -38,6 +38,7 @@ use vm_cache_map::Arena;
 use vm_runtime_types::value::Value;
 
 pub use crate::gas_meter::GAS_SCHEDULE_MODULE;
+use libra_config::config::VMMode;
 
 // Metadata needed for resolving the account module.
 lazy_static! {
@@ -125,14 +126,18 @@ where
         pre_cache_write_set: Option<WriteSet>,
         vm_mode: VMMode,
     ) -> Self {
+        let interpreter_context = TransactionExecutionContext::new_with_write_set(
+            txn_data.max_gas_amount(),
+            data_cache,
+            pre_cache_write_set,
+            vm_mode,
+        );
         TransactionExecutor {
-            interpreter: Interpreter::new_with_vm_mode(
-                module_cache,
-                txn_data,
-                TransactionDataCache::new_with_write_set(data_cache, pre_cache_write_set),
-                gas_schedule,
-                vm_mode,
-            ),
+            interpreter_context,
+            module_cache,
+            txn_data,
+            gas_schedule,
+            phantom: PhantomData,
         }
     }
 
@@ -166,16 +171,15 @@ where
                 &PROLOGUE_NAME,
                 vec![],
                 ).and_then(|_| {
-                    if self.interpreter.txn_data().is_channel_txn() {
+                    if self.txn_data.is_channel_txn() {
                         Interpreter::execute_function(
-                &mut self.interpreter_context,
-                &self.module_cache,
-                &self.txn_data,
-                &CostTable::zero(),
-                &CHANNEL_ACCOUNT_MODULE,
-                &PROLOGUE_NAME,
-                vec![],
-                )
+                            &mut self.interpreter_context,
+                            &self.module_cache,
+                            &self.txn_data,
+                            &CostTable::zero(),
+                            &CHANNEL_ACCOUNT_MODULE,
+                            &PROLOGUE_NAME,
+                            vec![],)
                     } else {
                         Ok(())
                     }
@@ -198,16 +202,16 @@ where
                 &EPILOGUE_NAME,
                 vec![],
                 ).and_then(|_| {
-                    if self.interpreter.txn_data().is_channel_txn() {
+                    if self.txn_data.is_channel_txn() {
                         Interpreter::execute_function(
-                &mut self.interpreter_context,
-                &self.module_cache,
-                &self.txn_data,
-                &CostTable::zero(),
-                &CHANNEL_ACCOUNT_MODULE,
-                &EPILOGUE_NAME,
-                vec![],
-                )
+                            &mut self.interpreter_context,
+                            &self.module_cache,
+                            &self.txn_data,
+                            &CostTable::zero(),
+                            &CHANNEL_ACCOUNT_MODULE,
+                            &EPILOGUE_NAME,
+                            vec![],
+                        )
                     } else {
                         Ok(())
                     }
