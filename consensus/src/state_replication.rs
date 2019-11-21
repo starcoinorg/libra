@@ -58,11 +58,11 @@ pub trait StateComputer: Send + Sync {
     fn compute_by_hash(
         &self,
         // The id of a grandpa block
-        grandpa_block_id: HashValue,
+        grandpa_block_id: &HashValue,
         // The id of a parent block
-        parent_block_id: HashValue,
+        parent_block_id: &HashValue,
         // The id of a current block.
-        block_id: HashValue,
+        block_id: &HashValue,
         // Transactions to execute.
         transactions: Vec<(BlockMetadata, Self::Payload)>,
     ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>>;

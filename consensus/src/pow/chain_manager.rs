@@ -40,10 +40,7 @@ impl ChainManager {
         rollback_flag: bool,
         author: AccountAddress,
     ) -> Self {
-        let genesis_block_index = BlockIndex {
-            id: *GENESIS_BLOCK_ID,
-            parent_block_id: *PRE_GENESIS_BLOCK_ID,
-        };
+        let genesis_block_index = BlockIndex::new(&GENESIS_BLOCK_ID,&PRE_GENESIS_BLOCK_ID);
         let genesis_height = 0;
         let mut index_map = HashMap::new();
         index_map.insert(genesis_height, vec![genesis_block_index.clone()]);
@@ -108,7 +105,7 @@ impl ChainManager {
                     // Pre compute
                     // 1. orphan block
                     let parent_block_id = block.parent_id();
-                    let block_index = BlockIndex { id: block.id(), parent_block_id };
+                    let block_index = BlockIndex::new(&block.id(), &parent_block_id);
                     let mut chain_lock = block_chain.write().compat().await.unwrap();
                     let mut save_flag = false;
                     if chain_lock.block_exist(&parent_block_id) {
@@ -128,13 +125,13 @@ impl ChainManager {
                             commit_txn_vec.push((block_meta_data, tmp_txns));
                         }
 
-                        let pre_compute_grandpa_block_id = pre_block_index.parent_block_id;
-                        let pre_compute_parent_block_id = pre_block_index.id;
+                        let pre_compute_grandpa_block_id = pre_block_index.parent_id();
+                        let pre_compute_parent_block_id = pre_block_index.id();
                         let block_meta_data = BlockMetadata::new(parent_block_id.clone(), block.timestamp_usecs(), BTreeMap::new(), association_address());
                         commit_txn_vec.push((block_meta_data, payload));
 
                                         // 4. call pre_compute
-                                        match state_computer.compute_by_hash(pre_compute_grandpa_block_id, parent_block_id.clone(), block.id(), commit_txn_vec).await {
+                                        match state_computer.compute_by_hash(&pre_compute_grandpa_block_id, &parent_block_id, &block.id(), commit_txn_vec).await {
                                             Ok(processed_vm_output) => {
                                                 let executed_trees = processed_vm_output.executed_trees();
                                                 let state_id = executed_trees.state_root();
@@ -153,7 +150,7 @@ impl ChainManager {
                                     } else {
                                         //save orphan block
                                         let mut write_lock = orphan_blocks.lock().compat().await.unwrap();
-                                        write_lock.insert(block_index.parent_block_id, vec![block_index.id]);
+                                        write_lock.insert(block_index.parent_id(), vec![block_index.id()]);
                                     }
 
                                     if save_flag {
@@ -173,8 +170,8 @@ impl ChainManager {
                                                             chain_lock.find_ancestor(&old_root, &parent_block_id).expect("find ancestor err.")
                                                         };
                                                         let rollback_len = rollback_vec.len();
-                                                        let ancestor_block_id = chain_lock.find_index_by_block_hash(rollback_vec.get(rollback_len - 1).expect("latest_block_id err.")).expect("block index is none err.").parent_block_id;
-                                                        let ancestor_block_id = chain_lock.find_index_by_block_hash(&ancestor_block_id).expect("block index is none err.").parent_block_id;
+                                                        let ancestor_block_id = chain_lock.find_index_by_block_hash(rollback_vec.get(rollback_len - 1).expect("latest_block_id err.")).expect("block index is none err.").parent_id();
+                                                        let ancestor_block_id = chain_lock.find_index_by_block_hash(&ancestor_block_id).expect("block index is none err.").parent_id();
                                                         //1. reset executor
                                                         state_computer.rollback(ancestor_block_id).await.expect("rollback failed.");
                                                         info!("rollback[ old root : {:?} , ancestor block id : {:?}]", old_root, ancestor_block_id);
@@ -185,7 +182,7 @@ impl ChainManager {
                                                         for commit in commit_vec.iter().rev() {
                                                             // 1. query block
                                                             let commit_block = block_db.get_block_by_hash::<BlockPayloadExt>(commit).expect("block not find in database err.");
-                                                            let grandpa_block_id = chain_lock.find_index_by_block_hash(&commit_block.parent_id()).expect("block index is none err.").parent_block_id;
+                                                            let grandpa_block_id = chain_lock.find_index_by_block_hash(&commit_block.parent_id()).expect("block index is none err.").parent_id();
                                                             // 2. commit block
                                                             Self::execut_and_commit_block(block_db.clone(), grandpa_block_id, commit_block, txn_manager.clone(), state_computer.clone()).await;
                                                         }
@@ -196,7 +193,7 @@ impl ChainManager {
 
                                                     //4.save latest block
                                                     let id = block.id();
-                                                    let grandpa_block_id = chain_lock.find_index_by_block_hash(&block.parent_id()).expect("block index is none err.").parent_block_id;
+                                                    let grandpa_block_id = chain_lock.find_index_by_block_hash(&block.parent_id()).expect("block index is none err.").parent_id();
                                                     Self::execut_and_commit_block(block_db.clone(), grandpa_block_id, block.clone(), txn_manager.clone(), state_computer.clone()).await;
 
                                                     //5. update main chain
@@ -253,9 +250,9 @@ impl ChainManager {
         );
         let processed_vm_output = state_computer
             .compute_by_hash(
-                grandpa_block_id,
-                block.parent_id().clone(),
-                block.id(),
+                &grandpa_block_id,
+                &block.parent_id(),
+                &block.id(),
                 vec![(block_meta_data.clone(), payload.clone())],
             )
             .await
@@ -375,7 +372,7 @@ impl BlockChain {
     }
 
     pub fn root_hash(&self) -> HashValue {
-        self.chain_height_and_root().1.id.clone()
+        self.chain_height_and_root().1.id()
     }
 
     pub fn chain_height_and_root(&self) -> (u64, BlockIndex) {
@@ -385,11 +382,11 @@ impl BlockChain {
     }
 
     pub fn connect_block(&mut self, block_index: BlockIndex) -> (bool, Option<HashValue>) {
-        let parent = self.find_height_index_by_block_hash(&block_index.parent_block_id);
+        let parent = self.find_height_index_by_block_hash(&block_index.parent_id());
         match parent {
             Some((parent_height, _parent_index)) => {
                 let height = parent_height.clone();
-                let current_block_id = block_index.id.clone();
+                let current_block_id = block_index.id();
                 let (old, current_index) = if self.height == height {
                     let old_root_hash = self.root_hash();
                     let tmp = self.height + 1;
@@ -435,10 +432,10 @@ impl BlockChain {
         hash: &HashValue,
     ) -> Option<(Vec<HashValue>, BlockIndex)> {
         let mut ancestors = vec![];
-        let mut latest_hash = hash;
+        let mut latest_hash = hash.clone();
         let mut block_index = None;
         for _i in 0..100 {
-            let (height, index) = match self.find_height_index_by_block_hash(latest_hash) {
+            let (height, index) = match self.find_height_index_by_block_hash(&latest_hash) {
                 Some(h_i) => h_i,
                 None => return None,
             };
@@ -448,8 +445,8 @@ impl BlockChain {
 
             match tmp_block_index {
                 Some(b_i) => {
-                    let current_id = b_i.id;
-                    latest_hash = &b_i.parent_block_id;
+                    let current_id = b_i.id();
+                    latest_hash = b_i.parent_id();
                     block_index = Some(b_i.clone());
 
                     if self
@@ -458,7 +455,7 @@ impl BlockChain {
                         .get(height)
                         .expect("get block index from main chain err.")
                         .clone()
-                        .id
+                        .id()
                         == current_id
                     {
                         break;
@@ -486,20 +483,20 @@ impl BlockChain {
                     let second_index = self.find_index_by_block_hash(second_hash);
                     match second_index {
                         Some(block_index_2) => {
-                            if block_index_1.parent_block_id != block_index_2.parent_block_id {
+                            if block_index_1.parent_id() != block_index_2.parent_id() {
                                 let mut first_ancestors = vec![];
                                 let mut second_ancestors = vec![];
-                                first_ancestors.push(&block_index_1.parent_block_id);
-                                second_ancestors.push(&block_index_2.parent_block_id);
+                                first_ancestors.push(block_index_1.parent_id_ref());
+                                second_ancestors.push(block_index_2.parent_id_ref());
 
                                 let ancestors = self.find_ancestor(
-                                    &block_index_1.parent_block_id,
-                                    &block_index_2.parent_block_id,
+                                    &block_index_1.parent_id(),
+                                    &block_index_2.parent_id(),
                                 );
                                 match ancestors {
-                                    Some((f, s)) => {
-                                        first_ancestors.append(&mut f.clone());
-                                        second_ancestors.append(&mut s.clone());
+                                    Some((mut f, mut s)) => {
+                                        first_ancestors.append(&mut f);
+                                        second_ancestors.append(&mut s);
                                     }
                                     None => {}
                                 }

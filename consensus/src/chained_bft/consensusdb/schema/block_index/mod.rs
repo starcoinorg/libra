@@ -14,10 +14,10 @@ define_schema!(BlockIndexSchema, Height, BlockIndex, BLOCK_INDEX_CF_NAME);
 
 type Height = u64;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BlockIndex {
-    pub id: HashValue,
-    pub parent_block_id: HashValue,
+    id: HashValue,
+    parent_block_id: HashValue,
 }
 
 impl BlockIndex {
@@ -25,12 +25,16 @@ impl BlockIndex {
         BlockIndex {id: id.clone(), parent_block_id: parent_id.clone()}
     }
 
-    pub fn id(&self) -> &HashValue {
-        &self.id
+    pub fn id(&self) -> HashValue {
+        self.id
     }
 
-    pub fn parent_id(&self) -> &HashValue {
-        &self.parent_id
+    pub fn parent_id(&self) -> HashValue {
+        self.parent_block_id
+    }
+
+    pub fn parent_id_ref(&self) -> &HashValue {
+        &self.parent_block_id
     }
 }
 

@@ -89,8 +89,8 @@ impl MintManager {
                             chain_manager_clone.borrow().chain_height_and_root().await;
                         if txns.len() > 0 {
                             //create block
-                            let parent_block_id = parent_block.id;
-                            let grandpa_block_id = parent_block.parent_block_id;
+                            let parent_block_id = parent_block.id();
+                            let grandpa_block_id = parent_block.parent_id();
                             //QC with parent block id
                             let quorum_cert = if parent_block_id != *GENESIS_BLOCK_ID {
                                 let parent_block = block_db
@@ -114,9 +114,9 @@ impl MintManager {
                             );
                             match mint_state_computer
                                 .compute_by_hash(
-                                    grandpa_block_id,
-                                    parent_block_id,
-                                    tmp_id,
+                                    &grandpa_block_id,
+                                    &parent_block_id,
+                                    &tmp_id,
                                     vec![(block_meta_data.clone(), txns.clone())],
                                 )
                                 .await
@@ -141,7 +141,7 @@ impl MintManager {
                                     let current_block_info = BlockInfo::new(
                                         epoch,
                                         height + 1,
-                                        parent_block_id,
+                                        parent_block_id.clone(),
                                         txn_accumulator_hash,
                                         txn_len,
                                         parent_li.timestamp_usecs(),

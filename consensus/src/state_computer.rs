@@ -103,11 +103,11 @@ impl StateComputer for ExecutionProxy {
     fn compute_by_hash(
         &self,
         // The id of a grandpa block
-        grandpa_block_id: HashValue,
+        grandpa_block_id: &HashValue,
         // The id of a parent block
-        parent_block_id: HashValue,
+        parent_block_id: &HashValue,
         // The id of a current block.
-        block_id: HashValue,
+        block_id: &HashValue,
         // Transactions to execute.
         transactions: Vec<(BlockMetadata, Self::Payload)>,
     ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>> {
@@ -126,7 +126,7 @@ impl StateComputer for ExecutionProxy {
 
         let execute_future =
             self.executor
-                .execute_block_by_id(txn_vec, grandpa_block_id, parent_block_id, block_id);
+                .execute_block_by_id(txn_vec, grandpa_block_id.clone(), parent_block_id.clone(), block_id.clone());
 
         async move {
             match execute_future.await {

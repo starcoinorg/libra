@@ -186,7 +186,7 @@ impl EventProcessor {
                                         let (height, block_index) =
                                             chain_manager.borrow().chain_height_and_root().await;
                                         if height < block.round()
-                                            && block.parent_id() != block_index.id
+                                            && block.parent_id() != block_index.id()
                                         {
                                             if let Err(err) = sync_signal_sender
                                                 .clone()
