@@ -470,14 +470,22 @@ lazy_static! {
             vec![TypeParameter(0)],
             vec![]
         );
-         add!(m, addr, "Channel", "save_channel",
+        add!(m, addr, "Channel", "save_channel",
            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "save_channel does not have a native implementation"
                                 .to_string()))
              },
-            vec![],
-            vec![Address, Struct(StructHandleIndex::new(0), vec![]), Address, Struct(StructHandleIndex::new(0), vec![])],
+            vec![Address, Struct(StructHandleIndex::new(0), vec![])],
+            vec![]
+        );
+        add!(m, addr, "Channel", "init_participant",
+           |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "init_participant does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Address, Struct(StructHandleIndex::new(1), vec![])],
             vec![]
         );
         m
