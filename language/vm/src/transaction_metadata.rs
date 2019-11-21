@@ -16,6 +16,8 @@ pub struct ChannelMetadata {
 
 pub struct ChannelMetadataV2 {
     pub channel_sequence_number: u64,
+    pub channel_txn_sender: AccountAddress,
+    pub public_keys: Vec<Ed25519PublicKey>,
 }
 
 pub struct TransactionMetadata {
@@ -43,6 +45,8 @@ impl TransactionMetadata {
         let channel_metadata_v2 = match txn.payload() {
             TransactionPayload::ChannelV2(channel_payload) => Some(ChannelMetadataV2 {
                 channel_sequence_number: channel_payload.channel_sequence_number(),
+                channel_txn_sender: channel_payload.channel_txn_sender(),
+                public_keys: channel_payload.public_keys().to_vec(),
             }),
             _ => None,
         };
