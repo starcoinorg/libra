@@ -27,8 +27,12 @@ module Channel {
     }
 
     //TODO native
-    save_channel(channel_address: address, channel: Self.T, participant: address, participant_account: Self.ChannelAccount){
+    save_channel(channel_address: address, channel: Self.T){
         move_to_sender<T>(move(channel));
+        return;
+    }
+
+    init_participant(participant:address, participant_account: Self.ChannelAccount){
         move_to_sender<ChannelAccount>(move(participant_account));
         return;
     }
@@ -41,6 +45,7 @@ module Channel {
         let participants: Vector.T<address>;
         let sender: address;
         let channel: Self.T;
+        let sender_account: Self.ChannelAccount;
         let participant_account: Self.ChannelAccount;
 
         sender = get_txn_sender();
@@ -64,10 +69,15 @@ module Channel {
            locked: false,
            participants: move(participants),
         };
-        participant_account = ChannelAccount{
+        sender_account = ChannelAccount{
             balance: LibraAccount.withdraw_from_sender(move(amount)),
         };
-        Self.save_channel(move(channel_address),move(channel), move(sender), move(participant_account));
+        participant_account = ChannelAccount{
+            balance: LibraCoin.zero(),
+        };
+        Self.save_channel(move(channel_address),move(channel));
+        Self.init_participant(move(sender), move(sender_account));
+        Self.init_participant(move(participant), move(participant_account));
         return;
     }
 
