@@ -374,6 +374,71 @@ lazy_static! {
             vec![],
             vec![U64]
         );
+        //ChannelTransaction v2
+        add!(m, addr, "ChannelTransaction", "is_offchain",
+            |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "is_offchain does not have a native implementation"
+                                .to_string()))
+             },
+            vec![],
+            vec![],
+            vec![Bool]
+        );
+        add!(m, addr, "ChannelTransaction", "is_channel_txn",
+            |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "is_channel_txn does not have a native implementation"
+                                .to_string()))
+             },
+            vec![],
+            vec![],
+            vec![Bool]
+        );
+         add!(m, addr, "ChannelTransaction", "get_txn_channel_sequence_number",
+            |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "get_txn_channel_sequence_number does not have a native implementation"
+                                .to_string()))
+             },
+            vec![],
+            vec![],
+            vec![U64]
+        );
+        add!(m, addr, "ChannelTransaction", "get_channel_txn_sender",
+            |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "get_channel_txn_sender does not have a native implementation"
+                                .to_string()))
+             },
+            vec![],
+            vec![],
+            vec![Address]
+        );
+        add!(m, addr, "ChannelTransaction", "get_public_keys",
+            |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "get_public_keys does not have a native implementation"
+                                .to_string()))
+             },
+            vec![],
+            vec![],
+            vec![
+                tstruct(addr, "Vector", "T", vec![ByteArray]),
+            ]
+        );
+        add!(m, addr, "ChannelTransaction", "get_signatures",
+            |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "get_signatures does not have a native implementation"
+                                .to_string()))
+             },
+            vec![],
+            vec![],
+            vec![
+                tstruct(addr, "Vector", "T", vec![ByteArray]),
+            ]
+        );
         m
     };
 }
