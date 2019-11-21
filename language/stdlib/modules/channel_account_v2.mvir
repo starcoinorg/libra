@@ -1,0 +1,59 @@
+// The module for the channel resource
+module ChannelAccountV2 {
+    import 0x0.LibraAccount;
+    import 0x0.LibraCoin;
+    import 0x00.Hash;
+    import 0x0.U64Util;
+    import 0x0.AddressUtil;
+    import 0x0.BytearrayUtil;
+    import 0x0.Vector;
+    import 0x0.ChannelTransaction;
+
+    resource T {
+        channel_sequence_number: u64,
+        closed: bool,
+        locked: bool,
+        participants: Vector.T<address>,
+    }
+
+    //TODO native
+    // sort participants and generate address;
+    generate_channel_address(participants: &mut Vector.T<address>): address{
+        return 0x1;
+    }
+
+    native move_to_channel<R:resource>(channel_address: address, r: R);
+
+    //only support one participant
+    public open(participant: address, signature: bytearray){
+        let channel_address: address;
+        let participants: Vector.T<address>;
+        let sender: address;
+        let channel: Self.T;
+
+        sender = get_txn_sender();
+        //TODO check participant_signature
+
+        participants = Vector.empty<address>();
+        Vector.push_back<address>(
+             &mut participants,
+             copy(sender)
+        );
+        Vector.push_back<address>(
+             &mut participants,
+             copy(participant)
+        );
+
+        channel_address = Self.generate_channel_address(&mut participants);
+        LibraAccount.create_account(copy(channel_address));
+        channel = T {
+           channel_sequence_number: 0,
+           closed: false,
+           locked: false,
+           participants: move(participants),
+        };
+        Self.move_to_channel<Self.T>(move(channel_address),move(channel));
+        return;
+    }
+
+}
