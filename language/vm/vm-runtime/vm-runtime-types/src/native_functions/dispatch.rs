@@ -449,18 +449,8 @@ lazy_static! {
                 tstruct(addr, "Vector", "T", vec![ByteArray]),
             ]
         );
-         // Channel Account V2
-        add!(m, addr, "ChannelAccountV2", "move_to_channel",
-           |_, _| {
-                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
-                            "move_to_channel does not have a native implementation"
-                                .to_string()))
-             },
-            vec![Kind::Resource],
-            vec![Address, TypeParameter(0)],
-            vec![]
-        );
-        add!(m, addr, "ChannelAccountV2", "generate_channel_address",
+         // Channel
+        add!(m, addr, "Channel", "generate_channel_address",
            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "generate_channel_address does not have a native implementation"
@@ -469,6 +459,26 @@ lazy_static! {
             vec![],
             vec![MutableReference(Box::new(tstruct(addr, "Vector", "T", vec![Address])))],
             vec![Address]
+        );
+        add!(m, addr, "Channel", "move_to_channel",
+           |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "move_to_channel does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Kind::Resource],
+            vec![TypeParameter(0)],
+            vec![]
+        );
+         add!(m, addr, "Channel", "save_channel",
+           |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "save_channel does not have a native implementation"
+                                .to_string()))
+             },
+            vec![],
+            vec![Address, Struct(StructHandleIndex::new(0), vec![]), Address, Struct(StructHandleIndex::new(0), vec![])],
+            vec![]
         );
         m
     };
