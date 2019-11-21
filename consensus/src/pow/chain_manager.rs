@@ -118,41 +118,23 @@ impl ChainManager {
                         // 3. find blocks
                         let blocks = block_db.get_blocks_by_hashs::<BlockPayloadExt>(ancestors).expect("find blocks err.");
 
-                        let mut pre_compute_grandpa_block_id = pre_block_index.parent_block_id;
-                        let mut pre_executed_trees = None;
+                        let mut commit_txn_vec = Vec::<(BlockMetadata, Vec<SignedTransaction>)>::new();
                         for b in blocks {
-                            let mut tmp_payload = match block.payload() {
-                                Some(p) => p.get_txns(),
+                            let mut tmp_txns = match b.payload() {
+                                Some(t) => t.get_txns(),
                                 None => vec![],
                             };
-
                             let block_meta_data = BlockMetadata::new(b.parent_id().clone(), b.timestamp_usecs(), BTreeMap::new(), association_address());
-
-                            match pre_executed_trees.clone() {
-                                Some(tree) => {
-                                    match state_computer.compute_with_meta_data(b.parent_id().clone(), b.id(), tree, (&block_meta_data, &tmp_payload)).await {
-                                        Ok(processed_vm_output) => {
-                                            pre_executed_trees = Some(processed_vm_output.executed_trees().clone());
-                                        }
-                                        Err(e) => {error!("{:?}", e)},
-                                    }
-                                },
-                                None => {
-                                    match state_computer.compute_by_hash(pre_compute_grandpa_block_id, b.parent_id().clone(), b.id(), (&block_meta_data, &tmp_payload)).await {
-                                        Ok(processed_vm_output) => {
-                                            pre_executed_trees = Some(processed_vm_output.executed_trees().clone());
-                                        }
-                                        Err(e) => {error!("{:?}", e)},
-                                    }
-                                },
-                            }
-
-                            pre_compute_grandpa_block_id = b.parent_id();
+                            commit_txn_vec.push((block_meta_data, tmp_txns));
                         }
 
+                        let pre_compute_grandpa_block_id = pre_block_index.parent_block_id;
+                        let pre_compute_parent_block_id = pre_block_index.id;
+                        let block_meta_data = BlockMetadata::new(parent_block_id.clone(), block.timestamp_usecs(), BTreeMap::new(), association_address());
+                        commit_txn_vec.push((block_meta_data, payload));
+
                                         // 4. call pre_compute
-                                        let block_meta_data = BlockMetadata::new(parent_block_id.clone(), block.timestamp_usecs(), BTreeMap::new(), association_address());
-                                        match state_computer.compute_by_hash(pre_compute_grandpa_block_id, parent_block_id.clone(), block.id(), (&block_meta_data, &payload)).await {
+                                        match state_computer.compute_by_hash(pre_compute_grandpa_block_id, parent_block_id.clone(), block.id(), commit_txn_vec).await {
                                             Ok(processed_vm_output) => {
                                                 let executed_trees = processed_vm_output.executed_trees();
                                                 let state_id = executed_trees.state_root();
@@ -274,7 +256,7 @@ impl ChainManager {
                 grandpa_block_id,
                 block.parent_id().clone(),
                 block.id(),
-                (&block_meta_data, &payload),
+                vec![(block_meta_data.clone(), payload.clone())],
             )
             .await
             .expect("compute block err.");

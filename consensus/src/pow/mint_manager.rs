@@ -117,7 +117,7 @@ impl MintManager {
                                     grandpa_block_id,
                                     parent_block_id,
                                     tmp_id,
-                                    (&block_meta_data, &txns),
+                                    vec![(block_meta_data.clone(), txns.clone())],
                                 )
                                 .await
                             {

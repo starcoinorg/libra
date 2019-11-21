@@ -64,20 +64,7 @@ pub trait StateComputer: Send + Sync {
         // The id of a current block.
         block_id: HashValue,
         // Transactions to execute.
-        transactions: (&BlockMetadata, &Self::Payload),
-    ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>>;
-
-    ///
-    fn compute_with_meta_data(
-        &self,
-        // The id of a parent block
-        parent_block_id: HashValue,
-        // The id of a current block.
-        block_id: HashValue,
-        // The executed trees after executing the parent block.
-        parent_executed_trees: ExecutedTrees,
-        // Transactions to execute.
-        transactions: (&BlockMetadata, &Self::Payload),
+        transactions: Vec<(BlockMetadata, Self::Payload)>,
     ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>>;
 
     /// Send a successful commit. A future is fulfilled when the state is finalized.
