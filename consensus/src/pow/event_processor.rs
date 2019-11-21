@@ -321,7 +321,7 @@ impl EventProcessor {
                         debug!("RpcRequest from {:?} ", peer_id);
                     }
                     Event::NewPeer(peer_id) => {
-                        debug!("Peer {:?} connected", peer_id);
+                        debug!("Peer {:?} connected111", peer_id);
                     }
                     Event::LostPeer(peer_id) => {
                         debug!("Peer {:?} disconnected", peer_id);
@@ -359,7 +359,6 @@ impl EventProcessor {
         ignore_peers: Vec<PeerId>,
     ) {
         if self_flag {
-            //let event_msg = Ok(Event::PowMessage((self_peer_id, pow_ctx.expect("Pow context not set"), msg.clone())));
             let event_msg = Ok(Event::Message((self_peer_id, msg.clone())));
             if let Err(err) = self_sender.send(event_msg).await {
                 error!("Error delivering a self proposal: {:?}", err);
