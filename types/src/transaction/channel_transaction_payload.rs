@@ -350,7 +350,6 @@ impl CryptoHash for ChannelTransactionPayloadBodyV2 {
 pub struct ChannelTransactionPayloadV2 {
     body: ChannelTransactionPayloadBodyV2,
     signatures: Vec<Ed25519Signature>,
-    public_keys: Vec<Ed25519PublicKey>,
 }
 
 impl ChannelTransactionPayloadV2 {
@@ -359,7 +358,6 @@ impl ChannelTransactionPayloadV2 {
         witness: Witness,
         action: ScriptAction,
         signatures: Vec<Ed25519Signature>,
-        public_keys: Vec<Ed25519PublicKey>,
     ) -> Self {
         Self {
             body: ChannelTransactionPayloadBodyV2 {
@@ -368,7 +366,6 @@ impl ChannelTransactionPayloadV2 {
                 action,
             },
             signatures,
-            public_keys,
         }
     }
 
@@ -393,6 +390,10 @@ impl ChannelTransactionPayloadV2 {
     }
 
     pub fn public_keys(&self) -> &[Ed25519PublicKey] {
-        self.public_keys.as_slice()
+        self.body.witness.public_keys()
+    }
+
+    pub fn channel_sequence_number(&self) -> u64 {
+        self.body.witness.channel_sequence_number()
     }
 }

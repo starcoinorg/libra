@@ -204,6 +204,45 @@ where
                 }
             }
         }
+        TransactionPayload::ChannelV2(channel_payload) => {
+            let VerifiedTransactionState {
+                mut txn_executor,
+                verified_txn,
+            } = txn_state.expect("script-based transactions should always have associated state");
+            match verified_txn {
+                VerTxn::ScriptAction() => {}
+                _ => unreachable!("expects TransactionPayload::ScriptAction"),
+            };
+            //TODO use txn_executor.interpeter_entrypoint
+            let action_output = match txn_executor.execute_function(
+                channel_payload.action().module(),
+                channel_payload.action().function(),
+                convert_txn_args(channel_payload.action().args().to_vec()),
+            ) {
+                Ok(_) => txn_executor.transaction_cleanup(vec![]),
+                Err(err) => match err.status_type() {
+                    StatusType::InvariantViolation => {
+                        error!("[VM] VM error running script: {:?}", err);
+                        ExecutedTransaction::discard_error_output(err)
+                    }
+                    _ => {
+                        warn!("[VM] User error running script: {:?}", err);
+                        txn_executor.failed_transaction_cleanup(Err(err))
+                    }
+                },
+            };
+            let merged_write_set = WriteSet::merge(
+                channel_payload.witness().write_set(),
+                action_output.write_set(),
+            );
+            //TODO(jole) eliminate clone
+            TransactionOutput::new(
+                merged_write_set,
+                action_output.events().to_vec(),
+                action_output.gas_used(),
+                action_output.status().clone(),
+            )
+        }
     }
 }
 
