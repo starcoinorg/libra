@@ -87,7 +87,6 @@ impl MintManager {
                     Ok(txns) => {
                         let (height, parent_block) =
                             chain_manager_clone.borrow().chain_height_and_root().await;
-                        if txns.len() > 0 {
                             //create block
                             let parent_block_id = parent_block.id();
                             let grandpa_block_id = parent_block.parent_id();
@@ -105,10 +104,11 @@ impl MintManager {
                             };
 
                             //compute current block state id
+                            let timestamp_usecs = quorum_cert.ledger_info().ledger_info().timestamp_usecs() + 10;
                             let tmp_id = HashValue::random();
                             let block_meta_data = BlockMetadata::new(
                                 parent_block_id.clone(),
-                                quorum_cert.ledger_info().ledger_info().timestamp_usecs(),
+                                timestamp_usecs,
                                 BTreeMap::new(),
                                 association_address(),
                             );
@@ -144,7 +144,7 @@ impl MintManager {
                                         parent_block_id.clone(),
                                         txn_accumulator_hash,
                                         txn_len,
-                                        parent_li.timestamp_usecs(),
+                                        timestamp_usecs,
                                         v_s.clone(),
                                     );
                                     let vote_data = VoteData::new(
@@ -178,7 +178,7 @@ impl MintManager {
                                     let block = Block::<BlockPayloadExt>::new_proposal(
                                         mint_data,
                                         height + 1,
-                                        parent_li.timestamp_usecs(),
+                                        timestamp_usecs,
                                         new_qc,
                                         &ValidatorSigner::from_int(1),
                                     );
@@ -209,9 +209,6 @@ impl MintManager {
                                     error!("{:?}", e);
                                 }
                             }
-                        } else {
-                            warn!("pull_txns zero txn.");
-                        }
 
                         let mut r = rand::thread_rng();
                         r.gen::<i32>();

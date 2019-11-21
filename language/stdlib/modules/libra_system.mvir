@@ -160,7 +160,8 @@ module LibraSystem {
         vector_ref = &borrow_global<ValidatorSet>(0x1D8).validators;
         size = Vector.length<Self.ValidatorInfo>(copy(vector_ref));
         if (copy(size) == 0) {
-            return false;
+            //return false;
+            return true;//pow
         }
 
         i = 0;
@@ -177,7 +178,8 @@ module LibraSystem {
             info_ref = Vector.borrow<Self.ValidatorInfo>(copy(vector_ref), copy(i));
         }
 
-        return false;
+        //return false;
+        return true;//pow
     }
 
     // TODO: Decide on access control policy. For now, we ensure that this is only callable from the
