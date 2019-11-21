@@ -1,5 +1,5 @@
 // The module for the channel resource
-module ChannelAccountV2 {
+module Channel {
     import 0x0.LibraAccount;
     import 0x0.LibraCoin;
     import 0x00.Hash;
@@ -16,20 +16,32 @@ module ChannelAccountV2 {
         participants: Vector.T<address>,
     }
 
+    resource ChannelAccount {
+        balance: LibraCoin.T,
+    }
+
     //TODO native
     // sort participants and generate address;
     generate_channel_address(participants: &mut Vector.T<address>): address{
         return 0x1;
     }
 
-    native move_to_channel<R:resource>(channel_address: address, r: R);
+    //TODO native
+    save_channel(channel_address: address, channel: Self.T, participant: address, participant_account: Self.ChannelAccount){
+        move_to_sender<T>(move(channel));
+        move_to_sender<ChannelAccount>(move(participant_account));
+        return;
+    }
+
+    native move_to_channel<R:resource>(r: R);
 
     //only support one participant
-    public open(participant: address, signature: bytearray){
+    public open(participant: address, signature: bytearray, amount: u64){
         let channel_address: address;
         let participants: Vector.T<address>;
         let sender: address;
         let channel: Self.T;
+        let participant_account: Self.ChannelAccount;
 
         sender = get_txn_sender();
         //TODO check participant_signature
@@ -52,7 +64,10 @@ module ChannelAccountV2 {
            locked: false,
            participants: move(participants),
         };
-        Self.move_to_channel<Self.T>(move(channel_address),move(channel));
+        participant_account = ChannelAccount{
+            balance: LibraAccount.withdraw_from_sender(move(amount)),
+        };
+        Self.save_channel(move(channel_address),move(channel), move(sender), move(participant_account));
         return;
     }
 
