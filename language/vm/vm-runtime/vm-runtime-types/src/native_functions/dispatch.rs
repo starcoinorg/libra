@@ -405,10 +405,20 @@ lazy_static! {
             vec![],
             vec![U64]
         );
-        add!(m, addr, "ChannelTransaction", "get_channel_txn_sender",
+        add!(m, addr, "ChannelTransaction", "get_channel_address",
             |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
-                            "get_channel_txn_sender does not have a native implementation"
+                            "get_channel_address does not have a native implementation"
+                                .to_string()))
+             },
+            vec![],
+            vec![],
+            vec![Address]
+        );
+         add!(m, addr, "ChannelTransaction", "get_proposer",
+            |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "get_proposer does not have a native implementation"
                                 .to_string()))
              },
             vec![],
