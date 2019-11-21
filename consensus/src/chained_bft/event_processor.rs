@@ -101,6 +101,7 @@ impl<T: Payload> EventProcessor<T> {
             let round = v.vote_data().proposed().round();
             (v, round)
         });
+
         Self {
             block_store,
             pacemaker,
@@ -290,36 +291,58 @@ impl<T: Payload> EventProcessor<T> {
             .certified_block()
             .round();
 
-        if current_hqc_round < sync_info.hqc_round() {
-            let deadline = self.pacemaker.current_round_deadline();
-            let now = Instant::now();
-            let deadline_repr = if deadline.gt(&now) {
-                deadline
-                    .checked_duration_since(now)
-                    .map_or("0 ms".to_string(), |v| format!("{:?}", v))
-            } else {
-                now.checked_duration_since(deadline)
-                    .map_or("0 ms".to_string(), |v| format!("Already late by {:?}", v))
-            };
-            debug!(
-                "Starting sync: current_hqc_round = {}, sync_info_hqc_round = {}, deadline = {:?}",
-                current_hqc_round,
-                sync_info.hqc_round(),
-                deadline_repr,
-            );
-            self.block_store
-                .sync_to(&sync_info, self.create_block_retriever(deadline, author))
-                .await
-                .map_err(|e| {
-                    warn!(
-                        "Fail to sync up to HQC @ round {}: {}",
-                        sync_info.hqc_round(),
-                        e
-                    );
-                    e
-                })?;
-            debug!("Caught up to HQC at round {}", sync_info.hqc_round());
+        let current_htc_round = self
+            .block_store
+            .highest_timeout_cert()
+            .map_or(0, |tc| tc.round());
+
+        if current_hqc_round >= sync_info.hqc_round()
+            && current_htc_round >= sync_info.htc_round()
+            && self.block_store.root().round()
+                >= sync_info.highest_ledger_info().commit_info().round()
+        {
+            return Ok(());
         }
+
+        // Some information in SyncInfo is ahead of what we have locally.
+        // First verify the SyncInfo (didn't verify it in the yet).
+        sync_info.verify(self.validators.as_ref()).map_err(|e| {
+            security_log(SecurityEvent::InvalidSyncInfoMsg)
+                .error(&e)
+                .data(&sync_info)
+                .log();
+            e
+        })?;
+
+        let deadline = self.pacemaker.current_round_deadline();
+        let now = Instant::now();
+        let deadline_repr = if deadline.gt(&now) {
+            deadline
+                .checked_duration_since(now)
+                .map_or("0 ms".to_string(), |v| format!("{:?}", v))
+        } else {
+            now.checked_duration_since(deadline)
+                .map_or("0 ms".to_string(), |v| format!("Already late by {:?}", v))
+        };
+        debug!(
+            "Starting sync: current_hqc_round = {}, sync_info_hqc_round = {}, deadline = {:?}",
+            current_hqc_round,
+            sync_info.hqc_round(),
+            deadline_repr,
+        );
+        self.block_store
+            .sync_to(&sync_info, self.create_block_retriever(deadline, author))
+            .await
+            .map_err(|e| {
+                warn!(
+                    "Fail to sync up to HQC @ round {}: {}",
+                    sync_info.hqc_round(),
+                    e
+                );
+                e
+            })?;
+        debug!("Caught up to HQC at round {}", sync_info.hqc_round());
+
         // Update the block store and potentially start a new round.
         self.process_certificates(
             sync_info.highest_quorum_cert(),
@@ -422,10 +445,7 @@ impl<T: Payload> EventProcessor<T> {
         counters::PREFERRED_BLOCK_ROUND.set(consensus_state.preferred_round() as i64);
 
         let mut highest_committed_proposal_round = None;
-        if let Some(block) = qc
-            .committed_block_id()
-            .and_then(|new_commit| self.block_store.get_block(new_commit))
-        {
+        if let Some(block) = self.block_store.get_block(qc.commit_info().id()) {
             if block.round() > self.block_store.root().round() {
                 // We don't want to use NIL commits for pacemaker round interval calculations.
                 if !block.is_nil_block() {

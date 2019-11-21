@@ -79,7 +79,7 @@ impl SwarmConfig {
         // Create network config for upstream node.
         let mut upstream_full_node_config = NetworkConfig {
             peer_id: upstream_peer_id.to_string(),
-            role: "full_node".to_string(),
+            role: RoleType::FullNode,
             network_keypairs_file: upstream_network_keys_file_name.into(),
             network_peers_file: template_network.network_peers_file.clone(),
             seed_peers_file: template_network.seed_peers_file.clone(),
@@ -317,20 +317,11 @@ impl SwarmConfig {
         // Save consensus peers file.
         let consensus_peers_file_name = "consensus_peers.config.toml".to_string();
         consensus_peers_config.save_config(&output_dir.join(&consensus_peers_file_name));
-        let role_string = match role {
-            RoleType::Validator => "validator".to_string(),
-            RoleType::FullNode => "full_node".to_string(),
-        };
-        let base_config = BaseConfig::new(
-            output_dir.to_path_buf(),
-            template.base.node_sync_retries,
-            template.base.node_sync_channel_buffer_size,
-            template.base.node_async_log_chan_size,
-        );
+        let base_config = BaseConfig::new(output_dir.to_path_buf());
         let template_network = template.networks.get(0).unwrap();
         let network_config = NetworkConfig {
             peer_id: node_id.to_string(),
-            role: role_string,
+            role,
             network_keypairs_file: network_keys_file_name.into(),
             network_peers_file: network_peers_file_name.into(),
             seed_peers_file: seed_peers_file_name.into(),
@@ -347,9 +338,10 @@ impl SwarmConfig {
             seed_peers: template_network.seed_peers.clone(),
             is_public_network: false,
         };
+        let miner_rpc_address = &template.consensus.miner_rpc_address;
         let consensus_config = ConsensusConfig {
             max_block_size: template.consensus.max_block_size,
-            proposer_type: template.consensus.proposer_type.clone(),
+            proposer_type: template.consensus.proposer_type,
             contiguous_rounds: template.consensus.contiguous_rounds,
             max_pruned_blocks_in_mem: template.consensus.max_pruned_blocks_in_mem,
             pacemaker_initial_timeout_ms: template.consensus.pacemaker_initial_timeout_ms,
@@ -359,9 +351,9 @@ impl SwarmConfig {
             consensus_keypair: ConsensusKeyPair::default(),
             consensus_peers: template.consensus.consensus_peers.clone(),
             safety_rules: safety_rules_config,
-            consensus_type: template.consensus.consensus_type.clone(),
-            miner_rpc_address: String::from(&template.consensus.miner_rpc_address),
             miner_client_enable: template.consensus.miner_client_enable,
+            consensus_type: template.consensus.consensus_type,
+            miner_rpc_address: miner_rpc_address.to_string(),
         };
         let mut config = NodeConfig {
             base: base_config,
@@ -374,7 +366,7 @@ impl SwarmConfig {
             storage: template.storage.clone(),
             mempool: template.mempool.clone(),
             state_sync: template.state_sync.clone(),
-            log_collector: template.log_collector.clone(),
+            logger: template.logger.clone(),
             vm_config: template.vm_config.clone(),
         };
         NodeConfigHelpers::randomize_config_ports(&mut config);

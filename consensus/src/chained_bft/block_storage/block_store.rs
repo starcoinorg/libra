@@ -94,13 +94,24 @@ impl<T: Payload> BlockStore<T> {
         max_pruned_blocks_in_mem: usize,
     ) -> BlockTree<T> {
         let (root_block, root_qc, root_li) = (root.0, root.1, root.2);
-        // TODO: check root matches the committed_trees.
-        let root_output = ProcessedVMOutput::new(vec![], state_computer.committed_trees(), None);
+        assert_eq!(
+            root_qc.certified_block().version(),
+            state_computer.committed_trees().version().unwrap_or(0),
+            "root qc version {} doesn't match committed trees {}",
+            root_qc.certified_block().version(),
+            state_computer.committed_trees().version().unwrap_or(0),
+        );
         assert_eq!(
             root_qc.certified_block().executed_state_id(),
-            root_output.accu_root(),
-            "We have inconsistent executed state with Quorum Cert for root block {}",
-            root_block.id()
+            state_computer.committed_trees().state_id(),
+            "root qc state id {} doesn't match committed trees {}",
+            root_qc.certified_block().executed_state_id(),
+            state_computer.committed_trees().state_id(),
+        );
+        let root_output = ProcessedVMOutput::new(
+            vec![],
+            state_computer.committed_trees(),
+            root_qc.certified_block().next_validator_set().cloned(),
         );
         let executed_root_block = ExecutedBlock::new(root_block, root_output);
         let mut tree = BlockTree::new(
@@ -164,17 +175,11 @@ impl<T: Payload> BlockStore<T> {
             .path_from_root(block_id_to_commit)
             .unwrap_or_else(Vec::new);
 
-        let payload_and_output_list = blocks_to_commit
-            .iter()
-            .map(|b| {
-                (
-                    b.payload().unwrap_or(&T::default()).clone(),
-                    Arc::clone(b.output()),
-                )
-            })
-            .collect();
         self.state_computer
-            .commit(payload_and_output_list, finality_proof)
+            .commit(
+                blocks_to_commit.iter().map(|b| b.as_ref()).collect(),
+                finality_proof,
+            )
             .await
             .unwrap_or_else(|e| panic!("Failed to persist commit due to {:?}", e));
         counters::LAST_COMMITTED_ROUND.set(block_to_commit.round() as i64);
@@ -217,13 +222,10 @@ impl<T: Payload> BlockStore<T> {
         // This introduces an inconsistent state if we send out SyncInfo and others try to sync to
         // B_i and figure out we only have B_j.
         // Here we commit up to the highest_ledger_info to maintain highest_ledger_info == state_computer.committed_trees.
-        if let Some(block_to_commit) = self.highest_ledger_info().committed_block_id() {
-            let highest_li_commit_round = self.get_block(block_to_commit).map_or(0, |b| b.round());
-            if highest_li_commit_round > self.root().round() {
-                let finality_proof = self.highest_ledger_info().ledger_info().clone();
-                if let Err(e) = self.commit(finality_proof).await {
-                    warn!("{:?}", e);
-                }
+        if self.highest_ledger_info().commit_info().round() > self.root().round() {
+            let finality_proof = self.highest_ledger_info().ledger_info().clone();
+            if let Err(e) = self.commit(finality_proof).await {
+                warn!("{:?}", e);
             }
         }
     }
@@ -297,12 +299,13 @@ impl<T: Payload> BlockStore<T> {
         // corruption, for example.
         match self.get_block(qc.certified_block().id()) {
             Some(executed_block) => {
-                assert_eq!(
-                        executed_block.compute_result().executed_state.state_id,
-                        qc.certified_block().executed_state_id(),
-                        "QC for block {} has a different execution result than the local computation. Restart and try again.",
-                        qc.certified_block().id(),
-                    );
+                ensure!(
+                    executed_block.block_info() == *qc.certified_block(),
+                    "QC for block {} has different BlockInfo {} than local {}",
+                    qc.certified_block().id(),
+                    qc.certified_block(),
+                    executed_block.block_info()
+                );
             }
             None => bail!("Insert {} without having the block in store first", qc),
         }

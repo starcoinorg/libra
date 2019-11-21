@@ -52,14 +52,13 @@ impl PowConsensusProvider {
         //Start miner proxy server
         let mine_state = MineStateManager::new();
         let miner_rpc_addr = String::from(&node_config.consensus.miner_rpc_address);
-        let mut miner_proxy = setup_minerproxy_service(mine_state.clone(), miner_rpc_addr);
+        let mut miner_proxy = setup_minerproxy_service(mine_state.clone(), miner_rpc_addr.clone());
         miner_proxy.start();
         for &(ref host, port) in miner_proxy.bind_addrs() {
             info!("listening on {}:{}", host, port);
         }
         // Start miner client.
         if node_config.consensus.miner_client_enable {
-            let miner_rpc_addr = node_config.consensus.miner_rpc_address();
             task::spawn(async move {
                 let mine_client = MineClient::new(miner_rpc_addr);
                 mine_client.start().await

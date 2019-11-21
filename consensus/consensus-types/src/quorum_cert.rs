@@ -3,13 +3,10 @@
 
 use crate::vote_data::VoteData;
 use failure::prelude::*;
-use libra_crypto::{
-    hash::{CryptoHash, ACCUMULATOR_PLACEHOLDER_HASH, GENESIS_BLOCK_ID},
-    HashValue,
-};
+use libra_crypto::{hash::CryptoHash, HashValue};
 use libra_types::{
     block_info::BlockInfo,
-    crypto_proxies::{LedgerInfoWithSignatures, ValidatorSigner, ValidatorVerifier},
+    crypto_proxies::{LedgerInfoWithSignatures, ValidatorVerifier},
     ledger_info::LedgerInfo,
 };
 use serde::{Deserialize, Serialize};
@@ -58,13 +55,8 @@ impl QuorumCert {
         &self.signed_ledger_info
     }
 
-    pub fn committed_block_id(&self) -> Option<HashValue> {
-        let id = self.ledger_info().ledger_info().consensus_block_id();
-        if id.is_zero() {
-            None
-        } else {
-            Some(id)
-        }
+    pub fn commit_info(&self) -> &BlockInfo {
+        self.ledger_info().ledger_info().commit_info()
     }
 
     /// If the QC commits reconfiguration and starts a new epoch
@@ -73,10 +65,6 @@ impl QuorumCert {
             .ledger_info()
             .next_validator_set()
             .is_some()
-    }
-
-    pub fn certificate_for_genesis() -> QuorumCert {
-        Self::certificate_for_genesis_from_ledger_info(&LedgerInfo::genesis(), *GENESIS_BLOCK_ID)
     }
 
     /// QuorumCert for the genesis block deterministically generated from end-epoch LedgerInfo:
@@ -100,13 +88,10 @@ impl QuorumCert {
         let vote_data = VoteData::new(ancestor.clone(), ancestor.clone());
         let li = LedgerInfo::new(ancestor, vote_data.hash());
 
-        let signer = ValidatorSigner::genesis();
-        let signature = signer
-            .sign_message(li.hash())
-            .expect("Fail to sign genesis ledger info");
-        let mut signatures = BTreeMap::new();
-        signatures.insert(signer.author(), signature);
-        QuorumCert::new(vote_data, LedgerInfoWithSignatures::new(li, signatures))
+        QuorumCert::new(
+            vote_data,
+            LedgerInfoWithSignatures::new(li, BTreeMap::new()),
+        )
     }
 
     pub fn verify(&self, validator: &ValidatorVerifier) -> failure::Result<()> {
@@ -115,11 +100,22 @@ impl QuorumCert {
             self.ledger_info().ledger_info().consensus_data_hash() == vote_hash,
             "Quorum Cert's hash mismatch LedgerInfo"
         );
-        // Genesis is implicitly agreed upon, it doesn't have real signatures.
-        if self.certified_block().round() == 0
-            && self.certified_block().id() == *GENESIS_BLOCK_ID
-            && self.certified_block().executed_state_id() == *ACCUMULATOR_PLACEHOLDER_HASH
-        {
+        // Genesis's QC is implicitly agreed upon, it doesn't have real signatures.
+        // If someone sends us a QC on a fake genesis, it'll fail to insert into BlockStore
+        // because of the round constraint.
+        if self.certified_block().round() == 0 {
+            ensure!(
+                self.parent_block() == self.certified_block(),
+                "Genesis QC has inconsistent parent block with certified block"
+            );
+            ensure!(
+                self.certified_block() == self.ledger_info().ledger_info().commit_info(),
+                "Genesis QC has inconsistent commit block with certified block"
+            );
+            ensure!(
+                self.ledger_info().signatures().is_empty(),
+                "Genesis QC should not carry signatures"
+            );
             return Ok(());
         }
         self.ledger_info()

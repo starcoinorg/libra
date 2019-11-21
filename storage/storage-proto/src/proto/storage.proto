@@ -51,8 +51,8 @@ service Storage {
     returns (GetStartupInfoResponse);
 
     // Returns latest ledger infos per epoch.
-    rpc GetLatestLedgerInfosPerEpoch(GetLatestLedgerInfosPerEpochRequest)
-    returns (GetLatestLedgerInfosPerEpochResponse);
+    rpc GetEpochChangeLedgerInfos(GetEpochChangeLedgerInfosRequest)
+    returns (GetEpochChangeLedgerInfosResponse);
 
     // Rollback
     rpc RollbackByBlockId(RollbackRequest)
@@ -130,7 +130,7 @@ message StartupInfo {
     // The latest committed LedgerInfo. Note that at start up storage can have more
     // transactions than the latest committed LedgerInfo indicates due to an incomplete
     // start up sync.
-    types.LedgerInfo ledger_info = 1;
+    types.LedgerInfoWithSignatures ledger_info = 1;
 
     // The latest committed tree state matching the ledger info above.
     TreeState committed_tree_state = 2;
@@ -140,12 +140,12 @@ message StartupInfo {
     TreeState synced_tree_state = 3;
 }
 
-message GetLatestLedgerInfosPerEpochRequest {
+message GetEpochChangeLedgerInfosRequest {
     /// The last epoch number with available information to the client.
     uint64 start_epoch = 1;
 }
 
-message GetLatestLedgerInfosPerEpochResponse {
+message GetEpochChangeLedgerInfosResponse {
     /// Vector of latest ledger infos per epoch (not sorted)
     repeated types.LedgerInfoWithSignatures latest_ledger_infos = 1;
 }

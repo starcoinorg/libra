@@ -1,13 +1,13 @@
 use crate::admission_control_service::AdmissionControlService;
+use crate::UpstreamProxyData;
 use admission_control_proto::proto::admission_control::{
     SubmitTransactionRequest, SubmitTransactionResponse,
 };
+use libra_mempool::core_mempool_client::CoreMemPoolClient;
 use libra_types::proto::types::{UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse};
 use std::sync::Arc;
-use crate::UpstreamProxyData;
-use libra_mempool::core_mempool_client::CoreMemPoolClient;
-use vm_validator::vm_validator::VMValidator;
 use tokio::runtime::TaskExecutor;
+use vm_validator::vm_validator::VMValidator;
 
 /// AdmissionControlClient
 #[derive(Clone)]
@@ -19,11 +19,15 @@ pub struct AdmissionControlMockClient {
 
 impl AdmissionControlMockClient {
     /// AdmissionControlService Wrapper
-    pub fn new(ac_service: AdmissionControlService, proxy: UpstreamProxyData<CoreMemPoolClient, VMValidator>, executor: TaskExecutor) -> Self {
+    pub fn new(
+        ac_service: AdmissionControlService,
+        proxy: UpstreamProxyData<CoreMemPoolClient, VMValidator>,
+        executor: TaskExecutor,
+    ) -> Self {
         AdmissionControlMockClient {
             ac_service: Arc::new(ac_service),
             proxy,
-            executor
+            executor,
         }
     }
 

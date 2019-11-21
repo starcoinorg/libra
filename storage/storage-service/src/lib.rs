@@ -28,8 +28,8 @@ use std::{
 };
 use storage_proto::proto::storage::{
     create_storage, GetAccountStateWithProofByVersionRequest,
-    GetAccountStateWithProofByVersionResponse, GetHistoryStartupInfoByBlockIdRequest,
-    GetLatestLedgerInfosPerEpochRequest, GetLatestLedgerInfosPerEpochResponse,
+    GetAccountStateWithProofByVersionResponse, GetEpochChangeLedgerInfosRequest,
+    GetEpochChangeLedgerInfosResponse, GetHistoryStartupInfoByBlockIdRequest,
     GetStartupInfoRequest, GetStartupInfoResponse, GetTransactionsRequest, GetTransactionsResponse,
     RollbackRequest, RollbackResponse, SaveTransactionsRequest, SaveTransactionsResponse, Storage,
 };
@@ -220,24 +220,24 @@ impl StorageService {
         Ok(rust_resp.into())
     }
 
+    fn get_epoch_change_ledger_infos_inner(
+        &self,
+        req: GetEpochChangeLedgerInfosRequest,
+    ) -> Result<GetEpochChangeLedgerInfosResponse> {
+        let rust_req = storage_proto::GetEpochChangeLedgerInfosRequest::try_from(req)?;
+        let ledger_infos = self
+            .db
+            .get_epoch_change_ledger_infos(rust_req.start_epoch)?;
+        let rust_resp = storage_proto::GetEpochChangeLedgerInfosResponse::new(ledger_infos);
+        Ok(rust_resp.into())
+    }
+
     fn get_history_startup_info_by_block_id_inner(
         &self,
         block_id: &HashValue,
     ) -> Result<GetStartupInfoResponse> {
         let info = self.db.get_history_startup_info_by_block_id(block_id)?;
         let rust_resp = storage_proto::GetStartupInfoResponse { info };
-        Ok(rust_resp.into())
-    }
-
-    fn get_latest_ledger_infos_per_epoch_inner(
-        &self,
-        req: GetLatestLedgerInfosPerEpochRequest,
-    ) -> Result<GetLatestLedgerInfosPerEpochResponse> {
-        let rust_req = storage_proto::GetLatestLedgerInfosPerEpochRequest::try_from(req)?;
-        let ledger_infos = self
-            .db
-            .get_latest_ledger_infos_per_epoch(rust_req.start_epoch)?;
-        let rust_resp = storage_proto::GetLatestLedgerInfosPerEpochResponse::new(ledger_infos);
         Ok(rust_resp.into())
     }
 
@@ -307,6 +307,18 @@ impl Storage for StorageService {
         provide_grpc_response(resp, ctx, sink);
     }
 
+    fn get_epoch_change_ledger_infos(
+        &mut self,
+        ctx: grpcio::RpcContext,
+        req: GetEpochChangeLedgerInfosRequest,
+        sink: grpcio::UnarySink<GetEpochChangeLedgerInfosResponse>,
+    ) {
+        debug!("[GRPC] Storage::get_epoch_change_ledger_infos");
+        let _timer = SVC_COUNTERS.req(&ctx);
+        let resp = self.get_epoch_change_ledger_infos_inner(req);
+        provide_grpc_response(resp, ctx, sink);
+    }
+
     fn get_history_startup_info_by_block_id(
         &mut self,
         ctx: grpcio::RpcContext,
@@ -318,18 +330,6 @@ impl Storage for StorageService {
         let resp = self.get_history_startup_info_by_block_id_inner(
             &HashValue::from_slice(req.block_id.as_ref()).expect("parse err."),
         );
-        provide_grpc_response(resp, ctx, sink);
-    }
-
-    fn get_latest_ledger_infos_per_epoch(
-        &mut self,
-        ctx: grpcio::RpcContext,
-        req: GetLatestLedgerInfosPerEpochRequest,
-        sink: grpcio::UnarySink<GetLatestLedgerInfosPerEpochResponse>,
-    ) {
-        debug!("[GRPC] Storage::get_latest_ledger_infos_per_epoch");
-        let _timer = SVC_COUNTERS.req(&ctx);
-        let resp = self.get_latest_ledger_infos_per_epoch_inner(req);
         provide_grpc_response(resp, ctx, sink);
     }
 

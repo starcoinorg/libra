@@ -39,16 +39,31 @@ commands:
             echo 'export IMAGE_NAME=myapp' >> $BASH_ENV
             echo 'export LIBRA_DUMP_LOGS=1' >> $BASH_ENV
             echo 'export CARGO_INCREMENTAL=0' >> $BASH_ENV
+            echo 'export CI_TIMEOUT="timeout 40m"' >> $BASH_ENV
   install_deps:
     steps:
       - run:
           name: Install Dependencies
           command: |
+            sudo sh -c 'echo "deb http://deb.debian.org/debian buster-backports main" > /etc/apt/sources.list.d/backports.list'
             sudo apt-get update
             sudo apt-get install -y cmake curl
             sudo apt-get clean
             sudo rm -r /var/lib/apt/lists/*
             rustup component add clippy rustfmt
+  install_code_coverage_deps:
+    steps:
+      - run:
+          name: Install grcov and lcov
+          command: |
+            sudo apt-get update
+            sudo apt-get install lcov
+            cargo install --force grcov
+  install_rust_nightly_toolchain:
+    steps:
+      - run:
+          name: Install nightly toolchain for features not in beta/stable
+          command: rustup install nightly
   build_setup:
     steps:
       - checkout
@@ -96,15 +111,15 @@ jobs:
       - run:
           name: Run All Unit Tests
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [013] ]] || RUST_BACKTRACE=1 cargo x test --unit
+            [[ $CIRCLE_NODE_INDEX =~ [013] ]] || RUST_BACKTRACE=1 $CI_TIMEOUT cargo x test --unit
       - run:
           name: Run Cryptography Unit Tests with the formally verified backend
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [013] ]] || ( RUST_BACKTRACE=1 cd crypto/crypto && cargo test --features='std fiat_u64_backend fuzzing' --no-default-features )
+            [[ $CIRCLE_NODE_INDEX =~ [013] ]] || ( RUST_BACKTRACE=1 cd crypto/crypto && $CI_TIMEOUT cargo test --features='std fiat_u64_backend fuzzing' --no-default-features )
       - run:
           name: Run All End to End Tests
           command: |
-            [[ $CIRCLE_NODE_INDEX =~ [012] ]] || RUST_BACKTRACE=1 cargo x test --package testsuite -- --test-threads 1
+            [[ $CIRCLE_NODE_INDEX =~ [012] ]] || RUST_BACKTRACE=1 $CI_TIMEOUT cargo x test --package testsuite -- --test-threads 1
       - build_teardown
   validate-config:
     description: Validate that committed docker configs are up to date
@@ -136,6 +151,22 @@ jobs:
             cargo install --force cargo-audit
             cargo audit
       - build_teardown
+  code-coverage:
+    description: Run code coverage
+    executor: build-executor
+    steps:
+      - build_setup
+      - install_code_coverage_deps
+      - install_rust_nightly_toolchain
+      - run:
+          name: Setup code coverage output
+          command: echo "export CODECOV_OUTPUT=codecov" >> $BASH_ENV
+      - run:
+          name: Run code coverage
+          command: ./scripts/coverage_report.sh . $CODECOV_OUTPUT --batch
+      - run:
+          name: Upload result to codecov.io
+          command: bash <(curl -s https://codecov.io/bash) -f $CODECOV_OUTPUT/lcov.info;
   terraform:
     executor: terraform-executor
     steps:
@@ -201,3 +232,4 @@ workflows:
               only: master
     jobs:
       - audit
+      - code-coverage

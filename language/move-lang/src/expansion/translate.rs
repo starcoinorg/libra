@@ -72,8 +72,8 @@ pub fn program(prog: P::Program, sender: Option<Address>) -> (E::Program, Errors
     // Ignore any main?
     for def in prog.lib_definitions {
         match def {
-            P::FileDefinition::Modules(ad, ms) => {
-                modules(&mut context, sender, false, &mut module_map, ad, ms)
+            P::FileDefinition::Modules(m_or_a_vec) => {
+                modules_and_addresses(&mut context, sender, false, &mut module_map, m_or_a_vec)
             }
             P::FileDefinition::Main(f) => context.error(vec![(
                 f.function.name.loc(),
@@ -86,8 +86,8 @@ pub fn program(prog: P::Program, sender: Option<Address>) -> (E::Program, Errors
     }
     for def in prog.source_definitions {
         match def {
-            P::FileDefinition::Modules(ad, ms) => {
-                modules(&mut context, sender, true, &mut module_map, ad, ms)
+            P::FileDefinition::Modules(m_or_a_vec) => {
+                modules_and_addresses(&mut context, sender, true, &mut module_map, m_or_a_vec)
             }
             P::FileDefinition::Main(f) => {
                 context.address = None;
@@ -113,31 +113,35 @@ pub fn program(prog: P::Program, sender: Option<Address>) -> (E::Program, Errors
     )
 }
 
-fn modules(
+fn modules_and_addresses(
     context: &mut Context,
     sender: Option<Address>,
     is_source_module: bool,
     module_map: &mut UniqueMap<ModuleIdent, E::ModuleDefinition>,
-    addr_directive: P::AddressDirective,
-    module_defs: Vec<P::ModuleDefinition>,
+    m_or_a_vec: Vec<P::ModuleOrAddress>,
 ) {
-    if module_defs.is_empty() {
-        return;
-    }
-
-    let loc = module_defs.get(0).unwrap().name.loc();
-    address_directive(context, sender, loc, addr_directive);
-
-    for module_def in module_defs {
-        let (mident, mod_) = module(context, is_source_module, context.cur_address(), module_def);
-        if let Err((old_loc, _)) = module_map.add(mident.clone(), mod_) {
-            context.error(vec![
-                (
-                    mident.loc(),
-                    format!("Duplicate definition for module '{}'", mident),
-                ),
-                (old_loc, "Previously defined here".into()),
-            ]);
+    let mut addr_directive = None;
+    for m_or_a in m_or_a_vec {
+        match m_or_a {
+            P::ModuleOrAddress::Address(loc, a) => addr_directive = Some((loc, a)),
+            P::ModuleOrAddress::Module(module_def) => {
+                let (mident, mod_) = module(
+                    context,
+                    is_source_module,
+                    sender,
+                    addr_directive,
+                    module_def,
+                );
+                if let Err((old_loc, _)) = module_map.add(mident.clone(), mod_) {
+                    context.error(vec![
+                        (
+                            mident.loc(),
+                            format!("Duplicate definition for module '{}'", mident),
+                        ),
+                        (old_loc, "Previously defined here".into()),
+                    ]);
+                }
+            }
         }
     }
 }
@@ -146,20 +150,17 @@ fn address_directive(
     context: &mut Context,
     sender: Option<Address>,
     loc: Loc,
-    addr_directive: P::AddressDirective,
+    addr_directive: Option<(Loc, Address)>,
 ) {
-    use P::AddressDirective as AD;
-    let addr = match addr_directive {
-        AD::Specified(_, addr) => addr,
-        AD::Sender => match sender {
-            Some(addr) => addr,
-            None => {
-                context.error(vec![
+    let addr = match (addr_directive, sender) {
+        (Some((_, addr)), _) => addr,
+        (None, Some(addr)) => addr,
+        (None, None) => {
+            context.error(vec![
                     (loc, format!("Invalid module declration. No sender address was given as a command line argument. Add one using --{}. Or set the address at the top of the file using 'address _:'", crate::command_line::SENDER)),
                 ]);
-                Address::LIBRA_CORE
-            }
-        },
+            Address::LIBRA_CORE
+        }
     };
     context.address = Some(addr);
 }
@@ -167,7 +168,8 @@ fn address_directive(
 fn module(
     context: &mut Context,
     is_source_module: bool,
-    address: Address,
+    sender: Option<Address>,
+    addr_directive: Option<(Loc, Address)>,
     mdef: P::ModuleDefinition,
 ) -> (ModuleIdent, E::ModuleDefinition) {
     let P::ModuleDefinition {
@@ -177,8 +179,11 @@ fn module(
         functions: pfunctions,
     } = mdef;
     let name_loc = name.loc();
+
+    address_directive(context, sender, name_loc, addr_directive);
+
     let mident_ = ModuleIdent_ {
-        address,
+        address: context.cur_address(),
         name: name.clone(),
     };
     let current_module = ModuleIdent(sp(name_loc, mident_));
@@ -634,7 +639,8 @@ fn exp_(context: &mut Context, sp!(loc, pe_): P::Exp) -> E::Exp {
                     EE::UnresolvedError
                 }
                 Some(LValue::Assigns(al)) => EE::Assign(al, er),
-                Some(LValue::Mutate(edotted)) => EE::Mutate(edotted, er),
+                Some(LValue::Mutate(el)) => EE::Mutate(el, er),
+                Some(LValue::FieldMutate(edotted)) => EE::FieldMutate(edotted, er),
             }
         }
         PE::Return(pe) => EE::Return(exp(context, *pe)),
@@ -940,7 +946,8 @@ fn bind(context: &mut Context, sp!(loc, pb_): P::Bind) -> Option<E::Bind> {
 
 enum LValue {
     Assigns(E::AssignList),
-    Mutate(Box<E::ExpDotted>),
+    FieldMutate(Box<E::ExpDotted>),
+    Mutate(Box<E::Exp>),
 }
 
 fn lvalues(context: &mut Context, sp!(loc, e_): P::Exp) -> Option<LValue> {
@@ -954,12 +961,12 @@ fn lvalues(context: &mut Context, sp!(loc, e_): P::Exp) -> Option<LValue> {
             L::Assigns(sp(loc, al_opt?))
         }
         PE::Dereference(pr) => {
-            let er = exp_(context, *pr);
-            L::Mutate(Box::new(sp(er.loc, E::ExpDotted_::Exp(er))))
+            let er = exp(context, *pr);
+            L::Mutate(er)
         }
         pdotted_ @ PE::Dot(_, _, _) => {
             let dotted = exp_dotted(context, sp(loc, pdotted_))?;
-            L::Mutate(Box::new(dotted))
+            L::FieldMutate(Box::new(dotted))
         }
         _ => L::Assigns(sp(loc, vec![assign(context, sp(loc, e_))?])),
     };
