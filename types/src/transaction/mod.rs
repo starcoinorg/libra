@@ -42,7 +42,7 @@ pub use script_action::ScriptAction;
 
 pub use channel_transaction_payload::{
     ChannelActionBody, ChannelScriptBody, ChannelTransactionPayload, ChannelTransactionPayloadBody,
-    ChannelTransactionPayloadBodyV2, ChannelWriteSetBody,
+    ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2, ChannelWriteSetBody,
 };
 use std::ops::Deref;
 pub use transaction_argument::{parse_as_transaction_argument, TransactionArgument};
@@ -208,6 +208,24 @@ impl RawTransaction {
         }
     }
 
+    pub fn new_channel_v2(
+        sender: AccountAddress,
+        sequence_number: u64,
+        channel_payload: ChannelTransactionPayloadV2,
+        max_gas_amount: u64,
+        gas_unit_price: u64,
+        expiration_time: Duration,
+    ) -> Self {
+        RawTransaction {
+            sender,
+            sequence_number,
+            payload: TransactionPayload::ChannelV2(channel_payload),
+            max_gas_amount,
+            gas_unit_price,
+            expiration_time,
+        }
+    }
+
     pub fn new_payload_txn(
         sender: AccountAddress,
         sequence_number: u64,
@@ -261,6 +279,7 @@ impl RawTransaction {
             }
             TransactionPayload::Module(_) => ("module publishing".to_string(), &empty_vec[..]),
             TransactionPayload::Channel(_) => ("channel".to_string(), &empty_vec[..]),
+            TransactionPayload::ChannelV2(_) => ("channel".to_string(), &empty_vec[..]),
         };
         let mut f_args: String = "".to_string();
         for arg in args {
@@ -336,8 +355,8 @@ pub enum TransactionPayload {
     Module(Module),
     /// Channel transaction
     Channel(ChannelTransactionPayload),
-    // New Channel transaction.
-    //ChannelV2(ChannelTransactionPayloadBodyV2),
+    /// New Channel transaction.
+    ChannelV2(ChannelTransactionPayloadV2),
 }
 
 impl TransactionPayload {
@@ -364,6 +383,7 @@ impl TransactionPayload {
     pub fn is_channel(&self) -> bool {
         match self {
             TransactionPayload::Channel(_) => true,
+            TransactionPayload::ChannelV2(_) => true,
             _ => false,
         }
     }

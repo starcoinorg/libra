@@ -322,6 +322,14 @@ fn new_raw_transaction(
             gas_unit_price,
             Duration::from_secs(expiration_time_secs),
         ),
+        TransactionPayload::ChannelV2(channel) => RawTransaction::new_channel_v2(
+            sender,
+            sequence_number,
+            channel,
+            max_gas_amount,
+            gas_unit_price,
+            Duration::from_secs(expiration_time_secs),
+        ),
     }
 }
 
