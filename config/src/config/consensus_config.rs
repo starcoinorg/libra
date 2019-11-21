@@ -30,6 +30,7 @@ pub struct ConsensusConfig {
     pub safety_rules: SafetyRulesConfig,
     pub consensus_type: ConsensusType,
     pub miner_rpc_address: String,
+    pub miner_client_enable: bool,
 }
 
 impl Default for ConsensusConfig {
@@ -47,6 +48,7 @@ impl Default for ConsensusConfig {
             safety_rules: SafetyRulesConfig::default(),
             consensus_type: ConsensusType::POW,
             miner_rpc_address: "127.0.0.1:4251".to_string(),
+            miner_client_enable: true,
         }
     }
 }

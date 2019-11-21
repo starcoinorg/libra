@@ -351,6 +351,7 @@ impl SwarmConfig {
             consensus_keypair: ConsensusKeyPair::default(),
             consensus_peers: template.consensus.consensus_peers.clone(),
             safety_rules: safety_rules_config,
+            miner_client_enable: template.consensus.miner_client_enable,
             consensus_type: template.consensus.consensus_type,
             miner_rpc_address: miner_rpc_address.to_string(),
         };

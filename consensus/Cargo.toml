@@ -56,6 +56,8 @@ futures_locks = { version = "=0.3.0", package = "futures-locks", features=["toki
 tokio-timer = "0.2.11"
 miner = { path = "miner" }
 cuckoo = { path = "cuckoo" }
+async-std = { version = "1.0.1", features = ["unstable"]}
+
 [dev-dependencies]
 cached = "0.9.0"
 parity-multiaddr = "0.5.0"
