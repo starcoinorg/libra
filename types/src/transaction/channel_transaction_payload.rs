@@ -6,6 +6,7 @@ use libra_crypto::{
     HashValue, SigningKey, VerifyingKey,
 };
 
+use crate::channel::witness::Witness;
 use crate::transaction::script_action::ScriptAction;
 use crate::{account_address::AccountAddress, transaction::Script, write_set::WriteSet};
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
@@ -315,5 +316,83 @@ impl CryptoHash for ChannelActionBody {
                 .as_slice(),
         );
         state.finish()
+    }
+}
+
+pub trait ChannelTransactionSigner {
+    /// sign method should return (participant index, participant public key, participant signature)
+    fn sign(body: &ChannelTransactionPayloadBodyV2) -> (usize, Ed25519PublicKey, Ed25519Signature);
+}
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ChannelTransactionPayloadBodyV2 {
+    channel_txn_sender: AccountAddress,
+    witness: Witness,
+    action: ScriptAction,
+}
+
+impl CryptoHash for ChannelTransactionPayloadBodyV2 {
+    //TODO use special hasher
+    type Hasher = TestOnlyHasher;
+
+    fn hash(&self) -> HashValue {
+        let mut state = Self::Hasher::default();
+        state.write(
+            lcs::to_bytes(self)
+                .expect("Failed to serialize ChannelTransactionPayloadBodyV2")
+                .as_slice(),
+        );
+        state.finish()
+    }
+}
+
+#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ChannelTransactionPayloadV2 {
+    body: ChannelTransactionPayloadBodyV2,
+    signatures: Vec<Ed25519Signature>,
+    public_keys: Vec<Ed25519PublicKey>,
+}
+
+impl ChannelTransactionPayloadV2 {
+    pub fn new(
+        channel_txn_sender: AccountAddress,
+        witness: Witness,
+        action: ScriptAction,
+        signatures: Vec<Ed25519Signature>,
+        public_keys: Vec<Ed25519PublicKey>,
+    ) -> Self {
+        Self {
+            body: ChannelTransactionPayloadBodyV2 {
+                channel_txn_sender,
+                witness,
+                action,
+            },
+            signatures,
+            public_keys,
+        }
+    }
+
+    pub fn verify(&self) -> Result<()> {
+        unimplemented!()
+    }
+
+    pub fn channel_txn_sender(&self) -> AccountAddress {
+        self.body.channel_txn_sender
+    }
+
+    pub fn witness(&self) -> &Witness {
+        &self.body.witness
+    }
+
+    pub fn action(&self) -> &ScriptAction {
+        &self.body.action
+    }
+
+    pub fn signatures(&self) -> &[Ed25519Signature] {
+        self.signatures.as_slice()
+    }
+
+    pub fn public_keys(&self) -> &[Ed25519PublicKey] {
+        self.public_keys.as_slice()
     }
 }

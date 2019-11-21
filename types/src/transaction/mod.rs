@@ -42,7 +42,7 @@ pub use script_action::ScriptAction;
 
 pub use channel_transaction_payload::{
     ChannelActionBody, ChannelScriptBody, ChannelTransactionPayload, ChannelTransactionPayloadBody,
-    ChannelWriteSetBody,
+    ChannelTransactionPayloadBodyV2, ChannelWriteSetBody,
 };
 use std::ops::Deref;
 pub use transaction_argument::{parse_as_transaction_argument, TransactionArgument};
@@ -336,6 +336,8 @@ pub enum TransactionPayload {
     Module(Module),
     /// Channel transaction
     Channel(ChannelTransactionPayload),
+    // New Channel transaction.
+    //ChannelV2(ChannelTransactionPayloadBodyV2),
 }
 
 impl TransactionPayload {
