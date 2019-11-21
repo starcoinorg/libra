@@ -10,6 +10,7 @@ use crate::{
 use libra_config::config::{VMMode, VMPublishingOption};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
+use libra_types::channel::witness::Witness;
 use libra_types::{
     account_address::AccountAddress,
     transaction::{
@@ -207,6 +208,18 @@ where
                     }
                 }
             }
+            TransactionPayload::ChannelV2(channel_payload) => Some(ValidatedTransaction::validate(
+                &txn,
+                gas_schedule,
+                module_cache,
+                data_cache,
+                mode,
+                vm_mode,
+                || {
+                    Self::check_channel_write_set_v2(channel_payload.witness())?;
+                    Ok(())
+                },
+            )?),
         };
 
         Ok(Self { txn, txn_state })
@@ -224,6 +237,12 @@ where
                 return Err(VMStatus::new(StatusCode::INVALID_WRITE_SET));
             }
         }
+        Ok(())
+    }
+
+    fn check_channel_write_set_v2(_witness: &Witness) -> Result<(), VMStatus> {
+        // check write_set resource ownership
+        //TODO
         Ok(())
     }
 
@@ -374,6 +393,9 @@ where
                 //let balance_checker = BalanceChecker::new(data_cache, &module_cache);
                 //balance_checker.check_balance(channel_payload.write_set())?;
                 Some(channel_payload.write_set().clone())
+            }
+            TransactionPayload::ChannelV2(channel_payload) => {
+                Some(channel_payload.witness().write_set().clone())
             }
             _ => None,
         };

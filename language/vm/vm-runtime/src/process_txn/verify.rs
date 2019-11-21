@@ -115,6 +115,20 @@ where
                     }
                 }
             }
+            TransactionPayload::ChannelV2(channel_payload) => {
+                let txn_state = txn_state
+                    .expect("script-based transactions should always have associated state");
+
+                Self::verify_script_action(
+                    channel_payload.action(),
+                    txn_state.txn_executor.module_cache(),
+                )?;
+
+                Some(VerifiedTransactionState {
+                    txn_executor: txn_state.txn_executor,
+                    verified_txn: VerTxn::ScriptAction(),
+                })
+            }
         };
 
         Ok(Self {
