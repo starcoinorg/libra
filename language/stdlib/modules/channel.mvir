@@ -27,15 +27,10 @@ module Channel {
     }
 
     //TODO native
-    save_channel(channel_address: address, channel: Self.T){
-        move_to_sender<T>(move(channel));
-        return;
-    }
+    native save_channel(channel_address: address, channel: Self.T);
 
-    init_participant(participant:address, participant_account: Self.ChannelAccount){
-        move_to_sender<ChannelAccount>(move(participant_account));
-        return;
-    }
+    //TODO native
+    native init_participant(participant:address, participant_account: Self.ChannelAccount);
 
     native move_to_channel<R:resource>(r: R);
 
@@ -80,5 +75,21 @@ module Channel {
         Self.init_participant(move(participant), move(participant_account));
         return;
     }
+
+    //public native move_to_participant<T>(participant: address, t: T);
+
+    //public native move_to_shared<T>(t: T);
+
+    //public native move_from_participant<T>(participant: address): T;
+
+    //public native move_from_shared<T>(): T;
+
+    //public native borrow_from_participant<T>(participant: address): & T;
+
+    //public native borrow_from_participant_mut<T>(participant: address): &mut T;
+
+    //public native borrow_from_shared<T>(): & T;
+
+    //public native borrow_from_shared_mut<T>(participant: address): &mut T;
 
 }
