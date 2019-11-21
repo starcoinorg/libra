@@ -326,7 +326,8 @@ pub trait ChannelTransactionSigner {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionPayloadBodyV2 {
-    channel_txn_sender: AccountAddress,
+    channel_address: AccountAddress,
+    proposer: AccountAddress,
     witness: Witness,
     action: ScriptAction,
 }
@@ -349,23 +350,28 @@ impl CryptoHash for ChannelTransactionPayloadBodyV2 {
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ChannelTransactionPayloadV2 {
     body: ChannelTransactionPayloadBodyV2,
-    signatures: Vec<Ed25519Signature>,
+    signatures: Vec<Option<Ed25519Signature>>,
+    public_keys: Vec<Ed25519PublicKey>,
 }
 
 impl ChannelTransactionPayloadV2 {
     pub fn new(
-        channel_txn_sender: AccountAddress,
+        channel_address: AccountAddress,
+        proposer: AccountAddress,
         witness: Witness,
         action: ScriptAction,
-        signatures: Vec<Ed25519Signature>,
+        signatures: Vec<Option<Ed25519Signature>>,
+        public_keys: Vec<Ed25519PublicKey>,
     ) -> Self {
         Self {
             body: ChannelTransactionPayloadBodyV2 {
-                channel_txn_sender,
+                channel_address,
+                proposer,
                 witness,
                 action,
             },
             signatures,
+            public_keys,
         }
     }
 
@@ -373,8 +379,12 @@ impl ChannelTransactionPayloadV2 {
         unimplemented!()
     }
 
-    pub fn channel_txn_sender(&self) -> AccountAddress {
-        self.body.channel_txn_sender
+    pub fn channel_address(&self) -> AccountAddress {
+        self.body.channel_address
+    }
+
+    pub fn proposer(&self) -> AccountAddress {
+        self.body.proposer
     }
 
     pub fn witness(&self) -> &Witness {
@@ -385,12 +395,12 @@ impl ChannelTransactionPayloadV2 {
         &self.body.action
     }
 
-    pub fn signatures(&self) -> &[Ed25519Signature] {
+    pub fn signatures(&self) -> &[Option<Ed25519Signature>] {
         self.signatures.as_slice()
     }
 
     pub fn public_keys(&self) -> &[Ed25519PublicKey] {
-        self.body.witness.public_keys()
+        self.public_keys.as_slice()
     }
 
     pub fn channel_sequence_number(&self) -> u64 {
