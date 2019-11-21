@@ -297,16 +297,6 @@ impl ChainManager {
             .expect("save_blocks err.");
     }
 
-    pub async fn _chain_height(&self) -> u64 {
-        self.block_chain
-            .clone()
-            .read()
-            .compat()
-            .await
-            .unwrap()
-            .longest_chain_height()
-    }
-
     pub async fn chain_root(&self) -> HashValue {
         self.block_chain
             .clone()
@@ -325,19 +315,6 @@ impl ChainManager {
             .await
             .unwrap()
             .block_exist(block_hash)
-    }
-
-    pub async fn _get_block_index_by_height(&self, height: &u64) -> BlockIndex {
-        self.block_chain
-            .clone()
-            .read()
-            .compat()
-            .await
-            .unwrap()
-            .indexes
-            .get(height)
-            .unwrap()[0]
-            .clone()
     }
 
     pub async fn chain_height_and_root(&self) -> (u64, BlockIndex) {
