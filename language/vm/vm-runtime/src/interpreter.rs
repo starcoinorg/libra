@@ -16,6 +16,7 @@ use crate::{
         loaded_module::LoadedModule,
     },
 };
+use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::{
     access_path::AccessPath,
@@ -58,12 +59,15 @@ lazy_static! {
     /// The ModuleId for the Account module
     pub static ref ACCOUNT_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("LibraAccount").unwrap()) };
-    /// The ModuleId for the ChannelAccount
+    /// The ModuleId for the ChannelAccount module
     pub static ref CHANNEL_ACCOUNT_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelAccount").unwrap()) };
-    /// The ModuleId for the ChannelAccount
+    /// The ModuleId for the ChannelTransaction module
     pub static ref CHANNEL_TXN_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelTransaction").unwrap()) };
+    /// The ModuleId for the Channel module
+    pub static ref CHANNEL_MODULE: ModuleId =
+        { ModuleId::new(account_config::core_code_address(), Identifier::new("Channel").unwrap()) };
 }
 
 // Names for special functions and structs
@@ -72,6 +76,8 @@ lazy_static! {
     static ref ACCOUNT_STRUCT_NAME: Identifier = Identifier::new("T").unwrap();
     static ref EMIT_EVENT_NAME: Identifier = Identifier::new("write_to_event_store").unwrap();
     static ref SAVE_ACCOUNT_NAME: Identifier = Identifier::new("save_account").unwrap();
+    static ref CHANNEL_STRUCT_NAME: Identifier = Identifier::new("T").unwrap();
+    static ref CHANNEL_ACCOUNT_STRUCT_NAME: Identifier = Identifier::new("ChannelAccount").unwrap();
 }
 
 fn derive_type_tag(
@@ -776,6 +782,13 @@ where
                 }
                 _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
             }
+        } else if module_id == *CHANNEL_MODULE {
+            match function_name.as_str() {
+                "generate_channel_address" => self.call_generate_channel_address(),
+                "save_channel" => self.call_save_channel(context),
+                "init_participant" => self.call_init_participant(context),
+                _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
+            }
         } else {
             let mut arguments = VecDeque::new();
             let expected_args = native_function.num_args();
@@ -950,6 +963,75 @@ where
         } else {
             Err(VMStatus::new(StatusCode::LINKER_ERROR))
         }
+    }
+
+    /// Generate channel address.
+    fn call_generate_channel_address(&mut self) -> VMResult<()> {
+        let receiver = self.operand_stack.pop_as::<AccountAddress>()?;
+        let sender = self.operand_stack.pop_as::<AccountAddress>()?;
+        let channel_address = Self::generate_channel_address(sender, receiver);
+        self.operand_stack.push(Value::address(channel_address))
+    }
+
+    fn generate_channel_address(participant_1: AccountAddress, participant_2: AccountAddress) -> AccountAddress {
+        let mut addresses = Vec::new();
+        let part1 = participant_1.to_vec();
+        let part2 = participant_2.to_vec();
+        addresses.push(part1);
+        addresses.push(part2);
+        addresses.sort();
+        let mut merged = addresses[0].clone();
+        merged.append(&mut addresses[1]);
+
+        let hash = *HashValue::from_sha3_256(&merged).as_ref();
+        AccountAddress::new(hash)
+    }
+
+    /// Save channel.
+    fn call_save_channel(&mut self, context: &mut dyn InterpreterContext) -> VMResult<()> {
+        let channel_module = self.module_cache.get_loaded_module(&CHANNEL_MODULE)?;
+
+        let channel_resource = self.operand_stack.pop_as::<Struct>()?;
+        let address = self.operand_stack.pop_as::<AccountAddress>()?;
+
+        let channel_struct_id = channel_module
+            .struct_defs_table
+            .get(&*CHANNEL_STRUCT_NAME)
+            .ok_or_else(|| VMStatus::new(StatusCode::LINKER_ERROR))?;
+        let channel_struct_def = self.module_cache.resolve_struct_def(
+            channel_module,
+            *channel_struct_id,
+            context,
+        )?;
+        let channel_path = Self::make_access_path(channel_module, *channel_struct_id, address);
+        context.move_resource_to(&channel_path, channel_struct_def, channel_resource)
+    }
+
+    /// Init channel participant.
+    fn call_init_participant(&mut self, context: &mut dyn InterpreterContext) -> VMResult<()> {
+        let channel_module = self.module_cache.get_loaded_module(&CHANNEL_MODULE)?;
+
+        let channel_account_resource = self.operand_stack.pop_as::<Struct>()?;
+        let participant = self.operand_stack.pop_as::<AccountAddress>()?;
+        let channel_address = self.operand_stack.pop_as::<AccountAddress>()?;
+
+        let channel_account_struct_id = channel_module
+            .struct_defs_table
+            .get(&*CHANNEL_ACCOUNT_STRUCT_NAME)
+            .ok_or_else(|| VMStatus::new(StatusCode::LINKER_ERROR))?;
+        let channel_account_struct_def = self.module_cache.resolve_struct_def(
+            channel_module,
+            *channel_account_struct_id,
+            context,
+        )?;
+        let channel_account_path = Self::make_channel_access_path(
+            channel_module,
+            *channel_account_struct_id,
+            channel_address,
+            participant,
+        );
+
+        context.move_resource_to(&channel_account_path, channel_account_struct_def, channel_account_resource)
     }
 
     /// Emit an event if the native function was `write_to_event_store`.
