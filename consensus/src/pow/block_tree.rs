@@ -58,6 +58,15 @@ impl BlockTree {
         }
     }
 
+    fn prune(&self) {
+        let times = self.height - self.tail_height - 1000;
+        if times > 0 {
+            for i in 0..times {
+                //TODO
+            }
+        }
+    }
+
     fn add_block_info_inner(&mut self, new_block_info: BlockInfo, new_root: bool) -> Result<()> {
         //4. update height\indexes\main chain
         if new_root {
