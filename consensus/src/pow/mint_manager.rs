@@ -1,13 +1,12 @@
 use crate::chained_bft::consensusdb::ConsensusDB;
 use crate::pow::chain_manager::ChainManager;
 use crate::pow::event_processor::EventProcessor;
-use crate::pow::payload_ext::BlockPayloadExt;
+use crate::pow::payload_ext::{BlockPayloadExt, genesis_id};
 use crate::state_replication::{StateComputer, TxnManager};
 use atomic_refcell::AtomicRefCell;
 use consensus_types::{block::Block, quorum_cert::QuorumCert, vote_data::VoteData};
 use cuckoo::consensus::PowService;
 use libra_crypto::hash::CryptoHash;
-use libra_crypto::hash::GENESIS_BLOCK_ID;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
@@ -17,7 +16,6 @@ use libra_types::crypto_proxies::ValidatorSigner;
 use libra_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
 use libra_types::transaction::SignedTransaction;
 use miner::types::{MineCtx, MineState, MineStateManager};
-
 use libra_types::block_metadata::BlockMetadata;
 use network::{
     proto::{
@@ -91,7 +89,7 @@ impl MintManager {
                             let parent_block_id = parent_block.id();
                             let grandpa_block_id = parent_block.parent_id();
                             //QC with parent block id
-                            let quorum_cert = if parent_block_id != *GENESIS_BLOCK_ID {
+                            let quorum_cert = if parent_block_id != genesis_id() {
                                 let parent_block = block_db
                                     .get_block_by_hash::<BlockPayloadExt>(&parent_block_id)
                                     .expect("block not find in database err.");
@@ -99,7 +97,7 @@ impl MintManager {
                             } else {
                                 QuorumCert::certificate_for_genesis_from_ledger_info(
                                     &LedgerInfo::genesis(),
-                                    *GENESIS_BLOCK_ID,
+                                    genesis_id(),
                                 )
                             };
 

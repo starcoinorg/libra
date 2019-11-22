@@ -2,9 +2,10 @@ use std::collections::{HashMap, LinkedList};
 use libra_crypto::HashValue;
 use executor::ProcessedVMOutput;
 use failure::prelude::*;
-use libra_crypto::hash::{GENESIS_BLOCK_ID, PRE_GENESIS_BLOCK_ID};
+use libra_crypto::hash::{PRE_GENESIS_BLOCK_ID};
 use crate::chained_bft::consensusdb::BlockIndex;
 use atomic_refcell::AtomicRefCell;
+use crate::pow::payload_ext::{BlockPayloadExt, genesis_id};
 
 pub type BlockHeight = u64;
 
@@ -135,7 +136,7 @@ impl BlockInfo {
     }
 
     fn genesis_block_info() -> Self {
-        BlockInfo::new_inner(&GENESIS_BLOCK_ID,
+        BlockInfo::new_inner(&genesis_id(),
                              &PRE_GENESIS_BLOCK_ID,
                              0,
                              None)

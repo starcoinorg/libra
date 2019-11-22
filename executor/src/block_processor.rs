@@ -127,6 +127,7 @@ where
             parent_trees: ExecutedTrees::new_empty(),
             parent_id: *PRE_GENESIS_BLOCK_ID,
             id: HashValue::zero(), /* we use 0 as genesis block id in executor internally but it may be different in consensus */
+            pbft:true
         };
         let output = self
             .execute_block(genesis_block)
@@ -266,6 +267,7 @@ where
                     parent_trees: parent_executed_trees,
                     parent_id,
                     id,
+                    pbft: false,
                 };
 
                 self.blocks_to_execute
@@ -659,13 +661,22 @@ where
     fn execute_block(&mut self, executable_block: ExecutableBlock) -> Result<ProcessedVMOutput> {
         // Construct a StateView and pass the transactions to VM.
         let state_view = {
-            let committed_trees = self.committed_trees.lock().unwrap();
-            VerifiedStateView::new(
-                Arc::clone(&self.storage_read_client),
-                committed_trees.version(),
-                committed_trees.state_root(),
-                executable_block.parent_trees.state_tree(),
-            )
+            if executable_block.pbft {
+                let committed_trees = self.committed_trees.lock().unwrap();
+                VerifiedStateView::new(
+                    Arc::clone(&self.storage_read_client),
+                    committed_trees.version(),
+                    committed_trees.state_root(),
+                    executable_block.parent_trees.state_tree(),
+                )
+            } else {
+                VerifiedStateView::new(
+                    Arc::clone(&self.storage_read_client),
+                    executable_block.parent_trees.version(),
+                    executable_block.parent_trees.state_root(),
+                    executable_block.parent_trees.state_tree(),
+                )
+            }
         };
 
         let vm_outputs = {

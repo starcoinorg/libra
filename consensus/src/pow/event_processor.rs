@@ -15,7 +15,7 @@ use cuckoo::consensus::{PowCuckoo, PowService, Proof};
 use futures::channel::mpsc;
 use futures::{stream::select, SinkExt, StreamExt, TryStreamExt};
 use libra_crypto::hash::CryptoHash;
-use libra_crypto::hash::{GENESIS_BLOCK_ID, PRE_GENESIS_BLOCK_ID};
+use libra_crypto::hash::{PRE_GENESIS_BLOCK_ID};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_prost_ext::MessageExt;
@@ -160,11 +160,13 @@ impl EventProcessor {
                                 //TODO:verify block and sign
                                 let block: Block<BlockPayloadExt> =
                                     Block::try_from(new_block).expect("parse block pb err.");
+
                                 debug!(
-                                    "Self is {:?}, Peer Id is {:?}, Block Id is {:?}",
+                                    "Self is {:?}, Peer Id is {:?}, Block Id is {:?}, height {}",
                                     self_peer_id,
                                     peer_id,
-                                    block.id()
+                                    block.id(),
+                                    block.round()
                                 );
 
                                 let payload = block.payload().expect("payload is none");
@@ -181,16 +183,28 @@ impl EventProcessor {
                                     },
                                 );
 
+
                                 if verify {
                                     if self_peer_id != peer_id {
                                         let (height, block_index) =
                                             chain_manager.borrow().chain_height_and_root().await;
+
+                                        debug!(
+                                            "Self is {:?}, height is {}, Peer Id is {:?}, Block Id is {:?}, verify {}, height {}",
+                                            self_peer_id,
+                                            height,
+                                            peer_id,
+                                            block.id(),
+                                            verify,
+                                            block.round()
+                                        );
+
                                         if height < block.round()
                                             && block.parent_id() != block_index.id()
                                         {
                                             if let Err(err) = sync_signal_sender
                                                 .clone()
-                                                .send((peer_id, (block.round(), block.id())))
+                                                .send((peer_id, (block.round(), HashValue::zero())))
                                                 .await
                                             {
                                                 error!("send sync signal err: {:?}", err);
@@ -240,7 +254,7 @@ impl EventProcessor {
                                             None
                                         };
                                     let mut not_exist_flag = false;
-                                    for _i in 1..block_req.num_blocks() {
+                                    for _i in 0..block_req.num_blocks() {
                                         let block = match latest_block {
                                             Some(child_hash) => {
                                                 if child_hash == *PRE_GENESIS_BLOCK_ID {
@@ -269,7 +283,7 @@ impl EventProcessor {
                                         latest_block = Some(block.parent_id());
                                         blocks.push(block.into());
 
-                                        if latest_block.unwrap() == *GENESIS_BLOCK_ID {
+                                        if latest_block.unwrap() == *PRE_GENESIS_BLOCK_ID {
                                             break;
                                         }
                                     }
@@ -290,6 +304,7 @@ impl EventProcessor {
                                             resp_block.try_into().expect("into err."),
                                         )),
                                     };
+
 
                                     Self::send_consensus_msg(
                                         peer_id,

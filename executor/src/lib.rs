@@ -440,6 +440,7 @@ where
                         parent_trees,
                         parent_id,
                         id,
+                        pbft: true
                     },
                     resp_sender,
                 })
@@ -628,6 +629,7 @@ struct ExecutableBlock {
     parent_id: HashValue,
     parent_trees: ExecutedTrees,
     transactions: Vec<Transaction>,
+    pbft: bool,
 }
 
 #[derive(Clone, Debug)]

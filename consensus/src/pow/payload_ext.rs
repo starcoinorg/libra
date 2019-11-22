@@ -4,6 +4,7 @@ use libra_types::transaction::SignedTransaction;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt;
+use consensus_types::block::Block;
 
 #[derive(Clone, Eq, PartialEq, Default, Hash, Serialize, Deserialize)]
 pub struct BlockPayloadExt {
@@ -60,4 +61,9 @@ impl CryptoHash for BlockPayloadExt {
         state.write(bytes.as_ref());
         state.finish()
     }
+}
+
+pub fn genesis_id() -> HashValue {
+    let genesis_block: Block<BlockPayloadExt> = Block::make_genesis_block();
+    genesis_block.id()
 }

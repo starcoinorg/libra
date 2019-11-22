@@ -112,7 +112,7 @@ module LibraSystem {
         block_metadata_ref = borrow_global_mut<BlockMetadata>(0xA550C18);
 
         // TODO: Figure out a story for errors in the system transactions.
-        assert(copy(timestamp) > *(&copy(block_metadata_ref).timestamp), 5001);
+        //assert(copy(timestamp) > *(&copy(block_metadata_ref).timestamp), 5001);
         assert(Self.is_validator(copy(proposer)), 5002);
 
         *(&mut copy(block_metadata_ref).id) = move(new_block_hash);

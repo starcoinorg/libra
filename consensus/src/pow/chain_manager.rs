@@ -6,18 +6,19 @@ use consensus_types::block::Block;
 use futures::compat::Future01CompatExt;
 use futures::{channel::mpsc, StreamExt};
 use futures_locks::{Mutex, RwLock};
-use libra_crypto::hash::{GENESIS_BLOCK_ID, PRE_GENESIS_BLOCK_ID};
+use libra_crypto::hash::{PRE_GENESIS_BLOCK_ID};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
 use libra_types::account_config::association_address;
 use libra_types::block_metadata::BlockMetadata;
-use libra_types::transaction::SignedTransaction;
+use libra_types::transaction::{SignedTransaction, Transaction};
 use libra_types::PeerId;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use tokio::runtime::TaskExecutor;
 use crate::pow::block_tree::BlockTree;
+use libra_crypto::hash::CryptoHash;
 
 pub struct ChainManager {
     block_cache_receiver: Option<mpsc::Receiver<Block<BlockPayloadExt>>>,
@@ -40,16 +41,28 @@ impl ChainManager {
         rollback_flag: bool,
         author: AccountAddress,
     ) -> Self {
-        let genesis_block_index = BlockIndex::new(&GENESIS_BLOCK_ID,&PRE_GENESIS_BLOCK_ID);
+        let genesis_block: Block<BlockPayloadExt> = Block::make_genesis_block();
+        let genesis_id = genesis_block.id();
+        let genesis_block_index = BlockIndex::new(&genesis_id,&PRE_GENESIS_BLOCK_ID);
         let genesis_height = 0;
+
+        //init block_store
+        let mut genesis_qcs = Vec::new();
+        genesis_qcs.push(genesis_block.quorum_cert().clone());
+        let a = block_store.save_blocks_and_quorum_certificates(vec![genesis_block], genesis_qcs);
+        block_store.insert_block_index(&genesis_height, &genesis_block_index);
+
+        //init main chain
         let mut index_map = HashMap::new();
         index_map.insert(genesis_height, vec![genesis_block_index.clone()]);
         let mut hash_height_index = HashMap::new();
-        hash_height_index.insert(*GENESIS_BLOCK_ID, (genesis_height, 0));
+        hash_height_index.insert(genesis_id, (genesis_height, 0));
         let main_chain = AtomicRefCell::new(HashMap::new());
         main_chain
             .borrow_mut()
             .insert(genesis_height, genesis_block_index);
+
+        //init block chain
         let init_block_chain = BlockChain {
             height: genesis_height,
             indexes: index_map,
@@ -57,8 +70,11 @@ impl ChainManager {
             main_chain,
         };
         let block_chain = Arc::new(RwLock::new(init_block_chain));
+
+        //orphan block
         let orphan_blocks = Arc::new(Mutex::new(HashMap::new()));
 
+        //block tree
         let block_tree = Arc::new(RwLock::new(BlockTree::new()));
         ChainManager {
             block_cache_receiver,
@@ -144,7 +160,7 @@ impl ChainManager {
                                                     warn!("Peer id {:?}, Drop block {:?}, parent_block_id {:?}, grandpa_block_id {:?}", author, block.id(), parent_block_id, pre_compute_grandpa_block_id);
                                                 }
                                             }
-                                            Err(e) => {error!("{:?}", e)},
+                                            Err(e) => {error!("error: {:?}", e)},
                                         }
 
                                     } else {
@@ -164,11 +180,22 @@ impl ChainManager {
                                                     let height = chain_lock.longest_chain_height();
 
                                                     if (rollback_flag && height > 2) || old_root != parent_block_id {//rollback
-                                                        let (rollback_vec, mut commit_vec) = if rollback_flag {
+                                                        let (mut rollback_vec, mut commit_vec) = if rollback_flag {
                                                             (vec![&old_root], vec![&old_root])
                                                         } else {
-                                                            chain_lock.find_ancestor(&old_root, &parent_block_id).expect("find ancestor err.")
+                                                            let mut rollback = vec![&old_root];
+                                                            let mut commit = vec![&parent_block_id];
+                                                            let ancestors = chain_lock.find_ancestor(&old_root, &parent_block_id);
+                                                            match ancestors {
+                                                                Some((mut r, mut c)) => {
+                                                                    rollback.append(&mut r);
+                                                                    commit.append(&mut c);
+                                                                },
+                                                                _ => {},
+                                                            }
+                                                            (rollback, commit)
                                                         };
+
                                                         let rollback_len = rollback_vec.len();
                                                         let ancestor_block_id = chain_lock.find_index_by_block_hash(rollback_vec.get(rollback_len - 1).expect("latest_block_id err.")).expect("block index is none err.").parent_id();
                                                         let ancestor_block_id = chain_lock.find_index_by_block_hash(&ancestor_block_id).expect("block index is none err.").parent_id();
@@ -195,7 +222,6 @@ impl ChainManager {
                                                     let id = block.id();
                                                     let grandpa_block_id = chain_lock.find_index_by_block_hash(&block.parent_id()).expect("block index is none err.").parent_id();
                                                     Self::execut_and_commit_block(block_db.clone(), grandpa_block_id, block.clone(), txn_manager.clone(), state_computer.clone()).await;
-
                                                     //5. update main chain
                                                     main_chain_indexes.append(&mut vec![&id].to_vec());
                                                     for hash in main_chain_indexes {
@@ -483,6 +509,8 @@ impl BlockChain {
                     let second_index = self.find_index_by_block_hash(second_hash);
                     match second_index {
                         Some(block_index_2) => {
+//                            let mut first_ancestors = vec![first_hash.clone()];
+//                            let mut second_ancestors = vec![second_hash.clone()];
                             if block_index_1.parent_id() != block_index_2.parent_id() {
                                 let mut first_ancestors = vec![];
                                 let mut second_ancestors = vec![];
