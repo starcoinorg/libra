@@ -10,8 +10,8 @@ use cuckoo::util::blake2b_256;
 use grpcio;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use proto::miner::{MineCtx as MineCtxRpc, MineCtxRequest, MinedBlockRequest, MinerProxyClient};
-use std::{pin::Pin, sync::Arc, thread};
-use std::{sync::Mutex, task::Waker};
+use std::{pin::Pin, sync::Arc};
+use std::{sync::Mutex, task::Waker, time::Duration};
 
 struct MineCtxStream {
     client: MinerProxyClient,
@@ -25,7 +25,7 @@ impl MineCtxStream {
 
         task::spawn(async move {
             loop {
-                thread::sleep(std::time::Duration::from_secs(1));
+                task::sleep(Duration::from_secs(1)).await;
                 let mut inner_waker = task_waker.lock().unwrap();
                 if let Some(waker) = inner_waker.take() {
                     waker.wake();
@@ -95,7 +95,7 @@ impl MineClient {
                 let resp = self.rpc_client.mined(&req);
                 println!("mined{:?}", resp);
             } else {
-                thread::sleep(std::time::Duration::from_secs(1));
+                task::sleep(Duration::from_secs(1)).await;
             }
         }
     }
