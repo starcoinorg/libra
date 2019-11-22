@@ -25,7 +25,7 @@ impl MineCtxStream {
 
         task::spawn(async move {
             loop {
-                task::sleep(Duration::from_secs(1)).await;
+                task::sleep(Duration::from_secs(10)).await;
                 let mut inner_waker = task_waker.lock().unwrap();
                 if let Some(waker) = inner_waker.take() {
                     waker.wake();
