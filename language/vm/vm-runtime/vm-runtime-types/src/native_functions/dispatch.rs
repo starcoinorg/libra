@@ -457,7 +457,8 @@ lazy_static! {
                                 .to_string()))
              },
             vec![],
-            vec![MutableReference(Box::new(tstruct(addr, "Vector", "T", vec![Address])))],
+            //vec![MutableReference(Box::new(tstruct(addr, "Vector", "T", vec![Address])))],
+            vec![Address, Address],
             vec![Address]
         );
         add!(m, addr, "Channel", "move_to_channel",
@@ -485,7 +486,7 @@ lazy_static! {
                             "init_participant does not have a native implementation"
                                 .to_string()))
              },
-            vec![Address, Struct(StructHandleIndex::new(1), vec![])],
+            vec![Address, Address, Struct(StructHandleIndex::new(1), vec![])],
             vec![]
         );
         m
