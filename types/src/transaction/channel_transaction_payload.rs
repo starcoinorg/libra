@@ -332,6 +332,22 @@ pub struct ChannelTransactionPayloadBodyV2 {
     action: ScriptAction,
 }
 
+impl ChannelTransactionPayloadBodyV2 {
+    pub fn new(
+        channel_address: AccountAddress,
+        proposer: AccountAddress,
+        action: ScriptAction,
+        witness: Witness,
+    ) -> Self {
+        Self {
+            channel_address,
+            proposer,
+            action,
+            witness,
+        }
+    }
+}
+
 impl CryptoHash for ChannelTransactionPayloadBodyV2 {
     //TODO use special hasher
     type Hasher = TestOnlyHasher;
@@ -356,20 +372,12 @@ pub struct ChannelTransactionPayloadV2 {
 
 impl ChannelTransactionPayloadV2 {
     pub fn new(
-        channel_address: AccountAddress,
-        proposer: AccountAddress,
-        witness: Witness,
-        action: ScriptAction,
-        signatures: Vec<Option<Ed25519Signature>>,
+        body: ChannelTransactionPayloadBodyV2,
         public_keys: Vec<Ed25519PublicKey>,
+        signatures: Vec<Option<Ed25519Signature>>,
     ) -> Self {
         Self {
-            body: ChannelTransactionPayloadBodyV2 {
-                channel_address,
-                proposer,
-                witness,
-                action,
-            },
+            body,
             signatures,
             public_keys,
         }
