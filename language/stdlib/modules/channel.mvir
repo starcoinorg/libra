@@ -30,10 +30,7 @@ module Channel {
 
     //TODO native
     // sort participants and generate address;
-//    generate_channel_address(participants: &mut Vector.T<address>): address{
-//        return 0x1;
-//    }
-    native generate_channel_address(participant_1: address, participant_2: address): address;
+    native generate_channel_address(participants: &mut Vector.T<address>): address;
     //TODO native
     native save_channel(channel_address: address, channel: Self.T);
 
@@ -51,8 +48,6 @@ module Channel {
         let channel: Self.T;
         let sender_account: Self.ChannelAccount;
         let participant_account: Self.ChannelAccount;
-        let participant_1: address;
-        let participant_2: address;
 
         sender = get_txn_sender();
         //TODO check participant_signature
@@ -67,9 +62,8 @@ module Channel {
              copy(participant)
         );
 
-        participant_1 = Vector.get<address>(&participants, 0);
-        participant_2 = Vector.get<address>(&participants, 1);
-        channel_address = Self.generate_channel_address(move(participant_1), move(participant_2));
+        channel_address = Self.generate_channel_address(&mut participants);
+
         LibraAccount.create_account(copy(channel_address));
         channel = T {
            channel_sequence_number: 0,

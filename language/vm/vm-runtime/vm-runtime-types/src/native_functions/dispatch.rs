@@ -457,8 +457,13 @@ lazy_static! {
                                 .to_string()))
              },
             vec![],
-            //vec![MutableReference(Box::new(tstruct(addr, "Vector", "T", vec![Address])))],
-            vec![Address, Address],
+            // this is Vector.T<address> which happens to be the 4th struct handle in the
+            // binary.
+            // TODO: libra team has plan to rework the description of the native function
+            // by using the binary directly and have functions that fetch the arguments
+            // go through the signature for extra verification. That is the plan if perf
+            // and the model look good.
+            vec![MutableReference(Box::new(Struct(StructHandleIndex::new(4), vec![Address])))],
             vec![Address]
         );
         add!(m, addr, "Channel", "move_to_channel",
