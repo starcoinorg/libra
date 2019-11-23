@@ -471,6 +471,16 @@ lazy_static! {
             vec![TypeParameter(0)],
             vec![]
         );
+        add!(m, addr, "Channel", "move_from_channel",
+          |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "move_from_channel does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Kind::Resource],
+            vec![],
+            vec![TypeParameter(0)]
+        );
         add!(m, addr, "Channel", "save_channel",
            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
@@ -488,6 +498,26 @@ lazy_static! {
              },
             vec![Address, Address, Struct(StructHandleIndex::new(1), vec![])],
             vec![]
+        );
+        add!(m, addr, "Channel", "borrow_from_participant",
+           |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "borrow_from_participant does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Kind::Resource],
+            vec![Address],
+            vec![Reference(Box::new(TypeParameter(0)))]
+        );
+        add!(m, addr, "Channel", "borrow_from_participant_mut",
+           |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "borrow_from_participant_mut does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Kind::Resource],
+            vec![Address],
+            vec![MutableReference(Box::new(TypeParameter(0)))]
         );
         m
     };
