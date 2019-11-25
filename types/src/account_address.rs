@@ -42,7 +42,7 @@ impl AccountAddress {
         AccountAddress::new(buf)
     }
     /// Generate channel address by participant's address.
-    pub fn channel_address(participants: Vec<AccountAddress>) -> Self {
+    pub fn channel_address(participants: &[AccountAddress]) -> Self {
         let mut set = BTreeSet::new();
         participants.iter().cloned().for_each(|add| {
             set.insert(add);
