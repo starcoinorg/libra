@@ -495,13 +495,14 @@ lazy_static! {
             vec![Address, Struct(StructHandleIndex::new(0), vec![])],
             vec![]
         );
-        add!(m, addr, "Channel", "init_participant",
+        add!(m, addr, "Channel", "move_to_participant",
            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "init_participant does not have a native implementation"
                                 .to_string()))
              },
-            vec![Address, Address, Struct(StructHandleIndex::new(1), vec![])],
+            vec![Kind::Resource],
+            vec![Address, TypeParameter(0)],
             vec![]
         );
         add!(m, addr, "Channel", "borrow_from_participant",

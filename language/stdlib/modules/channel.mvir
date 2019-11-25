@@ -34,14 +34,12 @@ module Channel {
     //TODO native
     native save_channel(channel_address: address, channel: Self.T);
 
-    //TODO native
-    native init_participant(channel_address: address, participant:address, participant_account: Self.ChannelAccount);
-
     native move_to_channel<R:resource>(r: R);
     native move_from_channel<R:resource>():R;
 
     //only support one participant
-    public open(participant: address, signature: bytearray, amount: u64){
+    public open(participant: address, amount: u64){
+        let txn_channel_address: address;
         let channel_address: address;
         let participants: Vector.T<address>;
         let sender: address;
@@ -61,8 +59,11 @@ module Channel {
              &mut participants,
              copy(participant)
         );
-
+        txn_channel_address = ChannelTransaction.get_channel_address();
         channel_address = Self.generate_channel_address(&mut participants);
+
+        assert(move(txn_channel_address) == copy(channel_address), 1111);
+        assert(ChannelTransaction.get_txn_channel_sequence_number() == 0, 1111);
 
         LibraAccount.create_account(copy(channel_address));
         channel = T {
@@ -78,8 +79,8 @@ module Channel {
             balance: LibraCoin.zero(),
         };
         Self.save_channel(copy(channel_address),move(channel));
-        Self.init_participant(copy(channel_address), move(sender), move(sender_account));
-        Self.init_participant(move(channel_address), move(participant), move(participant_account));
+        Self.move_to_participant<Self.ChannelAccount>(move(sender), move(sender_account));
+        Self.move_to_participant<Self.ChannelAccount>(move(participant), move(participant_account));
         return;
     }
 
@@ -179,7 +180,7 @@ module Channel {
         return;
     }
 
-    //public native move_to_participant<T>(participant: address, t: T);
+    native public move_to_participant<T:resource>(participant: address, t: T);
 
     //public native move_to_shared<T>(t: T);
 
@@ -204,15 +205,22 @@ module Channel {
 
         txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
         channel_address = ChannelTransaction.get_channel_address();
-        channel = borrow_global<T>(copy(channel_address));
-        channel_sequence_number = *(&copy(channel).channel_sequence_number);
 
-        if(ChannelTransaction.is_offchain()){
-            assert(copy(txn_channel_sequence_number) == copy(channel_sequence_number), 403);
+        // txn_sequence_number 0 should be open channel txn.
+        if(copy(txn_channel_sequence_number) == 0){
+            assert(!exists<T>(copy(channel_address)), 400);
+            return;
         }else{
-            assert(copy(txn_channel_sequence_number) >= copy(channel_sequence_number), 404);
+            channel = borrow_global<T>(copy(channel_address));
+            channel_sequence_number = *(&copy(channel).channel_sequence_number);
+
+            if(ChannelTransaction.is_offchain()){
+                assert(copy(txn_channel_sequence_number) == copy(channel_sequence_number), 403);
+            }else{
+                assert(copy(txn_channel_sequence_number) >= copy(channel_sequence_number), 404);
+            }
+            return;
         }
-        return;
     }
 
     epilogue() acquires T {
