@@ -96,7 +96,7 @@ fn build_global_config_channel() {
         //! channel: ch1,alice|bob 
     ").unwrap();
 
-    assert_eq!(config.accounts.len(), 2);
+    assert_eq!(config.accounts.len(), 3);
     assert_eq!(config.channels.len(), 1);
     assert!(config.channels.get("ch1").is_some());
 }
