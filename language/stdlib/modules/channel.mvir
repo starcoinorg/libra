@@ -182,19 +182,19 @@ module Channel {
 
     native public move_to_participant<T:resource>(participant: address, t: T);
 
-    //public native move_to_shared<T>(t: T);
+    native public move_to_shared<T:resource>(t: T);
 
-    //public native move_from_participant<T>(participant: address): T;
+    native public move_from_participant<T:resource>(participant: address): T;
 
-    //public native move_from_shared<T>(): T;
+    native public move_from_shared<T:resource>(): T;
 
     native public borrow_from_participant<T:resource>(participant: address): & T;
 
     native public borrow_from_participant_mut<T:resource>(participant: address): &mut T;
 
-    //public native borrow_from_shared<T>(): & T;
+    native public borrow_from_shared<T:resource>(): & T;
 
-    //public native borrow_from_shared_mut<T>(participant: address): &mut T;
+    native public borrow_from_shared_mut<T:resource>(): &mut T;
 
     // The prologue is invoked at the beginning of every channel transaction
     prologue() acquires T {

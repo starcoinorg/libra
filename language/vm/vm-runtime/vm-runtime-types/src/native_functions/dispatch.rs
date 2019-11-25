@@ -498,12 +498,42 @@ lazy_static! {
         add!(m, addr, "Channel", "move_to_participant",
            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
-                            "init_participant does not have a native implementation"
+                            "move_to_participant does not have a native implementation"
                                 .to_string()))
              },
             vec![Kind::Resource],
             vec![Address, TypeParameter(0)],
             vec![]
+        );
+        add!(m, addr, "Channel", "move_to_shared",
+           |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "move_to_shared does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Kind::Resource],
+            vec![TypeParameter(0)],
+            vec![]
+        );
+        add!(m, addr, "Channel", "move_from_participant",
+          |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "move_from_participant does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Kind::Resource],
+            vec![Address],
+            vec![TypeParameter(0)]
+        );
+        add!(m, addr, "Channel", "move_from_shared",
+          |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "move_from_shared does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Kind::Resource],
+            vec![],
+            vec![TypeParameter(0)]
         );
         add!(m, addr, "Channel", "borrow_from_participant",
            |_, _| {
@@ -523,6 +553,26 @@ lazy_static! {
              },
             vec![Kind::Resource],
             vec![Address],
+            vec![MutableReference(Box::new(TypeParameter(0)))]
+        );
+        add!(m, addr, "Channel", "borrow_from_shared",
+           |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "borrow_from_shared does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Kind::Resource],
+            vec![],
+            vec![Reference(Box::new(TypeParameter(0)))]
+        );
+        add!(m, addr, "Channel", "borrow_from_shared_mut",
+           |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "borrow_from_shared_mut does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Kind::Resource],
+            vec![],
             vec![MutableReference(Box::new(TypeParameter(0)))]
         );
         m
