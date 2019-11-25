@@ -538,9 +538,9 @@ impl From<RollbackRequest> for crate::proto::storage::RollbackRequest {
     }
 }
 
-/// Helper to construct and parse [`proto::storage::RollbackResponse`]
+/// Helper to construct and parse [`proto::storage::EmptyResponse`]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RollbackResponse {}
+pub struct EmptyResponse {}
 
 /// Helper to construct and parse [`proto::storage::GetHistoryStartupInfoByBlockIdRequest`]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -567,6 +567,41 @@ impl From<GetHistoryStartupInfoByBlockIdRequest>
     fn from(request: GetHistoryStartupInfoByBlockIdRequest) -> Self {
         Self {
             block_id: request.block_id.to_vec(),
+        }
+    }
+}
+
+/// Helper to construct and parse [`proto::storage::InsertBlockIndexRequest`]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InsertBlockIndexRequest {
+    pub height: u64,
+    pub block_id: HashValue,
+    pub parent_block_id: HashValue,
+}
+
+impl TryFrom<crate::proto::storage::InsertBlockIndexRequest>
+for InsertBlockIndexRequest
+{
+    type Error = Error;
+
+    fn try_from(
+        proto: crate::proto::storage::InsertBlockIndexRequest,
+    ) -> Result<Self> {
+        let height = proto.height;
+        let block_id = HashValue::from_slice(&proto.block_id)?;
+        let parent_block_id = HashValue::from_slice(&proto.parent_block_id)?;
+        Ok(Self { height, block_id, parent_block_id })
+    }
+}
+
+impl From<InsertBlockIndexRequest>
+for crate::proto::storage::InsertBlockIndexRequest
+{
+    fn from(request: InsertBlockIndexRequest) -> Self {
+        Self {
+            height: request.height,
+            block_id: request.block_id.to_vec(),
+            parent_block_id: request.parent_block_id.to_vec()
         }
     }
 }

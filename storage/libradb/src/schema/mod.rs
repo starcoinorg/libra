@@ -19,9 +19,11 @@ pub(crate) mod transaction_accumulator;
 pub mod transaction_by_account;
 pub(crate) mod transaction_info;
 pub(crate) mod validator;
+pub(crate) mod block_index;
 
 use failure::prelude::*;
 use schemadb::ColumnFamilyName;
+pub use block_index::BlockIndex;
 
 pub(super) const EPOCH_BY_VERSION_CF_NAME: ColumnFamilyName = "epoch_by_version";
 pub(super) const EVENT_ACCUMULATOR_CF_NAME: ColumnFamilyName = "event_accumulator";
@@ -36,6 +38,7 @@ pub(super) const TRANSACTION_BY_ACCOUNT_CF_NAME: ColumnFamilyName = "transaction
 pub(super) const TRANSACTION_INFO_CF_NAME: ColumnFamilyName = "transaction_info";
 pub(super) const VALIDATOR_CF_NAME: ColumnFamilyName = "validator";
 pub const LEDGER_HISTORY_CF_NAME: ColumnFamilyName = "ledger_history";
+pub(super) const BLOCK_INDEX_CF_NAME: ColumnFamilyName = "block_index";
 
 pub fn ensure_slice_len_eq(data: &[u8], len: usize) -> Result<()> {
     ensure!(

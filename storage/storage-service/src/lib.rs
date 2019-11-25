@@ -31,8 +31,9 @@ use storage_proto::proto::storage::{
     GetAccountStateWithProofByVersionResponse, GetEpochChangeLedgerInfosRequest,
     GetEpochChangeLedgerInfosResponse, GetHistoryStartupInfoByBlockIdRequest,
     GetStartupInfoRequest, GetStartupInfoResponse, GetTransactionsRequest, GetTransactionsResponse,
-    RollbackRequest, RollbackResponse, SaveTransactionsRequest, SaveTransactionsResponse, Storage,
+    RollbackRequest, InsertBlockIndexRequest, EmptyResponse, SaveTransactionsRequest, SaveTransactionsResponse, Storage,
 };
+use libradb::schema::BlockIndex;
 
 /// Starts storage service according to config.
 pub fn start_storage_service(config: &NodeConfig) -> ServerHandle {
@@ -244,6 +245,11 @@ impl StorageService {
     fn rollback_by_block_id_inner(&self, block_id: &HashValue) -> Result<()> {
         self.db.rollback_by_block_id(block_id)
     }
+
+    fn insert_block_index_inner(&self, height: &u64, block_id: &HashValue, parent_block_id: &HashValue) -> Result<()> {
+        let block_index = BlockIndex::new(block_id, parent_block_id);
+        self.db.insert_block_index(height, &block_index)
+    }
 }
 
 impl Storage for StorageService {
@@ -337,14 +343,30 @@ impl Storage for StorageService {
         &mut self,
         ctx: grpcio::RpcContext,
         req: RollbackRequest,
-        sink: grpcio::UnarySink<RollbackResponse>,
+        sink: grpcio::UnarySink<EmptyResponse>,
     ) {
         debug!("[GRPC] Storage::rollback_by_block_id");
         self.rollback_by_block_id_inner(
             &HashValue::from_slice(req.block_id.as_ref()).expect("parse err."),
         )
         .expect("rollback err.");
-        let resp = RollbackResponse {};
+        let resp = EmptyResponse {};
+        provide_grpc_response(Ok(resp), ctx, sink);
+    }
+
+    fn insert_block_index(
+        &mut self,
+        ctx: grpcio::RpcContext,
+        req: InsertBlockIndexRequest,
+        sink: grpcio::UnarySink<EmptyResponse>,
+    ) {
+        debug!("[GRPC] Storage::rollback_by_block_id");
+        self.insert_block_index_inner(&req.height,
+            &HashValue::from_slice(req.block_id.as_ref()).expect("parse err."),
+                                      &HashValue::from_slice(req.parent_block_id.as_ref()).expect("parse err."),
+        )
+            .expect("rollback err.");
+        let resp = EmptyResponse {};
         provide_grpc_response(Ok(resp), ctx, sink);
     }
 }

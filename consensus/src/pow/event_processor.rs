@@ -34,6 +34,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::{convert::TryFrom, path::PathBuf};
 use tokio::runtime::TaskExecutor;
+use storage_client::{StorageRead, StorageWrite};
 
 pub struct EventProcessor {
     block_cache_sender: mpsc::Sender<Block<BlockPayloadExt>>,
@@ -64,6 +65,8 @@ impl EventProcessor {
         storage_dir: PathBuf,
         rollback_flag: bool,
         mine_state: MineStateManager,
+        read_storage: Arc<dyn StorageRead>,
+        write_storage: Arc<dyn StorageWrite>
     ) -> Self {
         let (block_cache_sender, block_cache_receiver) = mpsc::channel(10);
 
@@ -80,6 +83,8 @@ impl EventProcessor {
             state_computer.clone(),
             rollback_flag,
             author.clone(),
+            read_storage,
+            write_storage
         )));
 
         let sync_manager = Arc::new(AtomicRefCell::new(SyncManager::new(

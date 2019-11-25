@@ -19,6 +19,7 @@ use std::sync::Arc;
 use tokio::runtime::TaskExecutor;
 use crate::pow::block_tree::BlockTree;
 use libra_crypto::hash::CryptoHash;
+use storage_client::{StorageRead, StorageWrite};
 
 pub struct ChainManager {
     block_cache_receiver: Option<mpsc::Receiver<Block<BlockPayloadExt>>>,
@@ -30,6 +31,8 @@ pub struct ChainManager {
     orphan_blocks: Arc<Mutex<HashMap<HashValue, Vec<HashValue>>>>, //key -> parent_block_id, value -> block_id
     rollback_flag: bool,
     author: AccountAddress,
+    read_storage: Arc<dyn StorageRead>,
+    write_storage: Arc<dyn StorageWrite>
 }
 
 impl ChainManager {
@@ -40,6 +43,8 @@ impl ChainManager {
         state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
         rollback_flag: bool,
         author: AccountAddress,
+        read_storage: Arc<dyn StorageRead>,
+        write_storage: Arc<dyn StorageWrite>
     ) -> Self {
         let genesis_block: Block<BlockPayloadExt> = Block::make_genesis_block();
         let genesis_id = genesis_block.id();
@@ -86,6 +91,8 @@ impl ChainManager {
             orphan_blocks,
             rollback_flag,
             author,
+            read_storage,
+            write_storage
         }
     }
 

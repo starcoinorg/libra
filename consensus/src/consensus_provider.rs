@@ -12,7 +12,7 @@ use grpcio::{ChannelBuilder, EnvBuilder};
 use libra_mempool::proto::mempool::MempoolClient;
 use state_synchronizer::StateSyncClient;
 use std::sync::Arc;
-use storage_client::{StorageRead, StorageReadServiceClient};
+use storage_client::{StorageRead, StorageReadServiceClient, StorageWrite, StorageWriteServiceClient};
 use vm_runtime::MoveVM;
 
 /// Public interface to a consensus protocol.
@@ -67,6 +67,17 @@ pub fn create_storage_read_client(config: &NodeConfig) -> Arc<dyn StorageRead> {
     ))
 }
 
+/// Create a storage write client based on the config
+pub fn create_storage_write_client(config: &NodeConfig) -> Arc<dyn StorageWrite> {
+    let env = Arc::new(EnvBuilder::new().name_prefix("grpc-con-sto-").build());
+    Arc::new(StorageWriteServiceClient::new(
+        Arc::clone(&env),
+        &config.storage.address,
+        config.storage.port,
+        config.storage.grpc_max_receive_len,
+    ))
+}
+
 /// pow provider
 pub fn make_pow_consensus_provider(
     node_config: &mut NodeConfig,
@@ -74,8 +85,10 @@ pub fn make_pow_consensus_provider(
     network_receiver: ConsensusNetworkEvents,
     executor: Arc<Executor<MoveVM>>,
     state_sync_client: Arc<StateSyncClient>,
-    rollback_flag: bool,
+    rollback_flag: bool
 ) -> Box<dyn ConsensusProvider> {
+    let read = create_storage_read_client(node_config);
+    let write = create_storage_write_client(node_config);
     Box::new(PowConsensusProvider::new(
         node_config,
         network_sender,
@@ -84,5 +97,7 @@ pub fn make_pow_consensus_provider(
         executor,
         state_sync_client,
         rollback_flag,
+        read,
+        write
     ))
 }

@@ -24,6 +24,7 @@ mod pruner;
 mod state_store;
 mod system_store;
 mod transaction_store;
+mod block_index_store;
 
 #[cfg(test)]
 mod libradb_test;
@@ -39,6 +40,7 @@ use crate::{
     state_store::StateStore,
     system_store::SystemStore,
     transaction_store::TransactionStore,
+    block_index_store::BlockIndexStore,
 };
 use failure::prelude::*;
 use itertools::{izip, zip_eq};
@@ -67,6 +69,7 @@ use schemadb::{ColumnFamilyOptions, ColumnFamilyOptionsMap, DB, DEFAULT_CF_NAME}
 use std::{convert::TryInto, iter::Iterator, path::Path, sync::Arc, time::Instant};
 use storage_proto::StartupInfo;
 use storage_proto::TreeState;
+use crate::schema::block_index::BlockIndex;
 
 lazy_static! {
     static ref OP_COUNTER: OpMetrics = OpMetrics::new_and_registered("storage");
@@ -92,6 +95,7 @@ pub struct LibraDB {
     state_store: StateStore,
     event_store: EventStore,
     system_store: SystemStore,
+    block_index_store: BlockIndexStore,
     pruner: Pruner,
 }
 
@@ -128,6 +132,7 @@ impl LibraDB {
             ),
             (TRANSACTION_INFO_CF_NAME, ColumnFamilyOptions::default()),
             (VALIDATOR_CF_NAME, ColumnFamilyOptions::default()),
+            (BLOCK_INDEX_CF_NAME, ColumnFamilyOptions::default()),
         ]
         .iter()
         .cloned()
@@ -153,6 +158,7 @@ impl LibraDB {
             state_store: StateStore::new(Arc::clone(&db)),
             transaction_store: TransactionStore::new(Arc::clone(&db)),
             system_store: SystemStore::new(Arc::clone(&db)),
+            block_index_store: BlockIndexStore::new(Arc::clone(&db)),
             pruner: Pruner::new(Arc::clone(&db), Self::NUM_HISTORICAL_VERSIONS_TO_KEEP),
         }
     }
@@ -797,6 +803,10 @@ impl LibraDB {
         self.ledger_store.rollback_by_block_id(block_id, &mut cs)?;
         let sealed_cs = SealedChangeSet { batch: cs.batch };
         self.commit(sealed_cs)
+    }
+
+    pub fn insert_block_index(&self, height: &u64, block_index: &BlockIndex) -> Result<()> {
+        self.block_index_store.insert_block_index(height, block_index)
     }
 }
 

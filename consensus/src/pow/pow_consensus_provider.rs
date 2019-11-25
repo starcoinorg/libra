@@ -18,6 +18,8 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::runtime::{self, TaskExecutor};
 use vm_runtime::MoveVM;
+use storage_client::{StorageRead, StorageWrite};
+
 pub struct PowConsensusProvider {
     runtime: tokio::runtime::Runtime,
     event_handle: Option<EventProcessor>,
@@ -33,6 +35,8 @@ impl PowConsensusProvider {
         executor: Arc<Executor<MoveVM>>,
         synchronizer_client: Arc<StateSyncClient>,
         rollback_flag: bool,
+        read_storage: Arc<dyn StorageRead>,
+        write_storage: Arc<dyn StorageWrite>
     ) -> Self {
         let runtime = runtime::Builder::new()
             .name_prefix("pow-consensus-")
@@ -73,6 +77,8 @@ impl PowConsensusProvider {
             node_config.get_storage_dir(),
             rollback_flag,
             mine_state,
+            read_storage,
+            write_storage
         );
         Self {
             runtime,

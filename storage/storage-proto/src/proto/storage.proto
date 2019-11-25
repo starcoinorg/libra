@@ -56,7 +56,11 @@ service Storage {
 
     // Rollback
     rpc RollbackByBlockId(RollbackRequest)
-    returns (RollbackResponse);
+    returns (EmptyResponse);
+
+    // Block Index
+    rpc InsertBlockIndex(InsertBlockIndexRequest)
+    returns (EmptyResponse);
 }
 
 message SaveTransactionsRequest {
@@ -154,6 +158,12 @@ message RollbackRequest {
     bytes block_id = 1;
 }
 
-message RollbackResponse {
+message EmptyResponse {
 
+}
+
+message InsertBlockIndexRequest {
+    uint64 height = 1;
+    bytes block_id = 2;
+    bytes parent_block_id = 3;
 }
