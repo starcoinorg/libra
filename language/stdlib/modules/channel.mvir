@@ -7,8 +7,10 @@ module Channel {
     import 0x0.AddressUtil;
     import 0x0.BytearrayUtil;
     import 0x0.Vector;
+    import 0x0.LibraSystem;
     import 0x0.ChannelUtil;
     import 0x0.ChannelTransaction;
+    import 0x0.HashTimeLock;
 
     resource T {
         channel_sequence_number: u64,
@@ -85,26 +87,28 @@ module Channel {
         return;
     }
 
-    public deposit_to_channel_account(account: &mut Self.ChannelAccount, coin: LibraCoin.T){
-        LibraCoin.deposit(&mut move(account).balance, move(coin));
+    // Deposit coin to proposer's ChannelAccount
+    public deposit_to_channel(coin: LibraCoin.T){
+        let proposer: address;
+        let channel_account: &mut Self.ChannelAccount;
+
+        proposer = ChannelTransaction.get_proposer();
+        channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
+        LibraCoin.deposit(&mut move(channel_account).balance, move(coin));
         return;
     }
 
     // Transfer LibraCoin from proposer's LibraAccount to ChannelAccount
     public deposit(amount: u64){
         let deposit_coin: LibraCoin.T;
-        let coin_ref: &mut LibraCoin.T;
         let proposer: address;
-        let channel_address: address;
-        let channel_account: &mut Self.ChannelAccount;
 
         proposer = ChannelTransaction.get_proposer();
         //should allow deposit to other participant?
         assert(get_txn_sender() == copy(proposer), 1111);
-        channel_address = ChannelTransaction.get_channel_address();
         deposit_coin = LibraAccount.withdraw_from_sender(copy(amount));
-        channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
-        Self.deposit_to_channel_account(move(channel_account), move(deposit_coin));
+
+        Self.deposit_to_channel(move(deposit_coin));
         return;
     }
 
@@ -112,14 +116,24 @@ module Channel {
     public withdraw(amount: u64){
         let proposer: address;
         let withdraw_coin: LibraCoin.T;
-        let channel_account: &mut Self.ChannelAccount;
 
         proposer = ChannelTransaction.get_proposer();
         assert(get_txn_sender() == copy(proposer), 1111);
-        channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
-        withdraw_coin = LibraCoin.withdraw(&mut move(channel_account).balance, move(amount));
+        withdraw_coin = Self.withdraw_from_channel(move(amount));
         LibraAccount.deposit(move(proposer), move(withdraw_coin));
         return;
+    }
+
+    // Withdraw LibraCoin from proposer's ChannelAccount
+    public withdraw_from_channel(amount: u64): LibraCoin.T {
+        let proposer: address;
+        let channel_account: &mut Self.ChannelAccount;
+        let withdraw_coin: LibraCoin.T;
+
+        proposer = ChannelTransaction.get_proposer();
+        channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
+        withdraw_coin = LibraCoin.withdraw(&mut move(channel_account).balance, move(amount));
+        return move(withdraw_coin);
     }
 
     public challenge() acquires T,ChannelLockedBy {
@@ -178,6 +192,37 @@ module Channel {
     }
 
     public close(){
+        return;
+    }
+
+    public send_payment(payee: address, amount: u64, hash_lock: bytearray){
+        let proposer: address;
+        let coin: LibraCoin.T;
+
+        proposer = ChannelTransaction.get_proposer();
+        coin = Self.withdraw_from_channel(copy(amount));
+        //TODO payment timeout
+        HashTimeLock.lock_in_channel(copy(payee), move(coin), move(hash_lock), LibraSystem.get_current_block_height()+10);
+        return;
+    }
+
+    public receive_payment(preimage: bytearray){
+        let proposer: address;
+        let coin: LibraCoin.T;
+
+        proposer = ChannelTransaction.get_proposer();
+        coin = HashTimeLock.unlock_in_channel(move(preimage));
+        Self.deposit_to_channel(move(coin));
+        return;
+    }
+
+    public cancel_payment_after_timeout(){
+        let proposer: address;
+        let coin: LibraCoin.T;
+
+        proposer = ChannelTransaction.get_proposer();
+        coin = HashTimeLock.unlock_in_channel_after_timeout();
+        Self.deposit_to_channel(move(coin));
         return;
     }
 
