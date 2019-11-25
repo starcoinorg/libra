@@ -41,6 +41,14 @@ impl AccountAddress {
         let buf: [u8; 32] = rng.gen();
         AccountAddress::new(buf)
     }
+    /// Generate channel address by participant's address.
+    pub fn channel_address(participants: Vec<AccountAddress>) -> Self {
+        let mut set = BTreeSet::new();
+        participants.iter().cloned().for_each(|add| {
+            set.insert(add);
+        });
+        AccountAddress::from(set)
+    }
 
     // Helpful in log messages
     pub fn short_str(&self) -> String {
@@ -218,15 +226,20 @@ impl TryFrom<AccountAddress> for Bech32 {
     }
 }
 
-impl TryFrom<&BTreeSet<AccountAddress>> for AccountAddress {
-    type Error = failure::Error;
+impl From<&BTreeSet<AccountAddress>> for AccountAddress {
     // keep the same logic with onchain
-    fn try_from(participants: &BTreeSet<AccountAddress>) -> Result<AccountAddress> {
+    fn from(participants: &BTreeSet<AccountAddress>) -> AccountAddress {
         let mut data = Vec::new();
         for participant in participants.iter() {
             data.extend_from_slice(participant.as_ref());
         }
-        let hash = HashValue::from_sha3_256(&data);
-        AccountAddress::try_from(hash.as_ref())
+        let hash = *HashValue::from_sha3_256(&data).as_ref();
+        AccountAddress::new(hash)
+    }
+}
+
+impl From<BTreeSet<AccountAddress>> for AccountAddress {
+    fn from(participants: BTreeSet<AccountAddress>) -> AccountAddress {
+        AccountAddress::from(&participants)
     }
 }
