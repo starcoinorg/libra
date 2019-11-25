@@ -1,6 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::config::global::ChannelData;
 use crate::{
     config::{global::Config as GlobalConfig, strip},
     errors::*,
@@ -40,6 +41,7 @@ pub enum Entry {
     MaxGas(u64),
     SequenceNumber(u64),
     Receiver(String),
+    Channel(String),
 }
 
 impl FromStr for Entry {
@@ -88,6 +90,13 @@ impl FromStr for Entry {
         if let Some(s) = strip(s, "sequence-number:") {
             return Ok(Entry::SequenceNumber(s.parse::<u64>()?));
         }
+        if s.starts_with("channel:") {
+            let s = s[8..].trim_start().trim_end();
+            if s.is_empty() {
+                return Err(ErrorKind::Other("channel cannot be empty".to_string()).into());
+            }
+            return Ok(Entry::Channel(s.to_ascii_lowercase()));
+        }
         Err(ErrorKind::Other(format!(
             "failed to parse '{}' as transaction config entry",
             s
@@ -125,6 +134,7 @@ pub struct Config<'a> {
     pub max_gas: Option<u64>,
     pub sequence_number: Option<u64>,
     pub receiver: Option<&'a Account>,
+    pub channel: Option<&'a ChannelData>,
 }
 
 impl<'a> Config<'a> {
@@ -136,6 +146,7 @@ impl<'a> Config<'a> {
         let mut max_gas = None;
         let mut sequence_number = None;
         let mut receiver = None;
+        let mut channel = None;
 
         for entry in entries {
             match entry {
@@ -195,6 +206,10 @@ impl<'a> Config<'a> {
                         )
                     }
                 },
+                Entry::Channel(name) => match channel {
+                    None => channel = Some(config.get_channel_for_name(name)?),
+                    _ => return Err(ErrorKind::Other("channel already set".to_string()).into()),
+                },
             }
         }
 
@@ -205,6 +220,7 @@ impl<'a> Config<'a> {
             max_gas,
             sequence_number,
             receiver,
+            channel,
         })
     }
 
@@ -214,6 +230,6 @@ impl<'a> Config<'a> {
     }
 
     pub fn is_channel_transaction(&self) -> bool {
-        return self.receiver.is_some();
+        return self.receiver.is_some() || self.channel.is_some();
     }
 }
