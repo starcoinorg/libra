@@ -30,6 +30,7 @@ lcs = { path = "../../common/lcs", version = "0.1.0", package = "libra-canonical
 libra-crypto = { path = "../../crypto/crypto", version = "0.1.0" }
 failure = { path = "../../common/failure-ext", version = "0.1.0", package = "libra-failure-ext" }
 jellyfish-merkle = { path = "../jellyfish-merkle", version = "0.1.0" }
+merkle-patricia = { path = "../merkle-patricia", version = "0.1.0" }
 libra-logger = { path = "../../common/logger", version = "0.1.0" }
 libra-metrics = { path = "../../common/metrics", version = "0.1.0" }
 libra-prost-ext = { path = "../../common/prost-ext", version = "0.1.0" }
@@ -46,4 +47,4 @@ libra-proptest-helpers = { path = "../../common/proptest-helpers", version = "0.
 
 [features]
 default = []
-fuzzing = ["proptest", "proptest-derive", "libra-proptest-helpers", "libra-crypto/fuzzing", "jellyfish-merkle/fuzzing", "libra-types/fuzzing"]
+fuzzing = ["proptest", "proptest-derive", "libra-proptest-helpers", "libra-crypto/fuzzing", "merkle-patricia/fuzzing", "libra-types/fuzzing"]

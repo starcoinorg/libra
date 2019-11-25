@@ -402,9 +402,11 @@ impl LibraDB {
             .iter()
             .map(|txn_to_commit| txn_to_commit.account_states().clone())
             .collect::<Vec<_>>();
-        let state_root_hashes =
-            self.state_store
-                .put_account_state_sets(account_state_sets, first_version, &mut cs)?;
+        let state_root_hashes = self.state_store.put_account_state_sets(
+            account_state_sets,
+            HashValue::zero(),
+            &mut cs,
+        )?;
 
         // Event updates. Gather event accumulator root hashes.
         let event_root_hashes = zip_eq(first_version..=last_version, txns_to_commit)

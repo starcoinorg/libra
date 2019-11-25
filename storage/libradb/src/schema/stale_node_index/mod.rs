@@ -18,15 +18,15 @@
 //! its numeric value.
 
 use crate::schema::{ensure_slice_len_eq, STALE_NODE_INDEX_CF_NAME};
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use failure::prelude::*;
-use jellyfish_merkle::{node_type::NodeKey, StaleNodeIndex};
+use libra_crypto::HashValue;
 use libra_types::transaction::Version;
+use merkle_patricia::{node_type::NodeKey, StaleNodeIndex};
 use schemadb::{
     define_schema,
     schema::{KeyCodec, SeekKeyCodec, ValueCodec},
 };
-use std::{io::Write, mem::size_of};
+use std::io::Write;
 
 define_schema!(
     StaleNodeIndexSchema,
@@ -38,20 +38,18 @@ define_schema!(
 impl KeyCodec<StaleNodeIndexSchema> for StaleNodeIndex {
     fn encode_key(&self) -> Result<Vec<u8>> {
         let mut encoded = vec![];
-        encoded.write_u64::<BigEndian>(self.stale_since_version)?;
+        encoded.write_all(self.stale_since_hash.to_vec().as_slice())?;
         encoded.write_all(&self.node_key.encode()?)?;
 
         Ok(encoded)
     }
 
     fn decode_key(data: &[u8]) -> Result<Self> {
-        let version_size = size_of::<Version>();
-
-        let stale_since_version = (&data[..version_size]).read_u64::<BigEndian>()?;
-        let node_key = NodeKey::decode(&data[version_size..])?;
+        let since_hash = HashValue::from_slice(&data[0..HashValue::LENGTH])?;
+        let node_key = NodeKey::decode(&data[HashValue::LENGTH..])?;
 
         Ok(Self {
-            stale_since_version,
+            stale_since_hash: since_hash,
             node_key,
         })
     }

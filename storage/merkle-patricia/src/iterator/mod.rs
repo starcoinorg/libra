@@ -17,7 +17,7 @@ use crate::{
 use failure::prelude::*;
 use libra_crypto::HashValue;
 use libra_nibble::Nibble;
-use libra_types::{account_state_blob::AccountStateBlob, transaction::Version};
+use libra_types::account_state_blob::AccountStateBlob;
 
 /// `NodeVisitInfo` keeps track of the status of an internal node during the iteration process. It
 /// indicates which ones of its children have been visited.
@@ -95,7 +95,7 @@ pub struct JellyfishMerkleIterator<'a, R: 'a + TreeReader> {
     reader: &'a R,
 
     /// The version of the tree this iterator is running on.
-    version: Version,
+    //    version: Version,
 
     /// The stack used for depth first traversal.
     parent_stack: Vec<NodeVisitInfo>,
@@ -113,11 +113,11 @@ where
     /// Constructs a new iterator. This puts the internal state in the correct position, so the
     /// following `next` call will yield the smallest key that is greater or equal to
     /// `starting_key`.
-    pub fn new(reader: &'a R, version: Version, starting_key: HashValue) -> Result<Self> {
+    pub fn new(reader: &'a R, starting_key: HashValue) -> Result<Self> {
         let mut parent_stack = vec![];
         let mut done = false;
 
-        let mut current_node_key = NodeKey::new_empty_path(version);
+        let mut current_node_key = NodeKey::new_empty_path(starting_key);
         let nibble_path = NibblePath::new(starting_key.to_vec());
         let mut nibble_iter = nibble_path.nibbles();
 
@@ -131,8 +131,7 @@ where
                         internal_node.clone(),
                         child_index,
                     ));
-                    current_node_key =
-                        current_node_key.gen_child_node_key(child.version, child_index);
+                    current_node_key = current_node_key.gen_child_node_key(child.hash, child_index);
                 }
                 None => {
                     let (bitmap, _) = internal_node.generate_bitmaps();
@@ -151,7 +150,6 @@ where
                     }
                     return Ok(Self {
                         reader,
-                        version,
                         parent_stack,
                         done,
                     });
@@ -174,7 +172,6 @@ where
 
         Ok(Self {
             reader,
-            version,
             parent_stack,
             done,
         })
@@ -204,7 +201,7 @@ where
         }
 
         if self.parent_stack.is_empty() {
-            let root_node_key = NodeKey::new_empty_path(self.version);
+            let root_node_key = NodeKey::new_empty_path(HashValue::zero());
             match self.reader.get_node(&root_node_key) {
                 Ok(Node::Leaf(leaf_node)) => {
                     // This means the entire tree has a single leaf node. The key of this leaf node
@@ -236,7 +233,7 @@ where
                     .node
                     .child(child_index)
                     .expect("Child should exist.")
-                    .version,
+                    .hash,
                 child_index,
             );
             match self.reader.get_node(&node_key) {

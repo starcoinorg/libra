@@ -15,17 +15,17 @@ mod node_type_test;
 
 use crate::nibble_path::NibblePath;
 use bincode::{deserialize, serialize};
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use failure::{Fail, Result, *};
 use libra_crypto::{
-    hash::{CryptoHash, SparseMerkleInternalHasher, SPARSE_MERKLE_PLACEHOLDER_HASH},
+    hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
     HashValue,
 };
+use libra_crypto_derive::CryptoHasher;
 use libra_nibble::Nibble;
 use libra_types::{
     account_state_blob::AccountStateBlob,
     proof::{SparseMerkleInternalNode, SparseMerkleLeafNode},
-    transaction::Version,
 };
 use num_derive::{FromPrimitive, ToPrimitive};
 use num_traits::cast::FromPrimitive;
@@ -34,6 +34,7 @@ use proptest::{collection::hash_map, prelude::*};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
+use std::io::IoSliceMut;
 use std::{
     collections::hash_map::HashMap,
     io::{prelude::*, Cursor, Read, SeekFrom, Write},
@@ -44,7 +45,7 @@ use std::{
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 pub struct NodeKey {
-    // The version at which the node is created.
+    // The hash at which the node is created.
     hash: HashValue,
     // The nibble path this node represents in the tree.
     nibble_path: NibblePath,
@@ -96,7 +97,7 @@ impl NodeKey {
     /// Serializes to bytes for physical storage enforcing the same order as that in memory.
     pub fn encode(&self) -> Result<Vec<u8>> {
         let mut out = vec![];
-        out.write_all(self.hash.to_vec())?;
+        out.write_all(self.hash.to_vec().as_slice())?;
         out.write_u8(self.nibble_path().num_nibbles() as u8)?;
         out.write_all(self.nibble_path().bytes())?;
         Ok(out)
@@ -106,7 +107,10 @@ impl NodeKey {
     pub fn decode(val: &[u8]) -> Result<NodeKey> {
         let mut reader = Cursor::new(val);
         //TODO read hash
-        let hash = reader.read_u64::<BigEndian>()?;
+        let mut hash_bytes: [u8; HashValue::LENGTH] = [0; HashValue::LENGTH];
+        let bufs = &mut [IoSliceMut::new(&mut hash_bytes)];
+        reader.read_vectored(bufs)?;
+        let hash = HashValue::from_slice(&hash_bytes)?;
         let num_nibbles = reader.read_u8()? as usize;
         let mut nibble_bytes = Vec::with_capacity((num_nibbles + 1) / 2);
         reader.read_to_end(&mut nibble_bytes)?;
@@ -134,18 +138,13 @@ pub struct Child {
     // `version`, the `nibble_path` of the ['NodeKey`] of this [`InternalNode`] the child belongs
     // to and the child's index constitute the [`NodeKey`] to uniquely identify this child node
     // from the storage. Used by `[`NodeKey::gen_child_node_key`].
-    pub version: Version,
     // Whether the child is a leaf node.
     pub is_leaf: bool,
 }
 
 impl Child {
-    pub fn new(hash: HashValue, version: Version, is_leaf: bool) -> Self {
-        Self {
-            hash,
-            version,
-            is_leaf,
-        }
+    pub fn new(hash: HashValue, is_leaf: bool) -> Self {
+        Self { hash, is_leaf }
     }
 }
 
@@ -158,21 +157,10 @@ pub(crate) type Children = HashMap<Nibble, Child>;
 /// Though we choose the same internal node structure as that of Patricia Merkle tree, the root hash
 /// computation logic is similar to a 4-level sparse Merkle tree except for some customizations. See
 /// the `CryptoHash` trait implementation below for details.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, CryptoHasher)]
 pub struct InternalNode {
     // Up to 16 children.
     children: Children,
-}
-
-/// Represents an account.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct LeafNode {
-    // The hashed account address associated with this leaf node.
-    account_key: HashValue,
-    // The hash of the account state blob.
-    blob_hash: HashValue,
-    // The account blob associated with `account_key`.
-    blob: AccountStateBlob,
 }
 
 /// Computes the hash of internal node according to [`JellyfishTree`](crate::JellyfishTree)
@@ -222,8 +210,7 @@ pub struct LeafNode {
 /// Note: @ denotes placeholder hash.
 /// ```
 impl CryptoHash for InternalNode {
-    // Unused hasher.
-    type Hasher = SparseMerkleInternalHasher;
+    type Hasher = InternalNodeHasher;
 
     fn hash(&self) -> HashValue {
         self.merkle_hash(
@@ -231,53 +218,6 @@ impl CryptoHash for InternalNode {
             16, /* the number of leaves in the subtree of which we want the hash of root */
             self.generate_bitmaps(),
         )
-    }
-}
-
-/// Computes the hash of a [`LeafNode`].
-impl CryptoHash for LeafNode {
-    // Unused hasher.
-    type Hasher = SparseMerkleLeafHasher;
-
-    fn hash(&self) -> HashValue {
-        SparseMerkleLeafNode::new(self.account_key, self.blob_hash).hash()
-    }
-}
-
-/// The concrete node type of [`JellyfishMerkleTree`](crate::JellyfishMerkleTree).
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Node {
-    /// Represents `null`.
-    Null,
-    /// A wrapper of [`InternalNode`].
-    Internal(InternalNode),
-    /// A wrapper of [`LeafNode`].
-    Leaf(LeafNode),
-}
-
-#[repr(u8)]
-#[derive(FromPrimitive, ToPrimitive)]
-enum NodeTag {
-    Null = 0,
-    Internal = 1,
-    Leaf = 2,
-}
-
-impl From<InternalNode> for Node {
-    fn from(node: InternalNode) -> Self {
-        Node::Internal(node)
-    }
-}
-
-impl From<InternalNode> for Children {
-    fn from(node: InternalNode) -> Self {
-        node.children
-    }
-}
-
-impl From<LeafNode> for Node {
-    fn from(node: LeafNode) -> Self {
-        Node::Leaf(node)
     }
 }
 
@@ -324,7 +264,7 @@ impl InternalNode {
         for _ in 0..existence_bitmap.count_ones() {
             let next_child = existence_bitmap.trailing_zeros() as u8;
             let child = &self.children[&Nibble::from(next_child)];
-            serialize_u64_varint(child.version, binary);
+            //            serialize_u64_varint(child.version, binary);
             binary.extend(child.hash.to_vec());
             existence_bitmap &= !(1 << next_child);
         }
@@ -354,7 +294,6 @@ impl InternalNode {
         let mut children = HashMap::new();
         for _ in 0..existence_bitmap.count_ones() {
             let next_child = existence_bitmap.trailing_zeros() as u8;
-            let version = deserialize_u64_varint(&mut reader)?;
             let pos = reader.position() as usize;
             let remaining = len - pos;
             ensure!(
@@ -368,7 +307,6 @@ impl InternalNode {
                 Nibble::from(next_child),
                 Child::new(
                     HashValue::from_slice(&reader.get_ref()[pos..pos + size_of::<HashValue>()])?,
-                    version,
                     (leaf_bitmap & child_bit) != 0,
                 ),
             );
@@ -426,7 +364,7 @@ impl InternalNode {
     ) -> HashValue {
         // Given a bit [start, 1 << nibble_height], return the value of that range.
         let (range_existence_bitmap, range_leaf_bitmap) =
-            InternalNode::range_bitmaps(start, width, (existence_bitmap, leaf_bitmap));
+            Self::range_bitmaps(start, width, (existence_bitmap, leaf_bitmap));
         if range_existence_bitmap == 0 {
             // No child under this subtree
             *SPARSE_MERKLE_PLACEHOLDER_HASH
@@ -487,13 +425,7 @@ impl InternalNode {
             // Get the number of children of the internal node that each subtree at this height
             // covers.
             let width = 1 << h;
-            // Get the index of the first child belonging to the same subtree whose root, let's say
-            // `r` is at height `h` that the n-th child belongs to.
-            // Note:  `child_half_start` will be always equal to `n` at height 0.
-            let child_half_start = (0xff << h) & u8::from(n);
-            // Get the index of the first child belonging to the subtree whose root is the sibling
-            // of `r` at height `h`.
-            let sibling_half_start = child_half_start ^ (1 << h);
+            let (child_half_start, sibling_half_start) = get_child_and_sibling_half_start(n, h);
             // Compute the root hash of the subtree rooted at the sibling of `r`.
             siblings.push(self.merkle_hash(
                 sibling_half_start,
@@ -501,11 +433,8 @@ impl InternalNode {
                 (existence_bitmap, leaf_bitmap),
             ));
 
-            let (range_existence_bitmap, range_leaf_bitmap) = InternalNode::range_bitmaps(
-                child_half_start,
-                width,
-                (existence_bitmap, leaf_bitmap),
-            );
+            let (range_existence_bitmap, range_leaf_bitmap) =
+                Self::range_bitmaps(child_half_start, width, (existence_bitmap, leaf_bitmap));
 
             if range_existence_bitmap == 0 {
                 // No child in this range.
@@ -520,7 +449,7 @@ impl InternalNode {
                 let only_child_index = Nibble::from(range_existence_bitmap.trailing_zeros() as u8);
                 return (
                     {
-                        let only_child_version = self
+                        let only_child_hash = self
                             .child(only_child_index)
                             .unwrap_or_else(|| {
                                 panic!(
@@ -529,8 +458,8 @@ impl InternalNode {
                                     only_child_index
                                 )
                             })
-                            .version;
-                        Some(node_key.gen_child_node_key(only_child_version, only_child_index))
+                            .hash;
+                        Some(node_key.gen_child_node_key(only_child_hash, only_child_index))
                     },
                     siblings,
                 );
@@ -538,6 +467,32 @@ impl InternalNode {
         }
         unreachable!("Impossible to get here without returning even at the lowest level.")
     }
+}
+
+/// Given a nibble, computes the start position of its `child_half_start` and `sibling_half_start`
+/// at `height` level.
+pub(crate) fn get_child_and_sibling_half_start(n: Nibble, height: u8) -> (u8, u8) {
+    // Get the index of the first child belonging to the same subtree whose root, let's say `r` is
+    // at `height` that the n-th child belongs to.
+    // Note: `child_half_start` will be always equal to `n` at height 0.
+    let child_half_start = (0xff << height) & u8::from(n);
+
+    // Get the index of the first child belonging to the subtree whose root is the sibling of `r`
+    // at `height`.
+    let sibling_half_start = child_half_start ^ (1 << height);
+
+    (child_half_start, sibling_half_start)
+}
+
+/// Represents an account.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, CryptoHasher)]
+pub struct LeafNode {
+    // The hashed account address associated with this leaf node.
+    account_key: HashValue,
+    // The hash of the account state blob.
+    blob_hash: HashValue,
+    // The account blob associated with `account_key`.
+    blob: AccountStateBlob,
 }
 
 impl LeafNode {
@@ -564,6 +519,53 @@ impl LeafNode {
     /// Gets the associated blob itself.
     pub fn blob(&self) -> &AccountStateBlob {
         &self.blob
+    }
+}
+
+/// Computes the hash of a [`LeafNode`].
+impl CryptoHash for LeafNode {
+    // Unused hasher.
+    type Hasher = LeafNodeHasher;
+
+    fn hash(&self) -> HashValue {
+        SparseMerkleLeafNode::new(self.account_key, self.blob_hash).hash()
+    }
+}
+
+#[repr(u8)]
+#[derive(FromPrimitive, ToPrimitive)]
+enum NodeTag {
+    Null = 0,
+    Internal = 1,
+    Leaf = 2,
+}
+
+/// The concrete node type of [`JellyfishMerkleTree`](crate::JellyfishMerkleTree).
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Node {
+    /// Represents `null`.
+    Null,
+    /// A wrapper of [`InternalNode`].
+    Internal(InternalNode),
+    /// A wrapper of [`LeafNode`].
+    Leaf(LeafNode),
+}
+
+impl From<InternalNode> for Node {
+    fn from(node: InternalNode) -> Self {
+        Node::Internal(node)
+    }
+}
+
+impl From<InternalNode> for Children {
+    fn from(node: InternalNode) -> Self {
+        node.children
+    }
+}
+
+impl From<LeafNode> for Node {
+    fn from(node: LeafNode) -> Self {
+        Node::Leaf(node)
     }
 }
 
@@ -657,42 +659,4 @@ pub enum NodeDecodeError {
         existing, leaves
     )]
     ExtraLeaves { existing: u16, leaves: u16 },
-}
-
-/// Helper function to serialize version in a more efficient encoding.
-/// We use a super simple encoding - the high bit is set if more bytes follow.
-fn serialize_u64_varint(mut num: u64, binary: &mut Vec<u8>) {
-    for _ in 0..8 {
-        let low_bits = num as u8 & 0x7f;
-        num >>= 7;
-        let more = (num > 0) as u8;
-        binary.push(low_bits | more << 7);
-        if more == 0 {
-            return;
-        }
-    }
-    // Last byte is encoded raw; this means there are no bad encodings.
-    assert_ne!(num, 0);
-    assert!(num <= 0xff);
-    binary.push(num as u8);
-}
-
-/// Helper function to deserialize versions from above encoding.
-fn deserialize_u64_varint<T>(reader: &mut T) -> Result<u64>
-where
-    T: Read,
-{
-    let mut num = 0u64;
-    for i in 0..8 {
-        let byte = reader.read_u8()?;
-        let more = (byte & 0x80) != 0;
-        num |= u64::from(byte & 0x7f) << (i * 7);
-        if !more {
-            return Ok(num);
-        }
-    }
-    // Last byte is encoded as is.
-    let byte = reader.read_u8()?;
-    num |= u64::from(byte) << 56;
-    Ok(num)
 }

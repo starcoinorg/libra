@@ -136,12 +136,14 @@ where
     /// Constructs a new `TreeCache` instance.
     pub fn new(reader: &'a R, current_last_hash: HashValue) -> Self {
         let mut node_cache = HashMap::new();
-        let root_node_key = if current_last_hash = HashValue::zero() {
+        let root_node_key: NodeKey = if current_last_hash == HashValue::zero() {
             // If the first version is 0, it means we need to start from an empty tree so we insert
             // a null node beforehand deliberately to deal with this corner case.
             let node_key = NodeKey::new_empty_path(HashValue::zero());
-            node_cache.insert(node_key, Node::new_null());
+            node_cache.insert(node_key.clone(), Node::new_null());
             node_key
+        } else {
+            NodeKey::new_empty_path(current_last_hash)
         };
         Self {
             node_cache,
@@ -178,13 +180,14 @@ where
 
     /// Puts the node with given hash as key into node_cache.
     pub fn put_node(&mut self, node_key: NodeKey, new_node: Node) -> Result<()> {
-        match self.node_cache.entry(node_key) {
+        let node_key_local = node_key.clone();
+        match self.node_cache.entry(node_key_local.clone()) {
             Entry::Vacant(o) => {
                 if new_node.is_leaf() {
                     self.num_new_leaves += 1
                 }
                 o.insert(new_node);
-                self.current_last_hash = node_key.hash;
+                self.current_last_hash = node_key_local.hash();
             }
             Entry::Occupied(o) => bail!("Node with key {:?} already exists in NodeBatch", o.key()),
         };

@@ -1,7 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{mock_tree_store::MockTreeStore, JellyfishMerkleTree};
+use crate::{mock_tree_store::MockTreeStore, MerklePatriciaTree};
 use libra_crypto::HashValue;
 use libra_types::{account_state_blob::AccountStateBlob, transaction::Version};
 use std::collections::HashMap;
@@ -27,7 +27,7 @@ pub fn init_mock_db(kvs: &HashMap<HashValue, AccountStateBlob>) -> (MockTreeStor
     assert!(!kvs.is_empty());
 
     let db = MockTreeStore::default();
-    let tree = JellyfishMerkleTree::new(&db);
+    let tree = MerklePatriciaTree::new(&db);
 
     for (i, (key, value)) in kvs.iter().enumerate() {
         let (_root_hash, write_batch) = tree

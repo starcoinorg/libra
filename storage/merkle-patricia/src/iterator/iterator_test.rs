@@ -3,7 +3,7 @@
 
 use crate::{
     iterator::JellyfishMerkleIterator, mock_tree_store::MockTreeStore, test_helper::plus_one,
-    JellyfishMerkleTree,
+    MerklePatriciaTree,
 };
 use failure::prelude::*;
 use libra_crypto::HashValue;
@@ -25,7 +25,7 @@ fn test_iterator_multiple_versions() {
 
 fn test_n_leaves_same_version(n: usize) {
     let db = MockTreeStore::default();
-    let tree = JellyfishMerkleTree::new(&db);
+    let tree = MerklePatriciaTree::new(&db);
 
     let mut rng = StdRng::from_seed([1; 32]);
 
@@ -46,7 +46,7 @@ fn test_n_leaves_same_version(n: usize) {
 
 fn test_n_leaves_multiple_versions(n: usize) {
     let db = MockTreeStore::default();
-    let tree = JellyfishMerkleTree::new(&db);
+    let tree = MerklePatriciaTree::new(&db);
 
     let mut rng = StdRng::from_seed([1; 32]);
 
