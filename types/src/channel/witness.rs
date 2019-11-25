@@ -3,7 +3,7 @@ use libra_crypto::{ed25519::Ed25519Signature, hash::HashValue};
 use libra_crypto_derive::CryptoHasher;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize, CryptoHasher)]
+#[derive(Clone, Debug, Default, Hash, Eq, PartialEq, Serialize, Deserialize, CryptoHasher)]
 pub struct WitnessData {
     channel_sequence_number: u64,
     write_set: WriteSet,
@@ -25,7 +25,7 @@ impl WitnessData {
     }
 }
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Witness {
     data: WitnessData,
     /// Channel participant's signatures.
