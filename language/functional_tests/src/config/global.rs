@@ -7,6 +7,7 @@
 use crate::{config::strip, errors::*, genesis_accounts::make_genesis_accounts};
 use language_e2e_tests::account::{Account, AccountData};
 use libra_config::trusted_peers::ConfigHelpers;
+use libra_types::account_address::AccountAddress;
 use libra_types::validator_set::ValidatorSet;
 use std::{
     collections::{btree_map, BTreeMap},
@@ -46,11 +47,20 @@ impl FromStr for Role {
     }
 }
 
+#[derive(Debug)]
+pub struct ChannelDefinition {
+    pub name: String,
+    /// Channel participant.
+    pub participants: Vec<String>,
+    pub channel_sequence_number: Option<u64>,
+}
+
 /// A raw entry extracted from the input. Used to build the global config table.
 #[derive(Debug)]
 pub enum Entry {
     /// Defines an account that can be used in tests.
     AccountDefinition(AccountDefinition),
+    ChannelDefinition(ChannelDefinition),
 }
 
 impl Entry {
@@ -95,8 +105,40 @@ impl FromStr for Entry {
                 role,
             }));
         }
+        if let Some(s) = strip(s, "channel:") {
+            let v: Vec<_> = s
+                .split(|c: char| c == ',' || c.is_whitespace())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if v.is_empty() || v.len() > 4 {
+                return Err(ErrorKind::Other(
+                    "config 'channel' takes 1 to 4 parameters".to_string(),
+                )
+                .into());
+            }
+            let participants_args: &str = v
+                .get(1)
+                .expect("channel config must contains participants.");
+            let participants = participants_args
+                .split('|')
+                .map(|s| s.to_string())
+                .collect();
+
+            let channel_sequence_number = v.get(2).and_then(|s| s.parse::<u64>().ok());
+            return Ok(Entry::ChannelDefinition(ChannelDefinition {
+                name: v[0].to_string(),
+                participants,
+                channel_sequence_number,
+            }));
+        }
         Err(ErrorKind::Other(format!("failed to parse '{}' as global config entry", s)).into())
     }
+}
+
+#[derive(Debug)]
+pub struct ChannelData {
+    channel_address: AccountAddress,
+    participants: Vec<AccountAddress>,
 }
 
 /// A table of options either shared by all transactions or used to define the testing environment.
@@ -107,6 +149,7 @@ pub struct Config {
     pub genesis_accounts: BTreeMap<String, Account>,
     /// The validator set after genesis
     pub validator_set: ValidatorSet,
+    pub channels: BTreeMap<String, ChannelData>,
 }
 
 impl Config {
@@ -119,6 +162,7 @@ impl Config {
             ConfigHelpers::gen_validator_nodes(validator_accounts, None);
         let validator_set = consensus_config.get_validator_set(&network_config);
 
+        let mut channels = BTreeMap::new();
         // initialize the keys of validator entries with the validator set
         // enhance type of config to contain a validator set, use it to initialize genesis
         for entry in entries {
@@ -158,6 +202,40 @@ impl Config {
                         }
                     }
                 }
+                Entry::ChannelDefinition(def) => {
+                    let participants: Vec<AccountAddress> = def
+                        .participants
+                        .iter()
+                        .map(|name| {
+                            accounts
+                                .get(name)
+                                .and_then(|account| Some(*account.address()))
+                                //TODO use error to replace expect
+                                .expect(
+                                    format!("Can not find account by name: {:?}", name).as_str(),
+                                )
+                        })
+                        .collect();
+                    let channel_address = AccountAddress::channel_address(participants.as_slice());
+                    let channel_data = ChannelData {
+                        channel_address,
+                        participants,
+                    };
+                    let name = def.name.to_ascii_lowercase();
+                    let entry = channels.entry(name);
+                    match entry {
+                        btree_map::Entry::Vacant(entry) => {
+                            entry.insert(channel_data);
+                        }
+                        btree_map::Entry::Occupied(_) => {
+                            return Err(ErrorKind::Other(format!(
+                                "already has channel '{}'",
+                                def.name,
+                            ))
+                            .into());
+                        }
+                    }
+                }
             }
         }
 
@@ -171,6 +249,7 @@ impl Config {
             accounts,
             genesis_accounts: make_genesis_accounts(),
             validator_set,
+            channels,
         })
     }
 
@@ -180,5 +259,11 @@ impl Config {
             .map(|account_data| account_data.account())
             .or_else(|| self.genesis_accounts.get(name))
             .ok_or_else(|| ErrorKind::Other(format!("account '{}' does not exist", name)).into())
+    }
+
+    pub fn get_channel_for_name(&self, name: &str) -> Result<&ChannelData> {
+        self.channels
+            .get(name)
+            .ok_or_else(|| ErrorKind::Other(format!("channel '{}' does not exist", name)).into())
     }
 }
