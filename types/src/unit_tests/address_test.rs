@@ -127,7 +127,7 @@ fn test_channel_address() {
     let two = AccountAddress::random();
     let participants1 = vec![one, two];
     let participants2 = vec![two, one];
-    let channel_address1 = AccountAddress::channel_address(participants1);
-    let channel_address2 = AccountAddress::channel_address(participants2);
+    let channel_address1 = AccountAddress::channel_address(participants1.as_slice());
+    let channel_address2 = AccountAddress::channel_address(participants2.as_slice());
     assert_eq!(channel_address1, channel_address2);
 }
