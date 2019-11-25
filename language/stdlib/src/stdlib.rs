@@ -39,6 +39,8 @@ lazy_static! {
         make_module_definition!("../modules/channel_account.mvir");
     static ref CHANNEL_TXN_MODULE: ModuleDefinition =
         make_module_definition!("../modules/channel_transaction.mvir");
+    static ref CHANNEL_UTIL_MODULE: ModuleDefinition =
+        make_module_definition!("../modules/channel_util.mvir");
     static ref CHANNEL_MODULE: ModuleDefinition =
         make_module_definition!("../modules/channel.mvir");
     static ref MODULE_DEFS: Vec<&'static ModuleDefinition> = {
@@ -59,6 +61,7 @@ lazy_static! {
             &*LIBRA_SYSTEM_MODULE, // depends on LibraAccount, ValidatorConfig
             &*TRANSACTION_FEE_DISTRIBUTION_MODULE, // depends on Block, ValidatorSet, LibraCoin, LibraAccount,
             &*CHANNEL_ACCOUNT_MODULE,
+            &*CHANNEL_UTIL_MODULE,
             &*CHANNEL_MODULE,
         ]
     };
@@ -114,4 +117,8 @@ pub fn channel_module() -> ModuleDefinition {
 
 pub fn channel_txn_module() -> ModuleDefinition {
     CHANNEL_TXN_MODULE.clone()
+}
+
+pub fn channel_util_module() -> ModuleDefinition {
+    CHANNEL_UTIL_MODULE.clone()
 }
