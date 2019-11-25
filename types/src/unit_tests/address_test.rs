@@ -120,3 +120,14 @@ proptest! {
         prop_assert_eq!(addr, addr2);
     }
 }
+
+#[test]
+fn test_channel_address() {
+    let one = AccountAddress::random();
+    let two = AccountAddress::random();
+    let participants1 = vec![one, two];
+    let participants2 = vec![two, one];
+    let channel_address1 = AccountAddress::channel_address(participants1);
+    let channel_address2 = AccountAddress::channel_address(participants2);
+    assert_eq!(channel_address1, channel_address2);
+}
