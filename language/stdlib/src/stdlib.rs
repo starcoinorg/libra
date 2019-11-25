@@ -41,6 +41,8 @@ lazy_static! {
         make_module_definition!("../modules/channel_transaction.mvir");
     static ref CHANNEL_UTIL_MODULE: ModuleDefinition =
         make_module_definition!("../modules/channel_util.mvir");
+    static ref HASH_TIME_LOCK_MODULE: ModuleDefinition =
+        make_module_definition!("../modules/hash_time_lock.mvir");
     static ref CHANNEL_MODULE: ModuleDefinition =
         make_module_definition!("../modules/channel.mvir");
     static ref MODULE_DEFS: Vec<&'static ModuleDefinition> = {
@@ -62,6 +64,7 @@ lazy_static! {
             &*TRANSACTION_FEE_DISTRIBUTION_MODULE, // depends on Block, ValidatorSet, LibraCoin, LibraAccount,
             &*CHANNEL_ACCOUNT_MODULE,
             &*CHANNEL_UTIL_MODULE,
+            &*HASH_TIME_LOCK_MODULE,
             &*CHANNEL_MODULE,
         ]
     };
@@ -121,4 +124,8 @@ pub fn channel_txn_module() -> ModuleDefinition {
 
 pub fn channel_util_module() -> ModuleDefinition {
     CHANNEL_UTIL_MODULE.clone()
+}
+
+pub fn hash_time_lock_module() -> ModuleDefinition {
+    HASH_TIME_LOCK_MODULE.clone()
 }
