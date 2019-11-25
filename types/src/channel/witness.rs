@@ -1,4 +1,5 @@
 use crate::write_set::WriteSet;
+use libra_crypto::hash::CryptoHash;
 use libra_crypto::{ed25519::Ed25519Signature, hash::HashValue};
 use libra_crypto_derive::CryptoHasher;
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,19 @@ impl WitnessData {
 
     pub fn write_set(&self) -> &WriteSet {
         &self.write_set
+    }
+}
+
+impl CryptoHash for WitnessData {
+    type Hasher = WitnessDataHasher;
+
+    fn hash(&self) -> HashValue {
+        let mut state = Self::Hasher::default();
+        libra_crypto::hash::CryptoHasher::write(
+            &mut state,
+            &lcs::to_bytes(self).expect("Serialization should work."),
+        );
+        libra_crypto::hash::CryptoHasher::finish(state)
     }
 }
 
