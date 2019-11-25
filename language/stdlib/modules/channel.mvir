@@ -7,6 +7,7 @@ module Channel {
     import 0x0.AddressUtil;
     import 0x0.BytearrayUtil;
     import 0x0.Vector;
+    import 0x0.ChannelUtil;
     import 0x0.ChannelTransaction;
 
     resource T {
@@ -79,8 +80,8 @@ module Channel {
             balance: LibraCoin.zero(),
         };
         Self.save_channel(copy(channel_address),move(channel));
-        Self.move_to_participant<Self.ChannelAccount>(move(sender), move(sender_account));
-        Self.move_to_participant<Self.ChannelAccount>(move(participant), move(participant_account));
+        ChannelUtil.move_to_participant<Self.ChannelAccount>(move(sender), move(sender_account));
+        ChannelUtil.move_to_participant<Self.ChannelAccount>(move(participant), move(participant_account));
         return;
     }
 
@@ -102,7 +103,7 @@ module Channel {
         assert(get_txn_sender() == copy(proposer), 1111);
         channel_address = ChannelTransaction.get_channel_address();
         deposit_coin = LibraAccount.withdraw_from_sender(copy(amount));
-        channel_account = Self.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
+        channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
         Self.deposit_to_channel_account(move(channel_account), move(deposit_coin));
         return;
     }
@@ -115,7 +116,7 @@ module Channel {
 
         proposer = ChannelTransaction.get_proposer();
         assert(get_txn_sender() == copy(proposer), 1111);
-        channel_account = Self.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
+        channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
         withdraw_coin = LibraCoin.withdraw(&mut move(channel_account).balance, move(amount));
         LibraAccount.deposit(move(proposer), move(withdraw_coin));
         return;
@@ -179,22 +180,6 @@ module Channel {
     public close(){
         return;
     }
-
-    native public move_to_participant<T:resource>(participant: address, t: T);
-
-    native public move_to_shared<T:resource>(t: T);
-
-    native public move_from_participant<T:resource>(participant: address): T;
-
-    native public move_from_shared<T:resource>(): T;
-
-    native public borrow_from_participant<T:resource>(participant: address): & T;
-
-    native public borrow_from_participant_mut<T:resource>(participant: address): &mut T;
-
-    native public borrow_from_shared<T:resource>(): & T;
-
-    native public borrow_from_shared_mut<T:resource>(): &mut T;
 
     // The prologue is invoked at the beginning of every channel transaction
     prologue() acquires T {
