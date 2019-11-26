@@ -2,137 +2,16 @@
 module Channel {
     import 0x0.LibraAccount;
     import 0x0.LibraCoin;
-    import 0x00.Hash;
-    import 0x0.U64Util;
-    import 0x0.AddressUtil;
-    import 0x0.BytearrayUtil;
-    import 0x0.Vector;
     import 0x0.LibraSystem;
-    import 0x0.ChannelUtil;
-    import 0x0.ChannelTransaction;
     import 0x0.HashTimeLock;
-
-    resource T {
-        channel_sequence_number: u64,
-        closed: bool,
-        locked: bool,
-        participants: Vector.T<address>,
-    }
-
-    resource ChannelAccount {
-        balance: LibraCoin.T,
-    }
-
-    resource ChannelLockedBy {
-        participant: address,
-    }
-
-    resource ChannelChallengedBy {
-        participant: address,
-    }
-
-    // participants is a sorted vector.
-    public generate_channel_address(participants: &Vector.T<address>): address {
-        let bytes: bytearray;
-        let length: u64;
-        let idx: u64;
-        let channel_address: address;
-        let hash: bytearray;
-
-        length = Vector.length<address>(copy(participants));
-        bytes = AddressUtil.address_to_bytes(Vector.get<address>(copy(participants), 0));
-        idx = 1;
-        while (copy(idx) < copy(length)) {
-            bytes = BytearrayUtil.bytearray_concat(copy(bytes), AddressUtil.address_to_bytes(Vector.get<address>(copy(participants), copy(idx))));
-            idx = copy(idx) + 1;
-        }
-        hash = Hash.sha3_256(move(bytes));
-        channel_address = AddressUtil.bytes_to_address(move(hash));
-        return move(channel_address);
-    }
-
-    //TODO native
-    native save_channel(channel_address: address, channel: Self.T);
-
-    native move_to_channel<R:resource>(r: R);
-    native move_from_channel<R:resource>():R;
+    import 0x0.ChannelTransaction;
 
     //just for test
     public do_nothing(){
         return;
     }
 
-    //only support one participant
-    public open(participant: address, amount: u64){
-        let txn_channel_address: address;
-        let channel_address: address;
-        let participants: Vector.T<address>;
-        let sender: address;
-        let channel: Self.T;
-        let sender_account: Self.ChannelAccount;
-        let participant_account: Self.ChannelAccount;
-
-        sender = get_txn_sender();
-
-        assert(copy(sender) != copy(participant), 1111);
-
-        participants = Vector.empty<address>();
-        if(AddressUtil.compare_address(copy(sender), copy(participant)) == 0){
-            Vector.push_back<address>(
-                &mut participants,
-                copy(sender)
-            );
-            Vector.push_back<address>(
-                &mut participants,
-                copy(participant)
-            );
-        }else{
-            Vector.push_back<address>(
-                &mut participants,
-                copy(participant)
-            );
-            Vector.push_back<address>(
-                &mut participants,
-                copy(sender)
-            );
-        }
-        txn_channel_address = ChannelTransaction.get_channel_address();
-        channel_address = Self.generate_channel_address(& participants);
-
-        assert(move(txn_channel_address) == copy(channel_address), 1111);
-        assert(ChannelTransaction.get_txn_channel_sequence_number() == 0, 1111);
-
-        LibraAccount.create_account(copy(channel_address));
-        channel = T {
-           channel_sequence_number: 0,
-           closed: false,
-           locked: false,
-           participants: move(participants),
-        };
-        sender_account = ChannelAccount{
-            balance: LibraAccount.withdraw_from_sender(move(amount)),
-        };
-        participant_account = ChannelAccount{
-            balance: LibraCoin.zero(),
-        };
-        Self.save_channel(copy(channel_address),move(channel));
-        ChannelUtil.move_to_participant<Self.ChannelAccount>(move(sender), move(sender_account));
-        ChannelUtil.move_to_participant<Self.ChannelAccount>(move(participant), move(participant_account));
-        return;
-    }
-
-    // Deposit coin to proposer's ChannelAccount
-    public deposit_to_channel(coin: LibraCoin.T){
-        let proposer: address;
-        let channel_account: &mut Self.ChannelAccount;
-
-        proposer = ChannelTransaction.get_proposer();
-        channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
-        LibraCoin.deposit(&mut move(channel_account).balance, move(coin));
-        return;
-    }
-
-    // Transfer LibraCoin from proposer's LibraAccount to ChannelAccount
+   // Transfer LibraCoin from proposer's LibraAccount to OffchainAccount
     public deposit(amount: u64){
         let deposit_coin: LibraCoin.T;
         let proposer: address;
@@ -142,90 +21,19 @@ module Channel {
         assert(get_txn_sender() == copy(proposer), 1111);
         deposit_coin = LibraAccount.withdraw_from_sender(copy(amount));
 
-        Self.deposit_to_channel(move(deposit_coin));
+        LibraAccount.deposit_to_channel(move(deposit_coin));
         return;
     }
 
-    // Transfer LibraCoin from proposer's ChannelAccount to LibraAccount
+    // Transfer LibraCoin from proposer's OffchainAccount to LibraAccount
     public withdraw(amount: u64){
         let proposer: address;
         let withdraw_coin: LibraCoin.T;
 
         proposer = ChannelTransaction.get_proposer();
         assert(get_txn_sender() == copy(proposer), 1111);
-        withdraw_coin = Self.withdraw_from_channel(move(amount));
+        withdraw_coin = LibraAccount.withdraw_from_channel(move(amount));
         LibraAccount.deposit(move(proposer), move(withdraw_coin));
-        return;
-    }
-
-    // Withdraw LibraCoin from proposer's ChannelAccount
-    public withdraw_from_channel(amount: u64): LibraCoin.T {
-        let proposer: address;
-        let channel_account: &mut Self.ChannelAccount;
-        let withdraw_coin: LibraCoin.T;
-
-        proposer = ChannelTransaction.get_proposer();
-        channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
-        withdraw_coin = LibraCoin.withdraw(&mut move(channel_account).balance, move(amount));
-        return move(withdraw_coin);
-    }
-
-    public challenge() acquires T,ChannelLockedBy {
-        let channel: &Self.T;
-        let channel_address: address;
-        let proposer: address;
-        let txn_channel_sequence_number: u64;
-        let locked_by: & Self.ChannelLockedBy;
-        let challenged_by: Self.ChannelChallengedBy;
-
-        channel_address = ChannelTransaction.get_channel_address();
-        proposer = ChannelTransaction.get_proposer();
-        txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
-
-        channel = borrow_global<T>(copy(channel_address));
-        locked_by = borrow_global<ChannelLockedBy>(copy(channel_address));
-
-        assert(*&copy(channel).locked, 101);
-        assert(*&copy(locked_by).participant != copy(proposer), 100);
-        assert(move(txn_channel_sequence_number) >= *(&copy(channel).channel_sequence_number), 102);
-
-        challenged_by = ChannelChallengedBy {
-            participant: copy(proposer),
-        };
-        Self.move_to_channel<Self.ChannelChallengedBy>(move(challenged_by));
-        Self.close();
-        return;
-    }
-
-    public has_authorized_by_participants(): bool {
-        return true;
-    }
-
-    public resolve() acquires T {
-        let channel: &mut Self.T;
-        let channel_address: address;
-        let txn_channel_sequence_number:u64;
-        let locked_by: Self.ChannelLockedBy;
-
-        assert(Self.has_authorized_by_participants(), 100);
-
-        channel_address = ChannelTransaction.get_channel_address();
-        txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
-
-        channel = borrow_global_mut<T>(copy(channel_address));
-        *(&mut copy(channel).locked) = false;
-        locked_by = Self.move_from_channel<Self.ChannelLockedBy>();
-        Self.destroy_locked_by(move(locked_by));
-        return;
-    }
-
-    destroy_locked_by(locked_by: Self.ChannelLockedBy){
-        let participant: address;
-        ChannelLockedBy{participant} = move(locked_by);
-        return;
-    }
-
-    public close(){
         return;
     }
 
@@ -234,7 +42,7 @@ module Channel {
         let coin: LibraCoin.T;
 
         proposer = ChannelTransaction.get_proposer();
-        coin = Self.withdraw_from_channel(copy(amount));
+        coin = LibraAccount.withdraw_from_channel(copy(amount));
         //TODO payment timeout
         HashTimeLock.lock_in_channel(copy(payee), move(coin), move(hash_lock), LibraSystem.get_current_block_height()+10);
         return;
@@ -246,7 +54,7 @@ module Channel {
 
         proposer = ChannelTransaction.get_proposer();
         coin = HashTimeLock.unlock_in_channel(move(preimage));
-        Self.deposit_to_channel(move(coin));
+        LibraAccount.deposit_to_channel(move(coin));
         return;
     }
 
@@ -256,56 +64,7 @@ module Channel {
 
         proposer = ChannelTransaction.get_proposer();
         coin = HashTimeLock.unlock_in_channel_after_timeout();
-        Self.deposit_to_channel(move(coin));
-        return;
-    }
-
-    // The prologue is invoked at the beginning of every channel transaction
-    prologue() acquires T {
-        let txn_channel_sequence_number: u64;
-        let channel_sequence_number: u64;
-        let channel_address: address;
-        let channel: & Self.T;
-
-        txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
-        channel_address = ChannelTransaction.get_channel_address();
-
-        // txn_sequence_number 0 should be open channel txn.
-        if(copy(txn_channel_sequence_number) == 0){
-            assert(!exists<T>(copy(channel_address)), 400);
-            return;
-        }else{
-            channel = borrow_global<T>(copy(channel_address));
-            channel_sequence_number = *(&copy(channel).channel_sequence_number);
-
-            if(ChannelTransaction.is_offchain()){
-                assert(copy(txn_channel_sequence_number) == copy(channel_sequence_number), 403);
-            }else{
-                assert(copy(txn_channel_sequence_number) >= copy(channel_sequence_number), 404);
-            }
-            return;
-        }
-    }
-
-    epilogue() acquires T {
-        let channel: &mut Self.T;
-        let txn_channel_sequence_number: u64;
-        let new_channel_sequence_number: u64;
-        let channel_address: address;
-
-        channel_address = ChannelTransaction.get_channel_address();
-        channel = borrow_global_mut<T>(copy(channel_address));
-        txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
-
-        new_channel_sequence_number = move(txn_channel_sequence_number) + 1;
-        *(&mut copy(channel).channel_sequence_number) = move(new_channel_sequence_number);
-
-        if(!ChannelTransaction.is_offchain()){
-            if(!Self.has_authorized_by_participants()){
-                *(&mut copy(channel).locked) = true;
-                //TODO write locked_by
-            }
-        }
+        LibraAccount.deposit_to_channel(move(coin));
         return;
     }
 }

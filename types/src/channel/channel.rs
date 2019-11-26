@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 
 lazy_static! {
     // Channel
-    static ref CHANNEL_MODULE_NAME: Identifier = Identifier::new("Channel").unwrap();
-    static ref CHANNEL_STRUCT_NAME: Identifier = Identifier::new("T").unwrap();
+    static ref CHANNEL_MODULE_NAME: Identifier = Identifier::new("LibraAccount").unwrap();
+    static ref CHANNEL_STRUCT_NAME: Identifier = Identifier::new("Channel").unwrap();
 }
 
 pub fn channel_module_name() -> &'static IdentStr {

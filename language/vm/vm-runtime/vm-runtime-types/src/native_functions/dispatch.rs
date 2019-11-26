@@ -461,23 +461,7 @@ lazy_static! {
             ]
         );
          // Channel
-        add!(m, addr, "Channel", "generate_channel_address",
-           |_, _| {
-                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
-                            "generate_channel_address does not have a native implementation"
-                                .to_string()))
-             },
-            vec![],
-            // this is Vector.T<address> which happens to be the 4th struct handle in the
-            // binary.
-            // TODO: libra team has plan to rework the description of the native function
-            // by using the binary directly and have functions that fetch the arguments
-            // go through the signature for extra verification. That is the plan if perf
-            // and the model look good.
-            vec![MutableReference(Box::new(Struct(StructHandleIndex::new(4), vec![Address])))],
-            vec![Address]
-        );
-        add!(m, addr, "Channel", "move_to_channel",
+        add!(m, addr, "LibraAccount", "move_to_channel",
            |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "move_to_channel does not have a native implementation"
@@ -487,7 +471,7 @@ lazy_static! {
             vec![TypeParameter(0)],
             vec![]
         );
-        add!(m, addr, "Channel", "move_from_channel",
+        add!(m, addr, "LibraAccount", "move_from_channel",
           |_, _| {
                 Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
                             "move_from_channel does not have a native implementation"
@@ -496,15 +480,6 @@ lazy_static! {
             vec![Kind::Resource],
             vec![],
             vec![TypeParameter(0)]
-        );
-        add!(m, addr, "Channel", "save_channel",
-           |_, _| {
-                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
-                            "save_channel does not have a native implementation"
-                                .to_string()))
-             },
-            vec![Address, Struct(StructHandleIndex::new(0), vec![])],
-            vec![]
         );
         //ChannelUtil
         add!(m, addr, "ChannelUtil", "move_to_participant",
