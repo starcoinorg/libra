@@ -22,6 +22,7 @@ use std::{
 };
 use storage_client::{StorageRead, StorageWrite};
 use storage_proto::proto::storage::{create_storage, GetAccountStateWithProofByVersionRequest};
+use libra_types::block_index::BlockIndex;
 
 pub fn start_storage_service_and_return_service(
     config: &NodeConfig,
@@ -201,6 +202,10 @@ impl StorageRead for StorageService {
     ) -> Pin<Box<dyn Future<Output = Result<Vec<LedgerInfoWithSignatures>>> + Send>> {
         unimplemented!()
     }
+
+    fn query_block_index_list_by_height(&self, height: Option<u64>, size: u64) -> Result<Vec<BlockIndex>> {
+        self.query_block_index_list_by_height(height, size)
+    }
 }
 
 impl StorageWrite for StorageService {
@@ -236,5 +241,10 @@ impl StorageWrite for StorageService {
     fn rollback_by_block_id(&self, block_id: HashValue) {
         self.rollback_by_block_id_inner(&block_id)
             .expect("rollback failed.");
+    }
+
+    /// BlockIndex
+    fn insert_block_index(&self, height: u64, block_index: BlockIndex) {
+        self.insert_block_index_inner(&height, &block_index).expect("insert block index failed.")
     }
 }

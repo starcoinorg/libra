@@ -3,9 +3,10 @@
 
 use failure::prelude::*;
 use libra_logger::prelude::*;
-use schemadb::{DB, SchemaBatch};
+use schemadb::{DB, SchemaBatch, ReadOptions};
 use std::sync::Arc;
-use crate::schema::block_index::{BlockIndex, BlockIndexSchema};
+use crate::schema::block_index::BlockIndexSchema;
+use libra_types::block_index::BlockIndex;
 
 pub(crate) struct BlockIndexStore {
     db: Arc<DB>,
@@ -26,5 +27,39 @@ impl BlockIndexStore {
     /// Load BlockIndex
     pub fn _load_block_index(&self) -> Result<Vec<BlockIndex>> {
         unimplemented!()
+    }
+
+    pub fn query_block_index(&self, height: Option<u64>, size: usize)  -> Result<Vec<BlockIndex>> {
+        let mut block_index_list = vec![];
+        let mut begin = match height {
+            Some(h) => {
+                h
+            },
+            None => {
+                let mut iter = self.db.iter::<BlockIndexSchema>(ReadOptions::default())?;
+                iter.seek_to_last();
+                let result = iter.next();
+                match result {
+                    Some(val) => {
+                        let (k, v) = val.expect("Get value from db err.");
+                        k
+                    }
+                    None => 0//todo:err
+                }
+            }
+        };
+
+        while block_index_list.len() < size {
+            let mut block_index:Option<BlockIndex> = self.db.get::<BlockIndexSchema>(&begin)?;
+            match block_index {
+                Some(index) => {
+                    block_index_list.push(index);
+                    begin = begin - 1;
+                },
+                None => {break;}
+            }
+        }
+        block_index_list.reverse();
+        Ok(block_index_list)
     }
 }

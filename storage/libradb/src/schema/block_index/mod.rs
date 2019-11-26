@@ -8,40 +8,17 @@ use schemadb::{
 };
 use std::io::Write;
 use std::mem::size_of;
+use libra_types::block_index::BlockIndex;
 
 define_schema!(BlockIndexSchema, Height, BlockIndex, BLOCK_INDEX_CF_NAME);
 
 type Height = u64;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct BlockIndex {
-    id: HashValue,
-    parent_block_id: HashValue,
-}
-
-impl BlockIndex {
-    pub fn new(id: &HashValue, parent_id : &HashValue) -> Self {
-        BlockIndex {id: id.clone(), parent_block_id: parent_id.clone()}
-    }
-
-    pub fn id(&self) -> HashValue {
-        self.id
-    }
-
-    pub fn parent_id(&self) -> HashValue {
-        self.parent_block_id
-    }
-
-    pub fn parent_id_ref(&self) -> &HashValue {
-        &self.parent_block_id
-    }
-}
-
 impl ValueCodec<BlockIndexSchema> for BlockIndex {
     fn encode_value(&self) -> Result<Vec<u8>> {
         let mut encode_value = Vec::with_capacity(HashValue::LENGTH + HashValue::LENGTH);
-        encode_value.write_all(&self.id.to_vec().as_slice())?;
-        encode_value.write_all(&self.parent_block_id.to_vec().as_slice())?;
+        encode_value.write_all(&self.id().to_vec().as_slice())?;
+        encode_value.write_all(&self.parent_id().to_vec().as_slice())?;
         Ok(encode_value)
     }
 
@@ -51,10 +28,9 @@ impl ValueCodec<BlockIndexSchema> for BlockIndex {
         let block_id = HashValue::from_slice(&data[..HashValue::LENGTH])?;
         let parent_block_id = HashValue::from_slice(&data[HashValue::LENGTH..])?;
 
-        Ok(BlockIndex {
-            id: block_id,
-            parent_block_id,
-        })
+        Ok(BlockIndex::new(&block_id,
+            &parent_block_id
+        ))
     }
 }
 

@@ -37,6 +37,7 @@ use libra_types::{
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use std::convert::{TryFrom, TryInto};
+use libra_types::block_index::BlockIndex;
 
 /// Helper to construct and parse [`proto::storage::GetAccountStateWithProofByVersionRequest`]
 #[derive(PartialEq, Eq, Clone)]
@@ -575,8 +576,7 @@ impl From<GetHistoryStartupInfoByBlockIdRequest>
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InsertBlockIndexRequest {
     pub height: u64,
-    pub block_id: HashValue,
-    pub parent_block_id: HashValue,
+    pub block_index: Option<BlockIndex>
 }
 
 impl TryFrom<crate::proto::storage::InsertBlockIndexRequest>
@@ -588,9 +588,8 @@ for InsertBlockIndexRequest
         proto: crate::proto::storage::InsertBlockIndexRequest,
     ) -> Result<Self> {
         let height = proto.height;
-        let block_id = HashValue::from_slice(&proto.block_id)?;
-        let parent_block_id = HashValue::from_slice(&proto.parent_block_id)?;
-        Ok(Self { height, block_id, parent_block_id })
+        let block_index = proto.block_index.map(BlockIndex::try_from).transpose()?;
+        Ok(Self { height, block_index })
     }
 }
 
@@ -600,8 +599,106 @@ for crate::proto::storage::InsertBlockIndexRequest
     fn from(request: InsertBlockIndexRequest) -> Self {
         Self {
             height: request.height,
-            block_id: request.block_id.to_vec(),
-            parent_block_id: request.parent_block_id.to_vec()
+            block_index: request.block_index.map(Into::into)
+        }
+    }
+}
+
+/// Helper to construct and parse [`proto::storage::BlockHeight`]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BlockHeight {
+    pub height: u64,
+}
+
+impl TryFrom<crate::proto::storage::BlockHeight>
+for BlockHeight
+{
+    type Error = Error;
+
+    fn try_from(
+        proto: crate::proto::storage::BlockHeight,
+    ) -> Result<Self> {
+        let height = proto.height;
+        Ok(Self { height })
+    }
+}
+
+impl From<BlockHeight>
+for crate::proto::storage::BlockHeight
+{
+    fn from(request: BlockHeight) -> Self {
+        Self {
+            height: request.height
+        }
+    }
+}
+
+/// Helper to construct and parse [`proto::storage::QueryBlockIndexListByHeightRequest`]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryBlockIndexListByHeightRequest {
+    pub begin: Option<BlockHeight>,
+    pub size: u64,
+}
+
+impl TryFrom<crate::proto::storage::QueryBlockIndexListByHeightRequest>
+for QueryBlockIndexListByHeightRequest
+{
+    type Error = Error;
+
+    fn try_from(
+        proto: crate::proto::storage::QueryBlockIndexListByHeightRequest,
+    ) -> Result<Self> {
+        let size = proto.size;
+        let begin = proto.begin.map(BlockHeight::try_from).transpose()?;
+        Ok(Self { begin, size })
+    }
+}
+
+impl From<QueryBlockIndexListByHeightRequest>
+for crate::proto::storage::QueryBlockIndexListByHeightRequest
+{
+    fn from(request: QueryBlockIndexListByHeightRequest) -> Self {
+        Self {
+            begin: request.begin.map(Into::into),
+            size: request.size,
+        }
+    }
+}
+
+/// Helper to construct and parse [`proto::storage::QueryBlockIndexListByHeightResponse`]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct QueryBlockIndexListByHeightResponse {
+    pub block_index_list: Vec<BlockIndex>,
+}
+
+impl TryFrom<crate::proto::storage::QueryBlockIndexListByHeightResponse>
+for QueryBlockIndexListByHeightResponse
+{
+    type Error = Error;
+
+    fn try_from(
+        proto: crate::proto::storage::QueryBlockIndexListByHeightResponse,
+    ) -> Result<Self> {
+        Ok(Self {
+            block_index_list: proto
+            .block_index_list
+            .into_iter()
+            .map(TryFrom::try_from)
+            .collect::<Result<Vec<_>>>()?,
+        })
+    }
+}
+
+impl From<QueryBlockIndexListByHeightResponse>
+for crate::proto::storage::QueryBlockIndexListByHeightResponse
+{
+    fn from(response: QueryBlockIndexListByHeightResponse) -> Self {
+        Self {
+            block_index_list: response
+            .block_index_list
+            .into_iter()
+            .map(Into::into)
+            .collect(),
         }
     }
 }

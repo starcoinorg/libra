@@ -69,7 +69,7 @@ use schemadb::{ColumnFamilyOptions, ColumnFamilyOptionsMap, DB, DEFAULT_CF_NAME}
 use std::{convert::TryInto, iter::Iterator, path::Path, sync::Arc, time::Instant};
 use storage_proto::StartupInfo;
 use storage_proto::TreeState;
-use crate::schema::block_index::BlockIndex;
+use libra_types::block_index::BlockIndex;
 
 lazy_static! {
     static ref OP_COUNTER: OpMetrics = OpMetrics::new_and_registered("storage");
@@ -807,6 +807,10 @@ impl LibraDB {
 
     pub fn insert_block_index(&self, height: &u64, block_index: &BlockIndex) -> Result<()> {
         self.block_index_store.insert_block_index(height, block_index)
+    }
+
+    pub fn query_block_index_list_by_height(&self, height: Option<u64>, size: usize) -> Result<Vec<BlockIndex>> {
+        self.block_index_store.query_block_index(height, size)
     }
 }
 

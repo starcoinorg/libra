@@ -23,7 +23,6 @@ pub(crate) mod block_index;
 
 use failure::prelude::*;
 use schemadb::ColumnFamilyName;
-pub use block_index::BlockIndex;
 
 pub(super) const EPOCH_BY_VERSION_CF_NAME: ColumnFamilyName = "epoch_by_version";
 pub(super) const EVENT_ACCUMULATOR_CF_NAME: ColumnFamilyName = "event_accumulator";

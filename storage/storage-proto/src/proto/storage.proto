@@ -10,6 +10,7 @@ import "ledger_info.proto";
 import "transaction.proto";
 import "account_state_blob.proto";
 import "proof.proto";
+import "block_index.proto";
 
 // -----------------------------------------------------------------------------
 // ---------------- Service definition for storage
@@ -61,6 +62,10 @@ service Storage {
     // Block Index
     rpc InsertBlockIndex(InsertBlockIndexRequest)
     returns (EmptyResponse);
+
+    // Query Block Index
+    rpc QueryBlockIndexListByHeight(QueryBlockIndexListByHeightRequest)
+    returns (QueryBlockIndexListByHeightResponse);
 }
 
 message SaveTransactionsRequest {
@@ -164,6 +169,18 @@ message EmptyResponse {
 
 message InsertBlockIndexRequest {
     uint64 height = 1;
-    bytes block_id = 2;
-    bytes parent_block_id = 3;
+    types.BlockIndex block_index = 2;
+}
+
+message BlockHeight {
+    uint64 height = 1;
+}
+
+message QueryBlockIndexListByHeightRequest {
+    BlockHeight begin = 1;
+    uint64 size = 2;
+}
+
+message QueryBlockIndexListByHeightResponse {
+    repeated types.BlockIndex block_index_list = 1;
 }
