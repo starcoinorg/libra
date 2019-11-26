@@ -163,6 +163,17 @@ lazy_static! {
             vec![Address],
             vec![ByteArray]
         );
+        // AddressUtil
+        add!(m, addr, "AddressUtil", "bytes_to_address",
+            primitive_helpers::native_bytes_to_address,
+            vec![ByteArray],
+            vec![Address]
+        );
+        add!(m, addr, "AddressUtil", "compare_address",
+            primitive_helpers::native_compare_address,
+            vec![Address, Address],
+            vec![U64]
+        );
         // U64Util
         add!(m, addr, "U64Util", "u64_to_bytes",
             primitive_helpers::native_u64_to_bytes,

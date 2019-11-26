@@ -31,9 +31,26 @@ module Channel {
         participant: address,
     }
 
-    //TODO native
-    // sort participants and generate address;
-    native generate_channel_address(participants: &mut Vector.T<address>): address;
+    // participants is a sorted vector.
+    public generate_channel_address(participants: &Vector.T<address>): address {
+        let bytes: bytearray;
+        let length: u64;
+        let idx: u64;
+        let channel_address: address;
+        let hash: bytearray;
+
+        length = Vector.length<address>(copy(participants));
+        bytes = AddressUtil.address_to_bytes(Vector.get<address>(copy(participants), 0));
+        idx = 1;
+        while (copy(idx) < copy(length)) {
+            bytes = BytearrayUtil.bytearray_concat(copy(bytes), AddressUtil.address_to_bytes(Vector.get<address>(copy(participants), copy(idx))));
+            idx = copy(idx) + 1;
+        }
+        hash = Hash.sha3_256(move(bytes));
+        channel_address = AddressUtil.bytes_to_address(move(hash));
+        return move(channel_address);
+    }
+
     //TODO native
     native save_channel(channel_address: address, channel: Self.T);
 
@@ -56,19 +73,31 @@ module Channel {
         let participant_account: Self.ChannelAccount;
 
         sender = get_txn_sender();
-        //TODO check participant_signature
+
+        assert(copy(sender) != copy(participant), 1111);
 
         participants = Vector.empty<address>();
-        Vector.push_back<address>(
-             &mut participants,
-             copy(sender)
-        );
-        Vector.push_back<address>(
-             &mut participants,
-             copy(participant)
-        );
+        if(AddressUtil.compare_address(copy(sender), copy(participant)) == 0){
+            Vector.push_back<address>(
+                &mut participants,
+                copy(sender)
+            );
+            Vector.push_back<address>(
+                &mut participants,
+                copy(participant)
+            );
+        }else{
+            Vector.push_back<address>(
+                &mut participants,
+                copy(participant)
+            );
+            Vector.push_back<address>(
+                &mut participants,
+                copy(sender)
+            );
+        }
         txn_channel_address = ChannelTransaction.get_channel_address();
-        channel_address = Self.generate_channel_address(&mut participants);
+        channel_address = Self.generate_channel_address(& participants);
 
         assert(move(txn_channel_address) == copy(channel_address), 1111);
         assert(ChannelTransaction.get_txn_channel_sequence_number() == 0, 1111);
