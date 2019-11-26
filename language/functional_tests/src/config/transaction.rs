@@ -42,6 +42,7 @@ pub enum Entry {
     SequenceNumber(u64),
     Receiver(String),
     Channel(String),
+    Proposer(String),
 }
 
 impl FromStr for Entry {
@@ -97,6 +98,13 @@ impl FromStr for Entry {
             }
             return Ok(Entry::Channel(s.to_ascii_lowercase()));
         }
+        if s.starts_with("proposer:") {
+            let s = s[9..].trim_start().trim_end();
+            if s.is_empty() {
+                return Err(ErrorKind::Other("proposer cannot be empty".to_string()).into());
+            }
+            return Ok(Entry::Proposer(s.to_ascii_lowercase()));
+        }
         Err(ErrorKind::Other(format!(
             "failed to parse '{}' as transaction config entry",
             s
@@ -135,6 +143,8 @@ pub struct Config<'a> {
     pub sequence_number: Option<u64>,
     pub receiver: Option<&'a Account>,
     pub channel: Option<&'a ChannelData>,
+    // Channel txn proposer
+    pub proposer: Option<&'a Account>,
 }
 
 impl<'a> Config<'a> {
@@ -147,6 +157,7 @@ impl<'a> Config<'a> {
         let mut sequence_number = None;
         let mut receiver = None;
         let mut channel = None;
+        let mut proposer = None;
 
         for entry in entries {
             match entry {
@@ -210,7 +221,18 @@ impl<'a> Config<'a> {
                     None => channel = Some(config.get_channel_for_name(name)?),
                     _ => return Err(ErrorKind::Other("channel already set".to_string()).into()),
                 },
+                Entry::Proposer(name) => match proposer {
+                    None => proposer = Some(config.get_account_for_name(name)?),
+                    _ => return Err(ErrorKind::Other("proposer already set".to_string()).into()),
+                },
             }
+        }
+
+        if channel.is_some() && proposer.is_none() {
+            return Err(ErrorKind::Other(
+                "proposer must be set in channel transaction.".to_string(),
+            )
+            .into());
         }
 
         Ok(Self {
@@ -221,6 +243,7 @@ impl<'a> Config<'a> {
             sequence_number,
             receiver,
             channel,
+            proposer,
         })
     }
 
@@ -230,6 +253,10 @@ impl<'a> Config<'a> {
     }
 
     pub fn is_channel_transaction(&self) -> bool {
-        return self.receiver.is_some() || self.channel.is_some();
+        return self.receiver.is_some();
+    }
+
+    pub fn is_channel_transaction_v2(&self) -> bool {
+        return self.channel.is_some();
     }
 }

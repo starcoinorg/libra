@@ -1,0 +1,17 @@
+//! account: alice, 10000000
+//! account: bob, 10000000
+//! channel: ch1, alice|bob
+
+//! new-transaction
+//! sender: alice
+//! channel: ch1
+//! proposer: alice
+
+0x0.Channel.do_nothing
+
+//! new-transaction
+//! sender: alice
+//! channel: ch1
+//! proposer: alice
+
+0x0.Channel.open {{bob}} 50000

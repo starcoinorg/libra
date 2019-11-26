@@ -173,6 +173,7 @@ fn build_transaction_config_channel() {
     parse_and_build_config(&global, r"
         //! sender: alice
         //! channel: ch1
+        //! proposer: alice
         //! args: {{bob}}, {{alice}}
     ").unwrap();
 }
