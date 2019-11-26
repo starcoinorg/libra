@@ -14,4 +14,4 @@
 //! channel: ch1
 //! proposer: alice
 
-0x0.Channel.open {{bob}} 50000
+0x0.LibraAccount.open_channel {{bob}} 50000
