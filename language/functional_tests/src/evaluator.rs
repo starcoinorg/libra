@@ -1,6 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::config::global::ChannelData;
 use crate::{
     config::{global::Config as GlobalConfig, transaction::Config as TransactionConfig},
     errors::*,
@@ -17,7 +18,12 @@ use language_e2e_tests::account::Account;
 use language_e2e_tests::executor::FakeExecutor;
 use libra_config::config::VMPublishingOption;
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-use libra_types::transaction::{ChannelActionBody, ScriptAction};
+use libra_types::access_path::DataPath;
+use libra_types::channel::channel::ChannelResource;
+use libra_types::channel::witness::Witness;
+use libra_types::transaction::{
+    ChannelActionBody, ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2, ScriptAction,
+};
 use libra_types::{
     access_path::AccessPath,
     account_address::AccountAddress,
@@ -304,6 +310,35 @@ fn make_channel_transaction(
     .into_inner())
 }
 
+fn make_channel_transaction_v2(
+    exec: &FakeExecutor,
+    config: &TransactionConfig,
+    action: ScriptAction,
+    channel: &ChannelData,
+    channel_sequence_number: u64,
+) -> Result<SignedTransaction> {
+    let params = get_transaction_parameters(exec, config);
+    //TODO construct signature.
+    let witness = Witness::new(channel_sequence_number, WriteSet::default(), vec![]);
+    let body = ChannelTransactionPayloadBodyV2::new(
+        channel.channel_address,
+        *config.proposer.unwrap().address(),
+        action,
+        witness,
+    );
+    let payload = ChannelTransactionPayloadV2::new(body, vec![], vec![]);
+    Ok(RawTransaction::new_channel_v2(
+        params.sender_addr,
+        params.sequence_number,
+        payload,
+        params.max_gas_amount,
+        params.gas_unit_price,
+        params.expiration_time,
+    )
+    .sign(params.privkey, params.pubkey.clone())?
+    .into_inner())
+}
+
 /// Runs a single transaction using the fake executor.
 fn run_transaction(
     exec: &mut FakeExecutor,
@@ -426,6 +461,44 @@ fn eval_transaction(
             &transaction.config,
             script_action,
             receiver,
+            channel_sequence_number,
+        )?;
+        let txn_output = unwrap_or_abort!(run_transaction(exec, channel_transaction));
+        log.append(EvaluationOutput::Output(Box::new(
+            OutputType::TransactionOutput(txn_output),
+        )));
+    } else if transaction.config.is_channel_transaction_v2() {
+        let channel_data = transaction
+            .config
+            .channel
+            .expect("channel must exist in channel transaction.");
+        let channel_address = channel_data.channel_address;
+        let channel_access_path =
+            AccessPath::new_for_data_path(channel_address, DataPath::channel_data_path());
+
+        let channel_sequence_number = exec
+            .read_from_access_path(&channel_access_path)
+            .map(|bytes| {
+                ChannelResource::make_from(bytes)
+                    .unwrap()
+                    .channel_sequence_number()
+            })
+            .unwrap_or(0);
+
+        let script_action = unwrap_or_abort!(ScriptAction::parse(&transaction.input));
+        log.append(EvaluationOutput::Output(Box::new(OutputType::Action(
+            script_action.clone(),
+        ))));
+        // stage 5: execute the script
+        if transaction.config.is_stage_disabled(Stage::Runtime) {
+            return Ok(Status::Success);
+        }
+        log.append(EvaluationOutput::Stage(Stage::Runtime));
+        let channel_transaction = make_channel_transaction_v2(
+            &exec,
+            &transaction.config,
+            script_action,
+            channel_data,
             channel_sequence_number,
         )?;
         let txn_output = unwrap_or_abort!(run_transaction(exec, channel_transaction));

@@ -104,7 +104,11 @@ impl TransactionMetadata {
     }
 
     pub fn is_channel_txn(&self) -> bool {
-        self.channel_metadata.is_some() || self.channel_metadata_v2.is_some()
+        self.channel_metadata.is_some()
+    }
+
+    pub fn is_channel_txn_v2(&self) -> bool {
+        self.channel_metadata_v2.is_some()
     }
 }
 

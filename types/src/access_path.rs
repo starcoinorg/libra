@@ -35,6 +35,7 @@
 //! On the other hand, if you want to query only <Alice>/a/*, `address` will be set to Alice and
 //! `path` will be set to "/a" and use the `get_prefix()` method from statedb
 
+use crate::channel::channel::channel_struct_tag;
 use crate::{
     account_address::{AccountAddress, ADDRESS_LENGTH},
     account_config::{
@@ -301,6 +302,10 @@ impl DataPath {
 
     pub fn account_resource_data_path() -> Self {
         Self::onchain_resource_path(account_struct_tag())
+    }
+
+    pub fn channel_data_path() -> Self {
+        Self::onchain_resource_path(channel_struct_tag())
     }
 
     pub fn code_data_path(module_id: ModuleId) -> Self {

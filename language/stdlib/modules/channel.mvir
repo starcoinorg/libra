@@ -40,6 +40,11 @@ module Channel {
     native move_to_channel<R:resource>(r: R);
     native move_from_channel<R:resource>():R;
 
+    //just for test
+    public do_nothing(){
+        return;
+    }
+
     //only support one participant
     public open(participant: address, amount: u64){
         let txn_channel_address: address;

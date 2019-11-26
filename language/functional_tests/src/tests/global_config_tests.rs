@@ -93,7 +93,7 @@ fn build_global_config_channel() {
     let config = parse_and_build_config(r"
         //! account: alice
         //! account: bob 
-        //! channel: ch1,alice|bob 
+        //! channel: ch1, alice|bob 
     ").unwrap();
 
     assert_eq!(config.accounts.len(), 3);

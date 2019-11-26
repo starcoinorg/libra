@@ -110,9 +110,9 @@ impl FromStr for Entry {
                 .split(|c: char| c == ',' || c.is_whitespace())
                 .filter(|s| !s.is_empty())
                 .collect();
-            if v.is_empty() || v.len() > 4 {
+            if v.len() < 2 || v.len() > 4 {
                 return Err(ErrorKind::Other(
-                    "config 'channel' takes 1 to 4 parameters".to_string(),
+                    "config 'channel' takes 2 to 4 parameters".to_string(),
                 )
                 .into());
             }
@@ -137,8 +137,8 @@ impl FromStr for Entry {
 
 #[derive(Debug)]
 pub struct ChannelData {
-    channel_address: AccountAddress,
-    participants: Vec<AccountAddress>,
+    pub channel_address: AccountAddress,
+    pub participants: Vec<AccountAddress>,
 }
 
 /// A table of options either shared by all transactions or used to define the testing environment.
