@@ -127,6 +127,7 @@ where
             parent_trees: ExecutedTrees::new_empty(),
             parent_id: *PRE_GENESIS_BLOCK_ID,
             id: HashValue::zero(), /* we use 0 as genesis block id in executor internally but it may be different in consensus */
+            pbft: true,
         };
         let output = self
             .execute_block(genesis_block)
@@ -156,39 +157,6 @@ where
         })
         .expect("Failed to commit genesis block.");
         info!("GENESIS transaction is committed.")
-    }
-
-    /// Rollback
-    pub fn rollback(&mut self, block_id: HashValue) -> Result<()> {
-        // 1. rollback
-        self.storage_write_client.rollback_by_block_id(block_id);
-
-        // 2. get StartInfo
-        let startup_info = self
-            .storage_read_client
-            .get_startup_info()
-            .expect("Failed to read startup info from storage.")
-            .expect("block not exist err.");
-
-        // 3. Reset ExecutedTrees
-        let state_tree = Arc::new(SparseMerkleTree::new(
-            startup_info.committed_tree_state.account_state_root_hash,
-        ));
-        let transaction_accumulator = Arc::new(
-            InMemoryAccumulator::new(
-                startup_info
-                    .committed_tree_state
-                    .ledger_frozen_subtree_hashes,
-                startup_info.committed_tree_state.version + 1,
-            )
-            .expect("The startup info read from storage should be valid."),
-        );
-        self.committed_trees
-            .lock()
-            .unwrap()
-            .reset(state_tree, transaction_accumulator);
-
-        Ok(())
     }
 
     /// Keeps processing blocks until the command sender is disconnected.
@@ -266,6 +234,7 @@ where
                     parent_trees: parent_executed_trees,
                     parent_id,
                     id,
+                    pbft: false,
                 };
 
                 self.blocks_to_execute
@@ -292,21 +261,6 @@ where
                 if let Err(_err) = resp_sender.send(res) {
                     warn!("Failed to send execute and commit chunk response.");
                 }
-            }
-            Command::RollbackBlock {
-                block_id,
-                resp_sender,
-            } => {
-                let res = self.rollback(block_id).map_err(|e| {
-                    security_log(SecurityEvent::InvalidBlock)
-                        .error(&e)
-                        .data(block_id)
-                        .log();
-                    e
-                });
-                resp_sender
-                    .send(res)
-                    .expect("Failed to send rollback response.");
             }
         }
     }
@@ -659,13 +613,22 @@ where
     fn execute_block(&mut self, executable_block: ExecutableBlock) -> Result<ProcessedVMOutput> {
         // Construct a StateView and pass the transactions to VM.
         let state_view = {
-            let committed_trees = self.committed_trees.lock().unwrap();
-            VerifiedStateView::new(
-                Arc::clone(&self.storage_read_client),
-                committed_trees.version(),
-                committed_trees.state_root(),
-                executable_block.parent_trees.state_tree(),
-            )
+            if executable_block.pbft {
+                let committed_trees = self.committed_trees.lock().unwrap();
+                VerifiedStateView::new(
+                    Arc::clone(&self.storage_read_client),
+                    committed_trees.version(),
+                    committed_trees.state_root(),
+                    executable_block.parent_trees.state_tree(),
+                )
+            } else {
+                VerifiedStateView::new(
+                    Arc::clone(&self.storage_read_client),
+                    executable_block.parent_trees.version(),
+                    executable_block.parent_trees.state_root(),
+                    executable_block.parent_trees.state_tree(),
+                )
+            }
         };
 
         let vm_outputs = {

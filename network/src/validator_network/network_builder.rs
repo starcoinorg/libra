@@ -524,7 +524,7 @@ impl NetworkBuilder {
         // We start the discovery module only if the network is permissioned.
         // Note: We use the `is_permissioned` flag as a proxy for whether we need to run the
         // discovery module or not. We should make this more explicit eventually.
-        if self.is_permissioned {
+        if self.is_permissioned || self.is_public {
             // Initialize and start Discovery actor.
             let (signing_private_key, _signing_public_key) =
                 self.signing_keys.take().expect("Signing keys not set");

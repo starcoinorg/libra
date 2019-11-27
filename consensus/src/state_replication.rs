@@ -9,6 +9,7 @@ use futures::Future;
 use libra_crypto::HashValue;
 use libra_types::block_metadata::BlockMetadata;
 use libra_types::crypto_proxies::{LedgerInfoWithSignatures, ValidatorChangeEventWithProof};
+use libra_types::transaction::TransactionStatus;
 use std::{pin::Pin, sync::Arc};
 
 /// Retrieves and updates the status of transactions on demand (e.g., via talking with Mempool)
@@ -30,6 +31,14 @@ pub trait TxnManager: Send + Sync {
         &'a self,
         txns: &Self::Payload,
         compute_result: &StateComputeResult,
+        // Monotonic timestamp_usecs of committed blocks is used to GC expired transactions.
+        timestamp_usecs: u64,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
+
+    fn commit_txns_with_status<'a>(
+        &'a self,
+        txns: &Self::Payload,
+        txns_status: Vec<TransactionStatus>,
         // Monotonic timestamp_usecs of committed blocks is used to GC expired transactions.
         timestamp_usecs: u64,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
@@ -58,26 +67,13 @@ pub trait StateComputer: Send + Sync {
     fn compute_by_hash(
         &self,
         // The id of a grandpa block
-        grandpa_block_id: HashValue,
+        grandpa_block_id: &HashValue,
         // The id of a parent block
-        parent_block_id: HashValue,
+        parent_block_id: &HashValue,
         // The id of a current block.
-        block_id: HashValue,
+        block_id: &HashValue,
         // Transactions to execute.
-        transactions: (&BlockMetadata, &Self::Payload),
-    ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>>;
-
-    ///
-    fn compute_with_meta_data(
-        &self,
-        // The id of a parent block
-        parent_block_id: HashValue,
-        // The id of a current block.
-        block_id: HashValue,
-        // The executed trees after executing the parent block.
-        parent_executed_trees: ExecutedTrees,
-        // Transactions to execute.
-        transactions: (&BlockMetadata, &Self::Payload),
+        transactions: Vec<(BlockMetadata, Self::Payload)>,
     ) -> Pin<Box<dyn Future<Output = Result<ProcessedVMOutput>> + Send>>;
 
     /// Send a successful commit. A future is fulfilled when the state is finalized.
@@ -87,16 +83,21 @@ pub trait StateComputer: Send + Sync {
         finality_proof: LedgerInfoWithSignatures,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 
-    /// Send a successful commit. A future is fulfilled when the state is finalized.
-    fn commit_with_meta_data(
-        &self,
-        meta_data_txn: &BlockMetadata,
-        block: (Self::Payload, Arc<ProcessedVMOutput>),
-        finality_proof: LedgerInfoWithSignatures,
-    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
-
-    /// Rollback
-    fn rollback(&self, block_id: HashValue) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+    //    /// Send a successful commit. A future is fulfilled when the state is finalized.
+    //    fn commit_with_meta_data(
+    //        &self,
+    //        meta_data_txn: &BlockMetadata,
+    //        block: (Self::Payload, Arc<ProcessedVMOutput>),
+    //        finality_proof: LedgerInfoWithSignatures,
+    //    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+    //
+    //    /// Rollback
+    //    fn rollback(&self, block_id: HashValue) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+    //
+    //    fn process_vm_outputs_to_commit(
+    //        transactions: (BlockMetadata, Self::Payload),
+    //        output: Arc<ProcessedVMOutput>,
+    //        parent_trees: &ExecutedTrees) -> Result<ProcessedVMOutput>;
 
     /// Best effort state synchronization to the given target LedgerInfo.
     /// In case of success (`Result::Ok`) the LI of storage is at the given target.

@@ -5,11 +5,8 @@
 mod consensusdb_test;
 mod schema;
 
-pub use schema::block_index::BlockIndex;
-
 use crate::chained_bft::consensusdb::schema::{
     block::{BlockSchema, SchemaBlock},
-    block_index::BlockIndexSchema,
     quorum_certificate::QCSchema,
     single_entry::{SingleEntryKey, SingleEntrySchema},
 };
@@ -17,7 +14,7 @@ use consensus_types::{block::Block, common::Payload, quorum_cert::QuorumCert};
 use failure::prelude::*;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
-use schema::{BLOCK_CF_NAME, BLOCK_INDEX_CF_NAME, QC_CF_NAME, SINGLE_ENTRY_CF_NAME};
+use schema::{BLOCK_CF_NAME, QC_CF_NAME, SINGLE_ENTRY_CF_NAME};
 use schemadb::{
     ColumnFamilyOptions, ColumnFamilyOptionsMap, ReadOptions, SchemaBatch, DB, DEFAULT_CF_NAME,
 };
@@ -40,7 +37,6 @@ impl ConsensusDB {
             (BLOCK_CF_NAME, ColumnFamilyOptions::default()),
             (QC_CF_NAME, ColumnFamilyOptions::default()),
             (SINGLE_ENTRY_CF_NAME, ColumnFamilyOptions::default()),
-            (BLOCK_INDEX_CF_NAME, ColumnFamilyOptions::default()),
         ]
         .iter()
         .cloned()
@@ -204,17 +200,5 @@ impl ConsensusDB {
         }
 
         return Some(blocks);
-    }
-
-    /// Insert BlockIndex
-    pub fn insert_block_index(&self, height: &u64, block_index: &BlockIndex) -> Result<()> {
-        let mut batch = SchemaBatch::new();
-        batch.put::<BlockIndexSchema>(&height, &block_index)?;
-        self.commit(batch)
-    }
-
-    /// Load BlockIndex
-    pub fn _load_block_index(&self) -> Result<Vec<BlockIndex>> {
-        unimplemented!()
     }
 }
