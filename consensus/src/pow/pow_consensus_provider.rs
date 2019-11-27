@@ -16,9 +16,9 @@ use network::validator_network::{ConsensusNetworkEvents, ConsensusNetworkSender}
 use state_synchronizer::StateSyncClient;
 use std::convert::TryFrom;
 use std::sync::Arc;
+use storage_client::{StorageRead, StorageWrite};
 use tokio::runtime::{self, TaskExecutor};
 use vm_runtime::MoveVM;
-use storage_client::{StorageRead, StorageWrite};
 
 pub struct PowConsensusProvider {
     runtime: tokio::runtime::Runtime,
@@ -36,7 +36,7 @@ impl PowConsensusProvider {
         synchronizer_client: Arc<StateSyncClient>,
         rollback_flag: bool,
         read_storage: Arc<dyn StorageRead>,
-        write_storage: Arc<dyn StorageWrite>
+        write_storage: Arc<dyn StorageWrite>,
     ) -> Self {
         let runtime = runtime::Builder::new()
             .name_prefix("pow-consensus-")
@@ -78,7 +78,7 @@ impl PowConsensusProvider {
             rollback_flag,
             mine_state,
             read_storage,
-            write_storage
+            write_storage,
         );
         Self {
             runtime,

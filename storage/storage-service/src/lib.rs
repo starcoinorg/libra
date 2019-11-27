@@ -18,6 +18,7 @@ use libra_config::config::NodeConfig;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_metrics::counters::SVC_COUNTERS;
+use libra_types::block_index::BlockIndex;
 use libra_types::proto::types::{UpdateToLatestLedgerRequest, UpdateToLatestLedgerResponse};
 use libradb::LibraDB;
 use std::{
@@ -27,17 +28,14 @@ use std::{
     sync::{mpsc, Arc, Mutex},
 };
 use storage_proto::proto::storage::{
-    create_storage, GetAccountStateWithProofByVersionRequest,
+    create_storage, EmptyResponse, GetAccountStateWithProofByVersionRequest,
     GetAccountStateWithProofByVersionResponse, GetEpochChangeLedgerInfosRequest,
     GetEpochChangeLedgerInfosResponse, GetHistoryStartupInfoByBlockIdRequest,
     GetStartupInfoRequest, GetStartupInfoResponse, GetTransactionsRequest, GetTransactionsResponse,
-    RollbackRequest, InsertBlockIndexRequest, EmptyResponse, SaveTransactionsRequest, SaveTransactionsResponse, Storage,
-    QueryBlockIndexListByHeightRequest, QueryBlockIndexListByHeightResponse
+    InsertBlockIndexRequest, QueryBlockIndexListByHeightRequest,
+    QueryBlockIndexListByHeightResponse, RollbackRequest, SaveTransactionsRequest,
+    SaveTransactionsResponse, Storage,
 };
-use libra_types::proto::types::BlockIndex as BlockIndexProto;
-use libra_types::block_index::BlockIndex;
-use storage_proto::BlockHeight;
-
 /// Starts storage service according to config.
 pub fn start_storage_service(config: &NodeConfig) -> ServerHandle {
     let (storage_service, shutdown_receiver) = StorageService::new(&config.get_storage_dir());
@@ -253,8 +251,13 @@ impl StorageService {
         self.db.insert_block_index(height, block_index)
     }
 
-    fn query_block_index_list_by_height_inner(&self, height: Option<u64>, size: u64) -> Result<Vec<BlockIndex>> {
-        self.db.query_block_index_list_by_height(height, size as usize)
+    fn query_block_index_list_by_height_inner(
+        &self,
+        height: Option<u64>,
+        size: u64,
+    ) -> Result<Vec<BlockIndex>> {
+        self.db
+            .query_block_index_list_by_height(height, size as usize)
     }
 }
 
@@ -367,7 +370,8 @@ impl Storage for StorageService {
         sink: grpcio::UnarySink<EmptyResponse>,
     ) {
         debug!("[GRPC] Storage::insert_block_index");
-        let req = storage_proto::InsertBlockIndexRequest::try_from(req).expect("InsertBlockIndexRequest err.");
+        let req = storage_proto::InsertBlockIndexRequest::try_from(req)
+            .expect("InsertBlockIndexRequest err.");
         self.insert_block_index_inner(&req.height, &req.block_index.expect("block index is none."))
             .expect("rollback err.");
         let resp = EmptyResponse {};
@@ -379,23 +383,22 @@ impl Storage for StorageService {
         &mut self,
         ctx: grpcio::RpcContext,
         req: QueryBlockIndexListByHeightRequest,
-        sink: grpcio::UnarySink<QueryBlockIndexListByHeightResponse>
+        sink: grpcio::UnarySink<QueryBlockIndexListByHeightResponse>,
     ) {
         debug!("[GRPC] Storage::query_block_index_list_by_height");
-        let req = storage_proto::QueryBlockIndexListByHeightRequest::try_from(req).expect("QueryBlockIndexListByHeightRequest err.");
+        let req = storage_proto::QueryBlockIndexListByHeightRequest::try_from(req)
+            .expect("QueryBlockIndexListByHeightRequest err.");
 
-        let size = if req.size > 100 {
-            100
-        } else {
-            req.size
-        };
+        let size = if req.size > 100 { 100 } else { req.size };
 
         let height = match req.begin {
-            Some(b) => {Some(b.height)}
-            None => None
+            Some(b) => Some(b.height),
+            None => None,
         };
 
-        let block_index_list = self.query_block_index_list_by_height_inner(height, size).expect("query block index err.");
+        let block_index_list = self
+            .query_block_index_list_by_height_inner(height, size)
+            .expect("query block index err.");
 
         let resp = storage_proto::QueryBlockIndexListByHeightResponse { block_index_list };
         provide_grpc_response(Ok(resp.into()), ctx, sink);

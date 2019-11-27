@@ -162,8 +162,11 @@ impl TxnManager for MempoolProxy {
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
         counters::COMMITTED_BLOCKS_COUNT.inc();
         counters::NUM_TXNS_PER_BLOCK.observe(txns.len() as f64);
-        let req =
-            Self::gen_commit_transactions_request_with_txn_status(txns.as_slice(), txns_status, timestamp_usecs);
+        let req = Self::gen_commit_transactions_request_with_txn_status(
+            txns.as_slice(),
+            txns_status,
+            timestamp_usecs,
+        );
         self.submit_commit_transactions_request(req)
     }
 }

@@ -124,9 +124,12 @@ impl StateComputer for ExecutionProxy {
             );
         }
 
-        let execute_future =
-            self.executor
-                .execute_block_by_id(txn_vec, grandpa_block_id.clone(), parent_block_id.clone(), block_id.clone());
+        let execute_future = self.executor.execute_block_by_id(
+            txn_vec,
+            grandpa_block_id.clone(),
+            parent_block_id.clone(),
+            block_id.clone(),
+        );
 
         async move {
             match execute_future.await {
@@ -199,93 +202,93 @@ impl StateComputer for ExecutionProxy {
             .boxed()
     }
 
-//    fn commit_with_meta_data(
-//        &self,
-//        meta_data_txn: &BlockMetadata,
-//        block: (Self::Payload, Arc<ProcessedVMOutput>),
-//        finality_proof: LedgerInfoWithSignatures,
-//    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
-//        let version = finality_proof.ledger_info().version();
-//        counters::LAST_COMMITTED_VERSION.set(version as i64);
-//
-//        let pre_commit_instant = Instant::now();
-//        let synchronizer = Arc::clone(&self.synchronizer);
-//
-//        let mut txn_vec = vec![Transaction::BlockMetadata(meta_data_txn.clone())];
-//        txn_vec.extend(
-//            block
-//                .0
-//                .iter()
-//                .map(|txn| Transaction::UserTransaction(txn.clone())),
-//        );
-//        let committable_blocks = vec![CommittableBlock::new(txn_vec, block.1)];
-//
-//        let commit_future = self
-//            .executor
-//            .commit_blocks(committable_blocks, finality_proof);
-//        async move {
-//            match commit_future.await {
-//                Ok(Ok(())) => {
-//                    counters::BLOCK_COMMIT_DURATION_S
-//                        .observe_duration(pre_commit_instant.elapsed());
-//                    if let Err(e) = synchronizer.commit().await {
-//                        error!("failed to notify state synchronizer: {:?}", e);
-//                    }
-//                    Ok(())
-//                }
-//                Ok(Err(e)) => Err(e),
-//                Err(e) => Err(e.into()),
-//            }
-//        }
-//            .boxed()
-//    }
-//
-//    fn rollback(&self, block_id: HashValue) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
-//        let pre_rollback_instant = Instant::now();
-//        let rollback_future = self.executor.rollback_by_block_id(block_id);
-//        async move {
-//            match rollback_future.await {
-//                Ok(Ok(())) => {
-//                    counters::BLOCK_COMMIT_DURATION_S
-//                        .observe_duration(pre_rollback_instant.elapsed());
-//                    Ok(())
-//                }
-//                Ok(Err(e)) => Err(e),
-//                Err(e) => Err(e.into()),
-//            }
-//        }
-//            .boxed()
-//    }
-//
-//    fn process_vm_outputs_to_commit(
-//        transactions: (BlockMetadata, Self::Payload),
-//        output: Arc<ProcessedVMOutput>,
-//        parent_trees: &ExecutedTrees) -> Result<ProcessedVMOutput> {
-//        let mut txn_vec = vec![Transaction::BlockMetadata(transactions.0.clone())];
-//        txn_vec.extend(
-//            transactions
-//                .1
-//                .iter()
-//                .map(|txn| Transaction::UserTransaction(txn.clone())),
-//        );
-//
-//        let len = txn_vec.len();
-//        let mut txn_data_list = vec![];
-//        let total_len = output.transaction_data().len();
-//
-//        for i in 0..len {
-//            txn_data_list[i] = output.transaction_data().get((total_len - len - i)).expect("transaction_data is none.").clone();
-//        }
-//
-//        txn_data_list.reverse();
-//
-//        let vm_out_put =  ProcessedVMOutput::new(
-//            txn_data_list,
-//                                                 output.executed_trees().clone(),
-//            output.validators().clone());
-//
-//        Executor::process_vm_outputs(txn_vec, vm_out_put, parent_trees)
-//    }
+    //    fn commit_with_meta_data(
+    //        &self,
+    //        meta_data_txn: &BlockMetadata,
+    //        block: (Self::Payload, Arc<ProcessedVMOutput>),
+    //        finality_proof: LedgerInfoWithSignatures,
+    //    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
+    //        let version = finality_proof.ledger_info().version();
+    //        counters::LAST_COMMITTED_VERSION.set(version as i64);
+    //
+    //        let pre_commit_instant = Instant::now();
+    //        let synchronizer = Arc::clone(&self.synchronizer);
+    //
+    //        let mut txn_vec = vec![Transaction::BlockMetadata(meta_data_txn.clone())];
+    //        txn_vec.extend(
+    //            block
+    //                .0
+    //                .iter()
+    //                .map(|txn| Transaction::UserTransaction(txn.clone())),
+    //        );
+    //        let committable_blocks = vec![CommittableBlock::new(txn_vec, block.1)];
+    //
+    //        let commit_future = self
+    //            .executor
+    //            .commit_blocks(committable_blocks, finality_proof);
+    //        async move {
+    //            match commit_future.await {
+    //                Ok(Ok(())) => {
+    //                    counters::BLOCK_COMMIT_DURATION_S
+    //                        .observe_duration(pre_commit_instant.elapsed());
+    //                    if let Err(e) = synchronizer.commit().await {
+    //                        error!("failed to notify state synchronizer: {:?}", e);
+    //                    }
+    //                    Ok(())
+    //                }
+    //                Ok(Err(e)) => Err(e),
+    //                Err(e) => Err(e.into()),
+    //            }
+    //        }
+    //            .boxed()
+    //    }
+    //
+    //    fn rollback(&self, block_id: HashValue) -> Pin<Box<dyn Future<Output = Result<()>> + Send>> {
+    //        let pre_rollback_instant = Instant::now();
+    //        let rollback_future = self.executor.rollback_by_block_id(block_id);
+    //        async move {
+    //            match rollback_future.await {
+    //                Ok(Ok(())) => {
+    //                    counters::BLOCK_COMMIT_DURATION_S
+    //                        .observe_duration(pre_rollback_instant.elapsed());
+    //                    Ok(())
+    //                }
+    //                Ok(Err(e)) => Err(e),
+    //                Err(e) => Err(e.into()),
+    //            }
+    //        }
+    //            .boxed()
+    //    }
+    //
+    //    fn process_vm_outputs_to_commit(
+    //        transactions: (BlockMetadata, Self::Payload),
+    //        output: Arc<ProcessedVMOutput>,
+    //        parent_trees: &ExecutedTrees) -> Result<ProcessedVMOutput> {
+    //        let mut txn_vec = vec![Transaction::BlockMetadata(transactions.0.clone())];
+    //        txn_vec.extend(
+    //            transactions
+    //                .1
+    //                .iter()
+    //                .map(|txn| Transaction::UserTransaction(txn.clone())),
+    //        );
+    //
+    //        let len = txn_vec.len();
+    //        let mut txn_data_list = vec![];
+    //        let total_len = output.transaction_data().len();
+    //
+    //        for i in 0..len {
+    //            txn_data_list[i] = output.transaction_data().get((total_len - len - i)).expect("transaction_data is none.").clone();
+    //        }
+    //
+    //        txn_data_list.reverse();
+    //
+    //        let vm_out_put =  ProcessedVMOutput::new(
+    //            txn_data_list,
+    //                                                 output.executed_trees().clone(),
+    //            output.validators().clone());
+    //
+    //        Executor::process_vm_outputs(txn_vec, vm_out_put, parent_trees)
+    //    }
 
     /// Synchronize to a commit that not present locally.
     fn sync_to(

@@ -16,6 +16,7 @@ pub mod test_helper;
 pub mod errors;
 pub mod schema;
 
+mod block_index_store;
 mod change_set;
 mod event_store;
 mod ledger_counters;
@@ -24,12 +25,12 @@ mod pruner;
 mod state_store;
 mod system_store;
 mod transaction_store;
-mod block_index_store;
 
 #[cfg(test)]
 mod libradb_test;
 
 use crate::{
+    block_index_store::BlockIndexStore,
     change_set::{ChangeSet, SealedChangeSet},
     errors::LibraDbError,
     event_store::EventStore,
@@ -40,7 +41,6 @@ use crate::{
     state_store::StateStore,
     system_store::SystemStore,
     transaction_store::TransactionStore,
-    block_index_store::BlockIndexStore,
 };
 use failure::prelude::*;
 use itertools::{izip, zip_eq};
@@ -48,6 +48,7 @@ use lazy_static::lazy_static;
 use libra_crypto::hash::{CryptoHash, HashValue};
 use libra_logger::prelude::*;
 use libra_metrics::OpMetrics;
+use libra_types::block_index::BlockIndex;
 use libra_types::{
     access_path::AccessPath,
     account_address::AccountAddress,
@@ -69,7 +70,6 @@ use schemadb::{ColumnFamilyOptions, ColumnFamilyOptionsMap, DB, DEFAULT_CF_NAME}
 use std::{convert::TryInto, iter::Iterator, path::Path, sync::Arc, time::Instant};
 use storage_proto::StartupInfo;
 use storage_proto::TreeState;
-use libra_types::block_index::BlockIndex;
 
 lazy_static! {
     static ref OP_COUNTER: OpMetrics = OpMetrics::new_and_registered("storage");
@@ -806,10 +806,15 @@ impl LibraDB {
     }
 
     pub fn insert_block_index(&self, height: &u64, block_index: &BlockIndex) -> Result<()> {
-        self.block_index_store.insert_block_index(height, block_index)
+        self.block_index_store
+            .insert_block_index(height, block_index)
     }
 
-    pub fn query_block_index_list_by_height(&self, height: Option<u64>, size: usize) -> Result<Vec<BlockIndex>> {
+    pub fn query_block_index_list_by_height(
+        &self,
+        height: Option<u64>,
+        size: usize,
+    ) -> Result<Vec<BlockIndex>> {
         self.block_index_store.query_block_index(height, size)
     }
 }

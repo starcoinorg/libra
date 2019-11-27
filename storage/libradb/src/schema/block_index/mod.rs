@@ -2,13 +2,13 @@ use crate::schema::{ensure_slice_len_eq, BLOCK_INDEX_CF_NAME};
 use byteorder::{BigEndian, ReadBytesExt};
 use failure::prelude::*;
 use libra_crypto::HashValue;
+use libra_types::block_index::BlockIndex;
 use schemadb::{
     define_schema,
     schema::{KeyCodec, ValueCodec},
 };
 use std::io::Write;
 use std::mem::size_of;
-use libra_types::block_index::BlockIndex;
 
 define_schema!(BlockIndexSchema, Height, BlockIndex, BLOCK_INDEX_CF_NAME);
 
@@ -28,9 +28,7 @@ impl ValueCodec<BlockIndexSchema> for BlockIndex {
         let block_id = HashValue::from_slice(&data[..HashValue::LENGTH])?;
         let parent_block_id = HashValue::from_slice(&data[HashValue::LENGTH..])?;
 
-        Ok(BlockIndex::new(&block_id,
-            &parent_block_id
-        ))
+        Ok(BlockIndex::new(&block_id, &parent_block_id))
     }
 }
 

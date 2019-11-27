@@ -29,11 +29,12 @@ use std::convert::TryFrom;
 use std::{pin::Pin, sync::Arc};
 use storage_proto::{
     proto::storage::{GetStartupInfoRequest, StorageClient},
-    GetAccountStateWithProofByVersionRequest, GetAccountStateWithProofByVersionResponse,
-    GetEpochChangeLedgerInfosRequest, GetEpochChangeLedgerInfosResponse,
-    GetHistoryStartupInfoByBlockIdRequest, GetStartupInfoResponse, GetTransactionsRequest,
-    GetTransactionsResponse, RollbackRequest, InsertBlockIndexRequest, SaveTransactionsRequest, StartupInfo,
-    QueryBlockIndexListByHeightRequest, QueryBlockIndexListByHeightResponse, BlockHeight
+    BlockHeight, GetAccountStateWithProofByVersionRequest,
+    GetAccountStateWithProofByVersionResponse, GetEpochChangeLedgerInfosRequest,
+    GetEpochChangeLedgerInfosResponse, GetHistoryStartupInfoByBlockIdRequest,
+    GetStartupInfoResponse, GetTransactionsRequest, GetTransactionsResponse,
+    InsertBlockIndexRequest, QueryBlockIndexListByHeightRequest,
+    QueryBlockIndexListByHeightResponse, RollbackRequest, SaveTransactionsRequest, StartupInfo,
 };
 
 pub use crate::state_view::VerifiedStateView;
@@ -249,19 +250,31 @@ impl StorageRead for StorageReadServiceClient {
         .boxed()
     }
 
-    fn query_block_index_list_by_height(&self, height: Option<u64>, size: u64) -> Result<Vec<BlockIndex>> {
+    fn query_block_index_list_by_height(
+        &self,
+        height: Option<u64>,
+        size: u64,
+    ) -> Result<Vec<BlockIndex>> {
         let block_height = match height {
-            Some(h) => {Some(BlockHeight{height: h})},
-            None => None
+            Some(h) => Some(BlockHeight { height: h }),
+            None => None,
         };
-        let mut req = QueryBlockIndexListByHeightRequest{begin: block_height, size};
+        let req = QueryBlockIndexListByHeightRequest {
+            begin: block_height,
+            size,
+        };
 
-        block_on(convert_grpc_response(self.client().query_block_index_list_by_height_async(&req.into()))
+        block_on(
+            convert_grpc_response(
+                self.client()
+                    .query_block_index_list_by_height_async(&req.into()),
+            )
             .map(|resp| {
                 let resp = QueryBlockIndexListByHeightResponse::try_from(resp?)?;
                 Ok(resp.block_index_list)
             })
-            .boxed())
+            .boxed(),
+        )
     }
 }
 
@@ -320,8 +333,10 @@ impl StorageWrite for StorageWriteServiceClient {
 
     /// BlockIndex
     fn insert_block_index(&self, height: u64, block_index: BlockIndex) {
-        let mut req =
-            InsertBlockIndexRequest{height, block_index: Some(block_index)};
+        let req = InsertBlockIndexRequest {
+            height,
+            block_index: Some(block_index),
+        };
         convert_grpc_response(self.client().insert_block_index_async(&req.into()))
             .map_ok(|_| ())
             .boxed();
@@ -450,7 +465,11 @@ pub trait StorageRead: Send + Sync {
         start_epoch: u64,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<LedgerInfoWithSignatures>>> + Send>>;
 
-    fn query_block_index_list_by_height(&self, height: Option<u64>, size: u64) -> Result<Vec<BlockIndex>>;
+    fn query_block_index_list_by_height(
+        &self,
+        height: Option<u64>,
+        size: u64,
+    ) -> Result<Vec<BlockIndex>>;
 }
 
 /// This trait defines interfaces to be implemented by a storage write client.

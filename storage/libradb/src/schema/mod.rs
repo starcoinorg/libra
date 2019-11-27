@@ -6,6 +6,7 @@
 //!
 //! All schemas are `pub(crate)` so not shown in rustdoc, refer to the source code to see details.
 
+pub(crate) mod block_index;
 pub(crate) mod epoch_by_version;
 pub(crate) mod event;
 pub(crate) mod event_accumulator;
@@ -19,7 +20,6 @@ pub(crate) mod transaction_accumulator;
 pub mod transaction_by_account;
 pub(crate) mod transaction_info;
 pub(crate) mod validator;
-pub(crate) mod block_index;
 
 use failure::prelude::*;
 use schemadb::ColumnFamilyName;

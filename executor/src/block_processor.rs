@@ -127,7 +127,7 @@ where
             parent_trees: ExecutedTrees::new_empty(),
             parent_id: *PRE_GENESIS_BLOCK_ID,
             id: HashValue::zero(), /* we use 0 as genesis block id in executor internally but it may be different in consensus */
-            pbft:true
+            pbft: true,
         };
         let output = self
             .execute_block(genesis_block)

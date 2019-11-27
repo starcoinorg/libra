@@ -9,8 +9,8 @@ use futures::Future;
 use libra_crypto::HashValue;
 use libra_types::block_metadata::BlockMetadata;
 use libra_types::crypto_proxies::{LedgerInfoWithSignatures, ValidatorChangeEventWithProof};
-use std::{pin::Pin, sync::Arc};
 use libra_types::transaction::TransactionStatus;
+use std::{pin::Pin, sync::Arc};
 
 /// Retrieves and updates the status of transactions on demand (e.g., via talking with Mempool)
 pub trait TxnManager: Send + Sync {
@@ -83,21 +83,21 @@ pub trait StateComputer: Send + Sync {
         finality_proof: LedgerInfoWithSignatures,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
 
-//    /// Send a successful commit. A future is fulfilled when the state is finalized.
-//    fn commit_with_meta_data(
-//        &self,
-//        meta_data_txn: &BlockMetadata,
-//        block: (Self::Payload, Arc<ProcessedVMOutput>),
-//        finality_proof: LedgerInfoWithSignatures,
-//    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
-//
-//    /// Rollback
-//    fn rollback(&self, block_id: HashValue) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
-//
-//    fn process_vm_outputs_to_commit(
-//        transactions: (BlockMetadata, Self::Payload),
-//        output: Arc<ProcessedVMOutput>,
-//        parent_trees: &ExecutedTrees) -> Result<ProcessedVMOutput>;
+    //    /// Send a successful commit. A future is fulfilled when the state is finalized.
+    //    fn commit_with_meta_data(
+    //        &self,
+    //        meta_data_txn: &BlockMetadata,
+    //        block: (Self::Payload, Arc<ProcessedVMOutput>),
+    //        finality_proof: LedgerInfoWithSignatures,
+    //    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+    //
+    //    /// Rollback
+    //    fn rollback(&self, block_id: HashValue) -> Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+    //
+    //    fn process_vm_outputs_to_commit(
+    //        transactions: (BlockMetadata, Self::Payload),
+    //        output: Arc<ProcessedVMOutput>,
+    //        parent_trees: &ExecutedTrees) -> Result<ProcessedVMOutput>;
 
     /// Best effort state synchronization to the given target LedgerInfo.
     /// In case of success (`Result::Ok`) the LI of storage is at the given target.

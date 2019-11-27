@@ -4,6 +4,7 @@ use futures::{executor::block_on, prelude::*};
 use grpc_helpers::{spawn_service_thread_with_drop_closure, ServerHandle};
 use libra_config::config::NodeConfig;
 use libra_crypto::HashValue;
+use libra_types::block_index::BlockIndex;
 use libra_types::proof::AccumulatorConsistencyProof;
 use libra_types::{
     account_address::AccountAddress,
@@ -22,7 +23,6 @@ use std::{
 };
 use storage_client::{StorageRead, StorageWrite};
 use storage_proto::proto::storage::{create_storage, GetAccountStateWithProofByVersionRequest};
-use libra_types::block_index::BlockIndex;
 
 pub fn start_storage_service_and_return_service(
     config: &NodeConfig,
@@ -203,8 +203,12 @@ impl StorageRead for StorageService {
         unimplemented!()
     }
 
-    fn query_block_index_list_by_height(&self, height: Option<u64>, size: u64) -> Result<Vec<BlockIndex>> {
-        self.query_block_index_list_by_height(height, size)
+    fn query_block_index_list_by_height(
+        &self,
+        height: Option<u64>,
+        size: u64,
+    ) -> Result<Vec<BlockIndex>> {
+        self.query_block_index_list_by_height_inner(height, size)
     }
 }
 
@@ -245,6 +249,7 @@ impl StorageWrite for StorageService {
 
     /// BlockIndex
     fn insert_block_index(&self, height: u64, block_index: BlockIndex) {
-        self.insert_block_index_inner(&height, &block_index).expect("insert block index failed.")
+        self.insert_block_index_inner(&height, &block_index)
+            .expect("insert block index failed.")
     }
 }

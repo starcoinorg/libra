@@ -15,7 +15,7 @@ use cuckoo::consensus::{PowCuckoo, PowService, Proof};
 use futures::channel::mpsc;
 use futures::{stream::select, SinkExt, StreamExt, TryStreamExt};
 use libra_crypto::hash::CryptoHash;
-use libra_crypto::hash::{PRE_GENESIS_BLOCK_ID};
+use libra_crypto::hash::PRE_GENESIS_BLOCK_ID;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_prost_ext::MessageExt;
@@ -33,8 +33,8 @@ use network::{
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::{convert::TryFrom, path::PathBuf};
-use tokio::runtime::TaskExecutor;
 use storage_client::{StorageRead, StorageWrite};
+use tokio::runtime::TaskExecutor;
 
 pub struct EventProcessor {
     block_cache_sender: mpsc::Sender<Block<BlockPayloadExt>>,
@@ -66,7 +66,7 @@ impl EventProcessor {
         rollback_flag: bool,
         mine_state: MineStateManager,
         read_storage: Arc<dyn StorageRead>,
-        write_storage: Arc<dyn StorageWrite>
+        write_storage: Arc<dyn StorageWrite>,
     ) -> Self {
         let (block_cache_sender, block_cache_receiver) = mpsc::channel(10);
 
@@ -84,7 +84,7 @@ impl EventProcessor {
             rollback_flag,
             author.clone(),
             read_storage,
-            write_storage
+            write_storage,
         )));
 
         let sync_manager = Arc::new(AtomicRefCell::new(SyncManager::new(
@@ -187,7 +187,6 @@ impl EventProcessor {
                                         solve: payload.solve.clone(),
                                     },
                                 );
-
 
                                 if verify {
                                     if self_peer_id != peer_id {
@@ -309,7 +308,6 @@ impl EventProcessor {
                                             resp_block.try_into().expect("into err."),
                                         )),
                                     };
-
 
                                     Self::send_consensus_msg(
                                         peer_id,

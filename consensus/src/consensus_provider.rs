@@ -12,7 +12,9 @@ use grpcio::{ChannelBuilder, EnvBuilder};
 use libra_mempool::proto::mempool::MempoolClient;
 use state_synchronizer::StateSyncClient;
 use std::sync::Arc;
-use storage_client::{StorageRead, StorageReadServiceClient, StorageWrite, StorageWriteServiceClient};
+use storage_client::{
+    StorageRead, StorageReadServiceClient, StorageWrite, StorageWriteServiceClient,
+};
 use vm_runtime::MoveVM;
 
 /// Public interface to a consensus protocol.
@@ -85,7 +87,7 @@ pub fn make_pow_consensus_provider(
     network_receiver: ConsensusNetworkEvents,
     executor: Arc<Executor<MoveVM>>,
     state_sync_client: Arc<StateSyncClient>,
-    rollback_flag: bool
+    rollback_flag: bool,
 ) -> Box<dyn ConsensusProvider> {
     let read = create_storage_read_client(node_config);
     let write = create_storage_write_client(node_config);
@@ -98,6 +100,6 @@ pub fn make_pow_consensus_provider(
         state_sync_client,
         rollback_flag,
         read,
-        write
+        write,
     ))
 }
