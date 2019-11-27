@@ -11,7 +11,7 @@ use bytecode_verifier::verifier::{
 };
 use ir_to_bytecode::{
     compiler::{compile_module, compile_script},
-    parser::parse_script_or_module,
+    parser::{parse_script, parse_script_or_module},
 };
 use ir_to_bytecode_syntax::ast::ScriptOrModule;
 use language_e2e_tests::account::Account;
@@ -22,7 +22,8 @@ use libra_types::access_path::DataPath;
 use libra_types::channel::channel::ChannelResource;
 use libra_types::channel::witness::Witness;
 use libra_types::transaction::{
-    ChannelActionBody, ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2, ScriptAction,
+    Action, ChannelActionBody, ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2,
+    ScriptAction,
 };
 use libra_types::{
     access_path::AccessPath,
@@ -395,6 +396,10 @@ fn serialize_and_deserialize_module(module: &CompiledModule) -> Result<()> {
     Ok(())
 }
 
+fn is_call(input: &str) -> bool {
+    input.trim().starts_with("0x")
+}
+
 fn eval_transaction(
     exec: &mut FakeExecutor,
     deps: &mut Vec<VerifiedModule>,
@@ -447,7 +452,8 @@ fn eval_transaction(
             })
             .unwrap_or(0);
 
-        let script_action = unwrap_or_abort!(ScriptAction::parse(&transaction.input));
+        let script_action =
+            unwrap_or_abort!(ScriptAction::parse_call_with_args(&transaction.input));
         log.append(EvaluationOutput::Output(Box::new(OutputType::Action(
             script_action.clone(),
         ))));
@@ -485,7 +491,50 @@ fn eval_transaction(
             })
             .unwrap_or(0);
 
-        let script_action = unwrap_or_abort!(ScriptAction::parse(&transaction.input));
+        let input = transaction.input.as_str();
+
+        let script_action = if is_call(input) {
+            ScriptAction::new(Action::parse_call(input)?, transaction.config.args.clone())
+        } else {
+            let parsed_script = unwrap_or_abort!(parse_script(input));
+            log.append(EvaluationOutput::Output(Box::new(OutputType::Ast(
+                ScriptOrModule::Script(parsed_script.clone()),
+            ))));
+
+            // stage 2: compile the script
+            if transaction.config.is_stage_disabled(Stage::Compiler) {
+                return Ok(Status::Success);
+            }
+            log.append(EvaluationOutput::Stage(Stage::Compiler));
+
+            let compiled_script =
+                unwrap_or_abort!(compile_script(sender_addr, parsed_script, &*deps)).0;
+            log.append(EvaluationOutput::Output(Box::new(
+                OutputType::CompiledScript(compiled_script.clone()),
+            )));
+
+            // stage 3: verify the script
+            if transaction.config.is_stage_disabled(Stage::Verifier) {
+                return Ok(Status::Success);
+            }
+            log.append(EvaluationOutput::Stage(Stage::Verifier));
+            let compiled_script =
+                unwrap_or_abort!(do_verify_script(compiled_script, &*deps)).into_inner();
+
+            // stage 4: serializer round trip
+            if !transaction.config.is_stage_disabled(Stage::Serializer) {
+                log.append(EvaluationOutput::Stage(Stage::Serializer));
+                unwrap_or_abort!(serialize_and_deserialize_script(&compiled_script));
+            }
+
+            // stage 5: execute the script
+            if transaction.config.is_stage_disabled(Stage::Runtime) {
+                return Ok(Status::Success);
+            }
+            let mut blob = vec![];
+            compiled_script.serialize(&mut blob)?;
+            ScriptAction::new_code(blob, transaction.config.args.clone())
+        };
         log.append(EvaluationOutput::Output(Box::new(OutputType::Action(
             script_action.clone(),
         ))));

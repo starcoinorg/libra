@@ -68,7 +68,7 @@ impl WriteSet {
 
     /// Check whether the write set modifies the `participant_address`'s private channel resources.
     /// FIXME: implement me.
-    pub fn contains_channel_resource(&self, participant_address: &AccountAddress) -> bool {
+    pub fn contains_channel_resource(&self, _participant_address: &AccountAddress) -> bool {
         unimplemented!()
     }
 

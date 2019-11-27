@@ -38,7 +38,7 @@ mod transaction_argument;
 
 pub use module::Module;
 pub use script::{Script, SCRIPT_HASH_LENGTH};
-pub use script_action::ScriptAction;
+pub use script_action::{Action, ScriptAction};
 
 pub use channel_transaction_payload::{
     ChannelActionBody, ChannelScriptBody, ChannelTransactionPayload, ChannelTransactionPayloadBody,
