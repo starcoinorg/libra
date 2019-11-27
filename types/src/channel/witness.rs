@@ -69,6 +69,10 @@ impl Witness {
         &self.data.write_set
     }
 
+    pub fn into_write_set(self) -> WriteSet {
+        self.data.write_set
+    }
+
     pub fn signatures(&self) -> &[Ed25519Signature] {
         self.signatures.as_slice()
     }
