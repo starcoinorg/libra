@@ -466,7 +466,7 @@ fn test_put_blob_sets() {
         let mut iter = keys.clone().into_iter().zip(values.clone().into_iter());
         let db = MockTreeStore::default();
         let tree = MerklePatriciaTree::new(&db);
-        for version in 0..10 {
+        for _version in 0..10 {
             let mut keyed_blob_set = vec![];
             for _ in 0..total_updates / 10 {
                 keyed_blob_set.push(iter.next().unwrap());
@@ -553,7 +553,7 @@ fn many_versions_get_proof_and_verify_tree_root(seed: &[u8], num_versions: usize
         kvs.push((key, value.clone(), new_value.clone()));
     }
 
-    for (idx, kvs) in kvs.iter().enumerate() {
+    for (_idx, kvs) in kvs.iter().enumerate() {
         let (root, batch) = tree
             .put_blob_set(HashValue::zero(), vec![(kvs.0, kvs.1.clone())])
             .unwrap();
@@ -562,7 +562,7 @@ fn many_versions_get_proof_and_verify_tree_root(seed: &[u8], num_versions: usize
     }
 
     // Update value of all keys
-    for (idx, kvs) in kvs.iter().enumerate() {
+    for (_idx, kvs) in kvs.iter().enumerate() {
         let (root, batch) = tree
             .put_blob_set(HashValue::zero(), vec![(kvs.0, kvs.2.clone())])
             .unwrap();
@@ -615,7 +615,7 @@ proptest! {
                 )
             })
     ) {
-        let (db, version) = init_mock_db(&existent_kvs);
+        let (db, _version) = init_mock_db(&existent_kvs);
         let tree = MerklePatriciaTree::new(&db);
 
         test_existent_keys_impl(&tree, &existent_kvs);
@@ -637,7 +637,7 @@ proptest! {
         kvs.insert(key1, accounts[0].clone());
         kvs.insert(key2, accounts[1].clone());
 
-        let (db, version) = init_mock_db(&kvs);
+        let (db, _version) = init_mock_db(&kvs);
         let tree = MerklePatriciaTree::new(&db);
 
         test_existent_keys_impl(&tree, &kvs);

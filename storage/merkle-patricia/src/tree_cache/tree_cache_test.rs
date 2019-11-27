@@ -45,7 +45,6 @@ fn test_root_node() {
 
 #[test]
 fn test_freeze_with_delete() {
-    let next_version = 0;
     let db = MockTreeStore::default();
     let mut cache = TreeCache::new(&db, HashValue::zero(),0);
 

@@ -93,7 +93,7 @@ fn assert_success(
     db: &MockTreeStore,
     expected_root_hash: HashValue,
     btree: &BTreeMap<HashValue, AccountStateBlob>,
-    version: Version,
+    _version: Version,
 ) {
     let tree = MerklePatriciaTree::new(db);
     for (key, value) in btree {
