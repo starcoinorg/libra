@@ -61,7 +61,7 @@ fn test_n_leaves_multiple_versions(n: usize) {
     }
 }
 
-fn run_tests(db: &MockTreeStore, btree: &BTreeMap<HashValue, AccountStateBlob>, version: Version) {
+fn run_tests(db: &MockTreeStore, btree: &BTreeMap<HashValue, AccountStateBlob>, _version: Version) {
     {
         let iter = JellyfishMerkleIterator::new(db, HashValue::zero()).unwrap();
         assert_eq!(

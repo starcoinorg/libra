@@ -288,7 +288,7 @@ fn test_batch_insertion() {
         let db = MockTreeStore::default();
         let tree = MerklePatriciaTree::new(&db);
 
-        let (_roots, batch) = tree.put_blob_sets(batches, HashValue::zero()).unwrap();
+        let (_roots, batch) = tree.put_blob_sets(batches,0 ,HashValue::zero()).unwrap();
         db.write_tree_update_batch(batch).unwrap();
         verify_fn(&tree);
 
@@ -496,7 +496,7 @@ fn test_put_blob_sets() {
             }
             blob_sets.push(keyed_blob_set);
         }
-        let (root_hashes, batch) = tree.put_blob_sets(blob_sets, HashValue::zero()).unwrap();
+        let (root_hashes, batch) = tree.put_blob_sets(blob_sets, 0,HashValue::zero()).unwrap();
         assert_eq!(root_hashes, root_hashes_one_by_one);
         assert_eq!(batch, batch_one_by_one);
     }

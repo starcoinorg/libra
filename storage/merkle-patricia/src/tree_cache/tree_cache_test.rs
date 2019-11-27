@@ -19,7 +19,7 @@ fn random_leaf_with_key(next_hash: HashValue) -> (Node, NodeKey) {
 #[test]
 fn test_get_node() {
     let db = MockTreeStore::default();
-    let cache = TreeCache::new(&db, HashValue::zero());
+    let cache = TreeCache::new(&db, HashValue::zero(),0);
 
     let (node, node_key) = random_leaf_with_key(HashValue::zero());
     db.put_node(node_key.clone(), node.clone()).unwrap();
@@ -30,7 +30,7 @@ fn test_get_node() {
 #[test]
 fn test_root_node() {
     let db = MockTreeStore::default();
-    let mut cache = TreeCache::new(&db, HashValue::zero());
+    let mut cache = TreeCache::new(&db, HashValue::zero(),0);
     assert_eq!(
         *cache.get_root_node_key(),
         NodeKey::new_empty_path(HashValue::zero())
@@ -47,7 +47,7 @@ fn test_root_node() {
 fn test_freeze_with_delete() {
     let next_version = 0;
     let db = MockTreeStore::default();
-    let mut cache = TreeCache::new(&db, HashValue::zero());
+    let mut cache = TreeCache::new(&db, HashValue::zero(),0);
 
     assert_eq!(
         *cache.get_root_node_key(),

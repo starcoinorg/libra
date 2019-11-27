@@ -90,6 +90,7 @@ use node_type::{Child, Children, InternalNode, LeafNode, Node, NodeKey};
 use proptest_derive::Arbitrary;
 use std::collections::{BTreeMap, BTreeSet};
 use tree_cache::TreeCache;
+use libra_types::transaction::Version;
 
 /// The hardcoded maximum height of a [`JellyfishMerkleTree`] in nibbles.
 const ROOT_NIBBLE_HEIGHT: usize = HashValue::LENGTH * 2;
@@ -127,8 +128,8 @@ pub type StaleNodeIndexBatch = BTreeSet<StaleNodeIndex>;
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 pub struct StaleNodeIndex {
-    /// The hash since when the node is overwritten and becomes stale.
-    pub stale_since_hash: HashValue,
+    /// The version since when the node is overwritten and becomes stale.
+    pub stale_since_version: Version,
     /// The [`NodeKey`](node_type/struct.NodeKey.html) identifying the node associated with this
     /// record.
     pub node_key: NodeKey,
@@ -169,7 +170,7 @@ where
         first_hash: HashValue,
         blob_set: Vec<(HashValue, AccountStateBlob)>,
     ) -> Result<(HashValue, TreeUpdateBatch)> {
-        let (root_hashes, tree_update_batch) = self.put_blob_sets(vec![blob_set], first_hash)?;
+        let (root_hashes, tree_update_batch) = self.put_blob_sets(vec![blob_set], 0,first_hash)?;
         assert_eq!(
             root_hashes.len(),
             1,
@@ -222,9 +223,10 @@ where
     pub fn put_blob_sets(
         &self,
         blob_sets: Vec<Vec<(HashValue, AccountStateBlob)>>,
+        first_version: Version,
         first_hash: HashValue,
     ) -> Result<(Vec<HashValue>, TreeUpdateBatch)> {
-        let mut tree_cache = TreeCache::new(self.reader, first_hash);
+        let mut tree_cache = TreeCache::new(self.reader, first_hash, first_version);
         for (_idx, blob_set) in blob_sets.into_iter().enumerate() {
             assert!(
                 !blob_set.is_empty(),
