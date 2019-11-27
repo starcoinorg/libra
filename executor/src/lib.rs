@@ -562,36 +562,6 @@ where
     pub fn committed_trees(&self) -> ExecutedTrees {
         (*self.committed_trees.lock().unwrap()).clone()
     }
-
-    /// Rollback
-    pub fn rollback_by_block_id(&self, block_id: HashValue) -> oneshot::Receiver<Result<()>> {
-        let (resp_sender, resp_receiver) = oneshot::channel();
-        match self
-            .command_sender
-            .lock()
-            .expect("Failed to lock mutex.")
-            .as_ref()
-        {
-            Some(sender) => sender
-                .send(Command::RollbackBlock {
-                    block_id,
-                    resp_sender,
-                })
-                .expect("Did block processor thread panic?"),
-            None => resp_sender
-                .send(Err(format_err!("Executor is shutting down.")))
-                .expect("Failed to send error message."),
-        }
-        resp_receiver
-    }
-
-//    pub fn process_vm_outputs(
-//        transactions: Vec<Transaction>,
-//        output: ProcessedVMOutput,
-//        parent_trees: &ExecutedTrees,
-//    ) -> Result<ProcessedVMOutput> {
-//        BlockProcessor::process_vm_outputs();
-//    }
 }
 
 impl<V> Drop for Executor<V> {
@@ -672,10 +642,6 @@ enum Command {
     },
     ExecuteAndCommitChunk {
         chunk: Chunk,
-        resp_sender: oneshot::Sender<Result<()>>,
-    },
-    RollbackBlock {
-        block_id: HashValue,
         resp_sender: oneshot::Sender<Result<()>>,
     },
 }

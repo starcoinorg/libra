@@ -159,39 +159,6 @@ where
         info!("GENESIS transaction is committed.")
     }
 
-    /// Rollback
-    pub fn rollback(&mut self, block_id: HashValue) -> Result<()> {
-        // 1. rollback
-        self.storage_write_client.rollback_by_block_id(block_id);
-
-        // 2. get StartInfo
-        let startup_info = self
-            .storage_read_client
-            .get_startup_info()
-            .expect("Failed to read startup info from storage.")
-            .expect("block not exist err.");
-
-        // 3. Reset ExecutedTrees
-        let state_tree = Arc::new(SparseMerkleTree::new(
-            startup_info.committed_tree_state.account_state_root_hash,
-        ));
-        let transaction_accumulator = Arc::new(
-            InMemoryAccumulator::new(
-                startup_info
-                    .committed_tree_state
-                    .ledger_frozen_subtree_hashes,
-                startup_info.committed_tree_state.version + 1,
-            )
-            .expect("The startup info read from storage should be valid."),
-        );
-        self.committed_trees
-            .lock()
-            .unwrap()
-            .reset(state_tree, transaction_accumulator);
-
-        Ok(())
-    }
-
     /// Keeps processing blocks until the command sender is disconnected.
     pub fn run(&mut self) {
         loop {
@@ -294,21 +261,6 @@ where
                 if let Err(_err) = resp_sender.send(res) {
                     warn!("Failed to send execute and commit chunk response.");
                 }
-            }
-            Command::RollbackBlock {
-                block_id,
-                resp_sender,
-            } => {
-                let res = self.rollback(block_id).map_err(|e| {
-                    security_log(SecurityEvent::InvalidBlock)
-                        .error(&e)
-                        .data(block_id)
-                        .log();
-                    e
-                });
-                resp_sender
-                    .send(res)
-                    .expect("Failed to send rollback response.");
             }
         }
     }

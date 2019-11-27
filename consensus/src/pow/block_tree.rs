@@ -99,13 +99,6 @@ impl BlockTree {
         if new_root {
             let old_root = self.root_hash();
 
-            //new root
-            self.height = new_block_info.height();
-            self.main_chain.borrow_mut().insert(new_block_info.height(), new_block_info.block_index().clone());
-            let mut hash_list = LinkedList::new();
-            hash_list.push_front(new_block_info.id().clone());
-            self.indexes.insert(new_block_info.height(), hash_list);
-
             //rollback
             if old_root != new_block_info.parent_id() {
                 let (ancestors, pre_block_index) = self.find_ancestor_until_main_chain(&new_block_info.parent_id()).expect("find ancestor failed.");
@@ -118,9 +111,7 @@ impl BlockTree {
                 // commit
                 for ancestor in ancestors {
                     let block_info = self.find_block_info_by_block_id(&ancestor).expect("ancestor block info is none.");
-                    self.commit_block(block_info.timestamp_usecs(),
-                                      block_info.output().expect("output is none."),
-                                      block_info.commit_data().expect("commit_data is none.")).await;
+                    self.commit_block(block_info).await;
                 }
             } else {
                 if self.rollback_mode && (self.height - self.tail_height) > 2 {//rollback mode
@@ -129,16 +120,17 @@ impl BlockTree {
                     info!("Rollback mode: Block Id {:?} , Parent Id {:?}, Grandpa Id {:?}", new_block_info.id(), new_block_info.parent_id(), grandpa_id);
                     self.write_storage.rollback_by_block_id(grandpa_id);
 
-                    self.commit_block(block_info.timestamp_usecs(),
-                                      block_info.output().expect("output is none."),
-                                      block_info.commit_data().expect("commit_data is none.")).await;
+                    self.commit_block(block_info).await;
                 }
             }
 
             // save self
-            self.commit_block(new_block_info.timestamp_usecs(),
-                              new_block_info.output().expect("output is none."),
-                              new_block_info.commit_data().expect("commit_data is none.")).await;
+            self.commit_block(&new_block_info).await;
+
+            self.height = new_block_info.height();
+            let mut hash_list = LinkedList::new();
+            hash_list.push_front(new_block_info.id().clone());
+            self.indexes.insert(new_block_info.height(), hash_list);
         } else {
             self.indexes.get_mut(&new_block_info.height()).unwrap().push_back(new_block_info.id().clone());
         }
@@ -147,13 +139,17 @@ impl BlockTree {
         self.id_to_block.insert(new_block_info.id().clone(), new_block_info);
     }
 
-    async fn commit_block(&self, timestamp_usecs: u64, vm_output: ProcessedVMOutput, commit_data: CommitData) {
+    async fn commit_block(&self, block_info: &BlockInfo) {
+        let timestamp_usecs = block_info.timestamp_usecs();
+        let vm_output = block_info.output().expect("output is none.");
+        let commit_data = block_info.commit_data().expect("commit_data is none.");
+        let height = block_info.height();
+        let block_index = block_info.block_index();
         // 1. remove tx from mempool
         if commit_data.txns_len() > 0 {
             let signed_txns = commit_data.signed_txns();
             let signed_txns_len = signed_txns.len();
             let txns_status_len = vm_output.state_compute_result().status().len();
-
 
             let mut txns_status = vec![];
             for i in 0..signed_txns_len {
@@ -173,6 +169,9 @@ impl BlockTree {
 
         // 2. commit
         self.write_storage.save_transactions(commit_data.txns_to_commit, commit_data.first_version, commit_data.ledger_info_with_sigs).expect("save transactions failed.");
+
+        // 3. update main chain
+        self.main_chain.borrow_mut().insert(height, block_index);
     }
 
 
