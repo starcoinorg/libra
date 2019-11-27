@@ -4,14 +4,37 @@
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+import 0x0.LibraAccount;
+main(){
+    LibraAccount.enable_channel();
+    return;
+}
 
-0x0.Channel.do_nothing
+//! new-transaction
+//! sender: bob
+import 0x0.LibraAccount;
+main(){
+    LibraAccount.enable_channel();
+    return;
+}
 
 //! new-transaction
 //! sender: alice
 //! channel: ch1
 //! proposer: alice
+import 0x0.ChannelTransaction;
+main() {
+   assert(ChannelTransaction.is_channel_txn(), 111);
+   return;
+}
 
-0x0.LibraAccount.open_channel {{bob}} 50000
+//! new-transaction
+//! sender: alice
+//! channel: ch1
+//! proposer: alice
+//! args: {{bob}},50000,50000
+
+0x0.LibraAccount.open_channel
+
+// check: ABORTED
+// check: 1111

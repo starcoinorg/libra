@@ -170,16 +170,12 @@ where
                         verified_txn,
                     } = txn_state
                         .expect("script-based transactions should always have associated state");
-                    match verified_txn {
-                        VerTxn::ScriptAction() => {}
+                    let func = match verified_txn {
+                        VerTxn::ScriptAction(func) => func,
                         _ => unreachable!("expects TransactionPayload::ScriptAction"),
                     };
-                    //TODO use txn_executor.interpeter_entrypoint
-                    let action_output = match txn_executor.execute_function(
-                        action_body.action().module(),
-                        action_body.action().function(),
-                        convert_txn_args(action_body.action().args().to_vec()),
-                    ) {
+                    let (_, args) = action_body.action.into_inner();
+                    let action_output = match txn_executor.interpeter_entrypoint(func, args) {
                         Ok(_) => txn_executor.transaction_cleanup(vec![]),
                         Err(err) => match err.status_type() {
                             StatusType::InvariantViolation => {
@@ -209,16 +205,12 @@ where
                 mut txn_executor,
                 verified_txn,
             } = txn_state.expect("script-based transactions should always have associated state");
-            match verified_txn {
-                VerTxn::ScriptAction() => {}
+            let func = match verified_txn {
+                VerTxn::ScriptAction(func) => func,
                 _ => unreachable!("expects TransactionPayload::ScriptAction"),
             };
-            //TODO use txn_executor.interpeter_entrypoint
-            let action_output = match txn_executor.execute_function(
-                channel_payload.action().module(),
-                channel_payload.action().function(),
-                convert_txn_args(channel_payload.action().args().to_vec()),
-            ) {
+            let args = channel_payload.action().args().to_vec();
+            let action_output = match txn_executor.interpeter_entrypoint(func, args) {
                 Ok(_) => txn_executor.transaction_cleanup(vec![]),
                 Err(err) => match err.status_type() {
                     StatusType::InvariantViolation => {
