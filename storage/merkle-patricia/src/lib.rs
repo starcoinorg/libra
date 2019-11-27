@@ -68,7 +68,7 @@
 
 pub mod iterator;
 #[cfg(test)]
-mod jellyfish_merkle_test;
+mod merkle_patricia_test;
 #[cfg(test)]
 mod mock_tree_store;
 mod nibble_path;
@@ -250,9 +250,9 @@ where
         let mut nibble_iter = nibble_path.nibbles();
 
         // Start insertion from the root node.
-        let (new_root_node_key, _) =
+        let (mut new_root_node_key, node) =
             Self::insert_at(root_node_key.clone(), &mut nibble_iter, blob, tree_cache)?;
-
+        new_root_node_key.set_hash(node.hash());
         tree_cache.set_root_node_key(new_root_node_key);
         Ok(())
     }
@@ -415,18 +415,19 @@ where
         assert_ne!(existing_leaf_index, new_leaf_index);
 
         let mut children = Children::new();
+        let existing_leaf_node_clone = existing_leaf_node.clone();
         children.insert(
             existing_leaf_index,
-            Child::new(existing_leaf_node.hash(), true /* is_leaf */),
+            Child::new(existing_leaf_node_clone.hash(), true /* is_leaf */),
         );
-        node_key = NodeKey::new(HashValue::zero(), common_nibble_path.clone());
+        node_key = NodeKey::new(node_key.hash(), common_nibble_path.clone());
         tree_cache.put_node(
-            node_key.gen_child_node_key(node_key.hash(), existing_leaf_index),
-            existing_leaf_node.into(),
+            node_key.gen_child_node_key(existing_leaf_node_clone.hash(), existing_leaf_index),
+            existing_leaf_node_clone.clone().into(),
         )?;
 
         let (_, new_leaf_node) = Self::create_leaf_node(
-            node_key.gen_child_node_key(node_key.hash(), new_leaf_index),
+            node_key.gen_child_node_key(existing_leaf_node_clone.hash(), new_leaf_index),
             nibble_iter,
             blob,
             tree_cache,
@@ -438,17 +439,15 @@ where
 
         let internal_node = InternalNode::new(children);
         let mut next_internal_node = internal_node.clone();
-        tree_cache.put_node(node_key.clone(), internal_node.into())?;
+        tree_cache.put_node(
+            NodeKey::new(internal_node.hash(), common_nibble_path.clone()),
+            internal_node.into(),
+        )?;
 
         for _i in 0..num_common_nibbles_below_internal {
             let nibble = common_nibble_path
                 .pop()
                 .expect("Common nibble_path below internal node ran out of nibble");
-            //TODO is internal_node.hash()?
-            node_key = NodeKey::new(
-                next_internal_node.clone().hash(),
-                common_nibble_path.clone(),
-            );
             let mut children = Children::new();
             children.insert(
                 nibble,
@@ -456,6 +455,10 @@ where
             );
             let internal_node = InternalNode::new(children);
             next_internal_node = internal_node.clone();
+            node_key = NodeKey::new(
+                next_internal_node.clone().hash(),
+                common_nibble_path.clone(),
+            );
             tree_cache.put_node(node_key.clone(), next_internal_node.clone().into())?;
         }
 
@@ -476,7 +479,8 @@ where
                 .expect("LeafNode must have full nibble path."),
             blob,
         );
-
+        let nibble_path = node_key.nibble_path().clone();
+        let node_key = NodeKey::new(new_leaf_node.hash(), nibble_path);
         tree_cache.put_node(node_key.clone(), new_leaf_node.clone())?;
         Ok((node_key, new_leaf_node))
     }

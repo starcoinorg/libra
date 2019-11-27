@@ -29,9 +29,9 @@ pub fn init_mock_db(kvs: &HashMap<HashValue, AccountStateBlob>) -> (MockTreeStor
     let db = MockTreeStore::default();
     let tree = MerklePatriciaTree::new(&db);
 
-    for (i, (key, value)) in kvs.iter().enumerate() {
+    for (_i, (key, value)) in kvs.iter().enumerate() {
         let (_root_hash, write_batch) = tree
-            .put_blob_set(vec![(*key, value.clone())], i as Version)
+            .put_blob_set(HashValue::zero(), vec![(*key, value.clone())])
             .unwrap();
         db.write_tree_update_batch(write_batch).unwrap();
     }

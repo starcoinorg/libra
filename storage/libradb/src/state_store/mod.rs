@@ -39,9 +39,9 @@ impl StateStore {
     pub fn get_account_state_with_proof_by_version(
         &self,
         address: AccountAddress,
-        version: Version,
+        root_hash: HashValue,
     ) -> Result<(Option<AccountStateBlob>, SparseMerkleProof)> {
-        let (blob, proof) = MerklePatriciaTree::new(self).get_with_proof(address.hash())?;
+        let (blob, proof) = MerklePatriciaTree::new(self).get_with_proof(root_hash)?;
         Ok((blob, proof))
     }
 

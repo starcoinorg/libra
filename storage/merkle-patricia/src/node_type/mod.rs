@@ -81,6 +81,7 @@ impl NodeKey {
 
     /// Generates parent node key at the same version based on this node key.
     pub fn gen_parent_node_key(&self) -> Self {
+        //FixMe
         let mut node_nibble_path = self.nibble_path().clone();
         assert!(
             node_nibble_path.pop().is_some(),
@@ -106,7 +107,6 @@ impl NodeKey {
     /// Recovers from serialized bytes in physical storage.
     pub fn decode(val: &[u8]) -> Result<NodeKey> {
         let mut reader = Cursor::new(val);
-        //TODO read hash
         let mut hash_bytes: [u8; HashValue::LENGTH] = [0; HashValue::LENGTH];
         let bufs = &mut [IoSliceMut::new(&mut hash_bytes)];
         reader.read_vectored(bufs)?;
@@ -659,4 +659,42 @@ pub enum NodeDecodeError {
         existing, leaves
     )]
     ExtraLeaves { existing: u16, leaves: u16 },
+}
+
+/// Helper function to serialize version in a more efficient encoding.
+/// We use a super simple encoding - the high bit is set if more bytes follow.
+fn serialize_u64_varint(mut num: u64, binary: &mut Vec<u8>) {
+    for _ in 0..8 {
+        let low_bits = num as u8 & 0x7f;
+        num >>= 7;
+        let more = (num > 0) as u8;
+        binary.push(low_bits | more << 7);
+        if more == 0 {
+            return;
+        }
+    }
+    // Last byte is encoded raw; this means there are no bad encodings.
+    assert_ne!(num, 0);
+    assert!(num <= 0xff);
+    binary.push(num as u8);
+}
+
+/// Helper function to deserialize versions from above encoding.
+fn deserialize_u64_varint<T>(reader: &mut T) -> Result<u64>
+where
+    T: Read,
+{
+    let mut num = 0u64;
+    for i in 0..8 {
+        let byte = reader.read_u8()?;
+        let more = (byte & 0x80) != 0;
+        num |= u64::from(byte & 0x7f) << (i * 7);
+        if !more {
+            return Ok(num);
+        }
+    }
+    // Last byte is encoded as is.
+    let byte = reader.read_u8()?;
+    num |= u64::from(byte) << 56;
+    Ok(num)
 }

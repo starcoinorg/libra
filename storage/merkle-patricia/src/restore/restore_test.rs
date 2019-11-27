@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    mock_tree_store::MockTreeStore, restore::JellyfishMerkleRestore, test_helper::init_mock_db,
+    mock_tree_store::MockTreeStore, restore::MerklePatriciaRestore, test_helper::init_mock_db,
     MerklePatriciaTree, TreeReader,
 };
 use libra_crypto::HashValue;
@@ -18,15 +18,15 @@ proptest! {
         btree in btree_map(any::<HashValue>(), any::<AccountStateBlob>(), 1..1000),
     ) {
         let (db, version) = init_mock_db(&btree.clone().into_iter().collect());
-        let tree = JellyfishMerkleTree::new(&db);
-        let expected_root_hash = tree.get_root_hash(version).unwrap();
+        let tree = MerklePatriciaTree::new(&db);
+        let expected_root_hash = tree.get_root_hash().unwrap();
 
         // For this test, restore everything without interruption.
         let restore_db = MockTreeStore::default();
         let mut restore =
-            JellyfishMerkleRestore::new(&restore_db, version, expected_root_hash).unwrap();
+            MerklePatriciaRestore::new(&restore_db, expected_root_hash).unwrap();
         for (key, value) in &btree {
-            let proof = tree.get_range_proof(*key, version).unwrap();
+            let proof = tree.get_range_proof(*key).unwrap();
             restore
                 .add_chunk(vec![(*key, value.clone())], proof)
                 .unwrap();
@@ -45,16 +45,16 @@ proptest! {
             })
     ) {
         let (db, version) = init_mock_db(&all.clone().into_iter().collect());
-        let tree = JellyfishMerkleTree::new(&db);
-        let expected_root_hash = tree.get_root_hash(version).unwrap();
+        let tree = MerklePatriciaTree::new(&db);
+        let expected_root_hash = tree.get_root_hash().unwrap();
         let batch1: Vec<_> = all.clone().into_iter().take(batch1_size).collect();
 
         let restore_db = MockTreeStore::default();
         {
             let mut restore =
-                JellyfishMerkleRestore::new(&restore_db, version, expected_root_hash).unwrap();
+                MerklePatriciaRestore::new(&restore_db, expected_root_hash).unwrap();
             let proof = tree
-                .get_range_proof(batch1.last().map(|(key, _value)| *key).unwrap(), version)
+                .get_range_proof(batch1.last().map(|(key, _value)| *key).unwrap())
                 .unwrap();
             restore.add_chunk(batch1, proof).unwrap();
             // Do not call `finish`.
@@ -75,11 +75,10 @@ proptest! {
                 .collect();
 
             let mut restore =
-                JellyfishMerkleRestore::new(&restore_db, version, expected_root_hash).unwrap();
+                MerklePatriciaRestore::new(&restore_db, expected_root_hash).unwrap();
             let proof = tree
                 .get_range_proof(
-                    remaining_accounts.last().map(|(key, _value)| *key).unwrap(),
-                    version,
+                    remaining_accounts.last().map(|(key, _value)| *key).unwrap()
                 )
                 .unwrap();
             restore.add_chunk(remaining_accounts, proof).unwrap();
@@ -98,9 +97,9 @@ fn assert_success(
 ) {
     let tree = MerklePatriciaTree::new(db);
     for (key, value) in btree {
-        assert_eq!(tree.get(*key, version).unwrap(), Some(value.clone()));
+        assert_eq!(tree.get(*key).unwrap(), Some(value.clone()));
     }
 
-    let actual_root_hash = tree.get_root_hash(version).unwrap();
+    let actual_root_hash = tree.get_root_hash().unwrap();
     assert_eq!(actual_root_hash, expected_root_hash);
 }

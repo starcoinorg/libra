@@ -37,7 +37,7 @@ fn test_n_leaves_same_version(n: usize) {
     }
 
     let (_root_hash, batch) = tree
-        .put_blob_set(btree.clone().into_iter().collect(), 0 /* version */)
+        .put_blob_set(HashValue::zero(), btree.clone().into_iter().collect())
         .unwrap();
     db.write_tree_update_batch(batch).unwrap();
 
@@ -55,7 +55,7 @@ fn test_n_leaves_multiple_versions(n: usize) {
         let key = HashValue::random_with_rng(&mut rng);
         let value = AccountStateBlob::from(i.to_be_bytes().to_vec());
         assert_eq!(btree.insert(key, value.clone()), None);
-        let (_root_hash, batch) = tree.put_blob_set(vec![(key, value)], i as Version).unwrap();
+        let (_root_hash, batch) = tree.put_blob_set(key, vec![(key, value)]).unwrap();
         db.write_tree_update_batch(batch).unwrap();
         run_tests(&db, &btree, i as Version);
     }
@@ -63,7 +63,7 @@ fn test_n_leaves_multiple_versions(n: usize) {
 
 fn run_tests(db: &MockTreeStore, btree: &BTreeMap<HashValue, AccountStateBlob>, version: Version) {
     {
-        let iter = JellyfishMerkleIterator::new(db, version, HashValue::zero()).unwrap();
+        let iter = JellyfishMerkleIterator::new(db, HashValue::zero()).unwrap();
         assert_eq!(
             iter.collect::<Result<Vec<_>>>().unwrap(),
             btree.clone().into_iter().collect::<Vec<_>>(),
@@ -74,7 +74,7 @@ fn run_tests(db: &MockTreeStore, btree: &BTreeMap<HashValue, AccountStateBlob>, 
         let ith_key = *btree.keys().nth(i).unwrap();
 
         {
-            let iter = JellyfishMerkleIterator::new(db, version, ith_key).unwrap();
+            let iter = JellyfishMerkleIterator::new(db, ith_key).unwrap();
             assert_eq!(
                 iter.collect::<Result<Vec<_>>>().unwrap(),
                 btree.clone().into_iter().skip(i).collect::<Vec<_>>(),
@@ -83,7 +83,7 @@ fn run_tests(db: &MockTreeStore, btree: &BTreeMap<HashValue, AccountStateBlob>, 
 
         {
             let ith_key_plus_one = plus_one(ith_key);
-            let iter = JellyfishMerkleIterator::new(db, version, ith_key_plus_one).unwrap();
+            let iter = JellyfishMerkleIterator::new(db, ith_key_plus_one).unwrap();
             assert_eq!(
                 iter.collect::<Result<Vec<_>>>().unwrap(),
                 btree.clone().into_iter().skip(i + 1).collect::<Vec<_>>(),
@@ -93,8 +93,7 @@ fn run_tests(db: &MockTreeStore, btree: &BTreeMap<HashValue, AccountStateBlob>, 
 
     {
         let iter =
-            JellyfishMerkleIterator::new(db, version, HashValue::new([0xFF; HashValue::LENGTH]))
-                .unwrap();
+            JellyfishMerkleIterator::new(db, HashValue::new([0xFF; HashValue::LENGTH])).unwrap();
         assert_eq!(iter.collect::<Result<Vec<_>>>().unwrap(), vec![]);
     }
 }

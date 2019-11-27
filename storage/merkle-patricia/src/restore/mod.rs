@@ -95,7 +95,7 @@ impl InternalInfo {
     }
 }
 
-pub struct JellyfishMerkleRestore<'a, S> {
+pub struct MerklePatriciaRestore<'a, S> {
     /// The underlying storage.
     store: &'a S,
 
@@ -148,7 +148,7 @@ pub struct JellyfishMerkleRestore<'a, S> {
     expected_root_hash: HashValue,
 }
 
-impl<'a, S> JellyfishMerkleRestore<'a, S>
+impl<'a, S> MerklePatriciaRestore<'a, S>
 where
     S: 'a + TreeReader + TreeWriter,
 {

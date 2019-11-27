@@ -20,43 +20,34 @@ fn hash_leaf(key: HashValue, value_hash: HashValue) -> HashValue {
 
 // Generate a random node key with 63 nibbles.
 fn random_63nibbles_node_key() -> NodeKey {
-    let mut bytes = HashValue::random().to_vec();
+    let tmp_hash = HashValue::random();
+    let mut bytes = tmp_hash.to_vec();
     *bytes.last_mut().unwrap() &= 0xf0;
-    NodeKey::new(0 /* version */, NibblePath::new_odd(bytes))
+    NodeKey::new(tmp_hash, NibblePath::new_odd(bytes))
 }
 
 // Generate a pair of leaf node key and account key with a passed-in 63-nibble node key and the last
 // nibble to be appended.
-fn gen_leaf_keys(
-    version: Version,
-    nibble_path: &NibblePath,
-    nibble: Nibble,
-) -> (NodeKey, HashValue) {
+fn gen_leaf_keys(nibble_path: &NibblePath, nibble: Nibble) -> (NodeKey, HashValue) {
     assert_eq!(nibble_path.num_nibbles(), 63);
     let mut np = nibble_path.clone();
     np.push(nibble);
     let account_key = HashValue::from_slice(np.bytes()).unwrap();
-    (NodeKey::new(version, np), account_key)
+    (NodeKey::new(account_key, np), account_key)
 }
 
 #[test]
 fn test_encode_decode() {
     let internal_node_key = random_63nibbles_node_key();
 
-    let leaf1_keys = gen_leaf_keys(0, internal_node_key.nibble_path(), Nibble::from(1));
+    let leaf1_keys = gen_leaf_keys(internal_node_key.nibble_path(), Nibble::from(1));
     let leaf1_node = Node::new_leaf(leaf1_keys.1, AccountStateBlob::from(vec![0x00]));
-    let leaf2_keys = gen_leaf_keys(0, internal_node_key.nibble_path(), Nibble::from(2));
+    let leaf2_keys = gen_leaf_keys(internal_node_key.nibble_path(), Nibble::from(2));
     let leaf2_node = Node::new_leaf(leaf2_keys.1, AccountStateBlob::from(vec![0x01]));
 
     let mut children = Children::default();
-    children.insert(
-        Nibble::from(1),
-        Child::new(leaf1_node.hash(), 0 /* version */, true),
-    );
-    children.insert(
-        Nibble::from(2),
-        Child::new(leaf2_node.hash(), 0 /* version */, true),
-    );
+    children.insert(Nibble::from(1), Child::new(leaf1_node.hash(), true));
+    children.insert(Nibble::from(2), Child::new(leaf2_node.hash(), true));
 
     let account_key = HashValue::random();
     let nodes = vec![
@@ -110,11 +101,7 @@ fn test_internal_validity() {
         let mut children = Children::default();
         children.insert(
             Nibble::from(1),
-            Child::new(
-                HashValue::random(),
-                0,    /* version */
-                true, /* is_leaf */
-            ),
+            Child::new(HashValue::random(), true /* is_leaf */),
         );
         InternalNode::new(children);
     });
@@ -139,13 +126,13 @@ proptest! {
         let internal_node_key = random_63nibbles_node_key();
         let mut children = Children::default();
 
-        let leaf1_node_key = gen_leaf_keys(0 /* version */, internal_node_key.nibble_path(), index1).0;
-        let leaf2_node_key = gen_leaf_keys(1 /* version */, internal_node_key.nibble_path(), index2).0;
+        let leaf1_node_key = gen_leaf_keys( internal_node_key.nibble_path(), index1).0;
+        let leaf2_node_key = gen_leaf_keys( internal_node_key.nibble_path(), index2).0;
         let hash1 = HashValue::random();
         let hash2 = HashValue::random();
 
-        children.insert(index1, Child::new(hash1, 0 /* version */, true));
-        children.insert(index2, Child::new(hash2, 1 /* version */, true));
+        children.insert(index1, Child::new(hash1, true));
+        children.insert(index2, Child::new(hash2, true));
         let internal_node = InternalNode::new(children);
 
         // Internal node will have a structure below
@@ -178,13 +165,13 @@ proptest! {
         let internal_node_key = random_63nibbles_node_key();
         let mut children = Children::default();
 
-        let leaf1_node_key = gen_leaf_keys(0 /* version */, internal_node_key.nibble_path(), index1).0;
-        let leaf2_node_key = gen_leaf_keys(1 /* version */, internal_node_key.nibble_path(), index2).0;
+        let leaf1_node_key = gen_leaf_keys( internal_node_key.nibble_path(), index1).0;
+        let leaf2_node_key = gen_leaf_keys( internal_node_key.nibble_path(), index2).0;
         let hash1 = HashValue::random();
         let hash2 = HashValue::random();
 
-        children.insert(index1, Child::new(hash1, 0 /* version */, true));
-        children.insert(index2, Child::new(hash2, 1 /* version */, true));
+        children.insert(index1, Child::new(hash1, true));
+        children.insert(index2, Child::new(hash2, true));
         let internal_node = InternalNode::new(children);
 
         // Internal node will have a structure below
@@ -254,17 +241,17 @@ proptest! {
         let internal_node_key = random_63nibbles_node_key();
         let mut children = Children::default();
 
-        let leaf1_node_key = gen_leaf_keys(0 /* version */, internal_node_key.nibble_path(), index1).0;
-        let leaf2_node_key = gen_leaf_keys(1 /* version */, internal_node_key.nibble_path(), index2).0;
-        let leaf3_node_key = gen_leaf_keys(2 /* version */, internal_node_key.nibble_path(), index3).0;
+        let leaf1_node_key = gen_leaf_keys( internal_node_key.nibble_path(), index1).0;
+        let leaf2_node_key = gen_leaf_keys( internal_node_key.nibble_path(), index2).0;
+        let leaf3_node_key = gen_leaf_keys( internal_node_key.nibble_path(), index3).0;
 
         let hash1 = HashValue::random();
         let hash2 = HashValue::random();
         let hash3 = HashValue::random();
 
-        children.insert(index1, Child::new(hash1, 0 /* version */, true));
-        children.insert(index2, Child::new(hash2, 1 /* version */, true));
-        children.insert(index3, Child::new(hash3, 2 /* version */, true));
+        children.insert(index1, Child::new(hash1, true));
+        children.insert(index2, Child::new(hash2, true));
+        children.insert(index3, Child::new(hash3, true));
         let internal_node = InternalNode::new(children);
         // Internal node will have a structure below
         //
@@ -306,19 +293,19 @@ proptest! {
         let internal_node_key = random_63nibbles_node_key();
         let mut children = Children::default();
 
-        let leaf1_node_key = gen_leaf_keys(0 /* version */, internal_node_key.nibble_path(), index1).0;
-        let internal2_node_key = gen_leaf_keys(1 /* version */, internal_node_key.nibble_path(), 2.into()).0;
-        let internal3_node_key = gen_leaf_keys(2 /* version */, internal_node_key.nibble_path(), 7.into()).0;
-        let leaf4_node_key = gen_leaf_keys(3 /* version */, internal_node_key.nibble_path(), index2).0;
+        let leaf1_node_key = gen_leaf_keys( internal_node_key.nibble_path(), index1).0;
+        let internal2_node_key = gen_leaf_keys( internal_node_key.nibble_path(), 2.into()).0;
+        let internal3_node_key = gen_leaf_keys( internal_node_key.nibble_path(), 7.into()).0;
+        let leaf4_node_key = gen_leaf_keys( internal_node_key.nibble_path(), index2).0;
 
         let hash1 = HashValue::random();
         let hash2 = HashValue::random();
         let hash3 = HashValue::random();
         let hash4 = HashValue::random();
-        children.insert(index1, Child::new(hash1, 0, true));
-        children.insert(2.into(), Child::new(hash2, 1, false));
-        children.insert(7.into(), Child::new(hash3, 2, false));
-        children.insert(index2, Child::new(hash4, 3, true));
+        children.insert(index1, Child::new(hash1, true));
+        children.insert(2.into(), Child::new(hash2, false));
+        children.insert(7.into(), Child::new(hash3, false));
+        children.insert(index2, Child::new(hash4, true));
         let internal_node = InternalNode::new(children);
         // Internal node (B) will have a structure below
         //
@@ -432,20 +419,10 @@ fn test_internal_hash_and_proof() {
         let index2 = Nibble::from(15);
         let hash1 = HashValue::random();
         let hash2 = HashValue::random();
-        let child1_node_key = gen_leaf_keys(
-            0, /* version */
-            internal_node_key.nibble_path(),
-            index1,
-        )
-        .0;
-        let child2_node_key = gen_leaf_keys(
-            1, /* version */
-            internal_node_key.nibble_path(),
-            index2,
-        )
-        .0;
-        children.insert(index1, Child::new(hash1, 0 /* version */, false));
-        children.insert(index2, Child::new(hash2, 1 /* version */, false));
+        let child1_node_key = gen_leaf_keys(internal_node_key.nibble_path(), index1).0;
+        let child2_node_key = gen_leaf_keys(internal_node_key.nibble_path(), index2).0;
+        children.insert(index1, Child::new(hash1, false));
+        children.insert(index2, Child::new(hash2, false));
         let internal_node = InternalNode::new(children);
         // Internal node (B) will have a structure below
         //
@@ -565,21 +542,11 @@ fn test_internal_hash_and_proof() {
         let index2 = Nibble::from(7);
         let hash1 = HashValue::random();
         let hash2 = HashValue::random();
-        let child1_node_key = gen_leaf_keys(
-            0, /* version */
-            internal_node_key.nibble_path(),
-            index1,
-        )
-        .0;
-        let child2_node_key = gen_leaf_keys(
-            1, /* version */
-            internal_node_key.nibble_path(),
-            index2,
-        )
-        .0;
+        let child1_node_key = gen_leaf_keys(internal_node_key.nibble_path(), index1).0;
+        let child2_node_key = gen_leaf_keys(internal_node_key.nibble_path(), index2).0;
 
-        children.insert(index1, Child::new(hash1, 0 /* version */, false));
-        children.insert(index2, Child::new(hash2, 1 /* version */, false));
+        children.insert(index1, Child::new(hash1, false));
+        children.insert(index2, Child::new(hash2, false));
         let internal_node = InternalNode::new(children);
         // Internal node will have a structure below
         //
@@ -696,7 +663,6 @@ impl BinaryTreeNode {
     fn new_child(index: u8, child: &Child) -> Self {
         Self::Child(BinaryTreeChildNode {
             index,
-            version: child.version,
             hash: child.hash,
             is_leaf: child.is_leaf,
         })
@@ -766,7 +732,6 @@ impl BinaryTreeInternalNode {
 /// node will be brought up to the root of the highest subtree that has only that leaf.
 #[derive(Clone, Copy)]
 struct BinaryTreeChildNode {
-    version: Version,
     index: u8,
     hash: HashValue,
     is_leaf: bool,

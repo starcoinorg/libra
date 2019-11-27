@@ -139,8 +139,10 @@ where
         let root_node_key: NodeKey = if current_last_hash == HashValue::zero() {
             // If the first version is 0, it means we need to start from an empty tree so we insert
             // a null node beforehand deliberately to deal with this corner case.
-            let node_key = NodeKey::new_empty_path(HashValue::zero());
-            node_cache.insert(node_key.clone(), Node::new_null());
+            let mut node_key = NodeKey::new_empty_path(HashValue::zero());
+            let null_node = Node::new_null();
+            node_key.set_hash(null_node.hash());
+            node_cache.insert(node_key.clone(), null_node);
             node_key
         } else {
             NodeKey::new_empty_path(current_last_hash)

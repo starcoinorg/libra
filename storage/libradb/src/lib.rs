@@ -34,7 +34,7 @@ use crate::{
     event_store::EventStore,
     ledger_counters::LedgerCounters,
     ledger_store::LedgerStore,
-    pruner::Pruner,
+    //    pruner::Pruner,
     schema::*,
     state_store::StateStore,
     system_store::SystemStore,
@@ -92,7 +92,7 @@ pub struct LibraDB {
     state_store: StateStore,
     event_store: EventStore,
     system_store: SystemStore,
-    pruner: Pruner,
+    //    pruner: Pruner,
 }
 
 impl LibraDB {
@@ -153,7 +153,7 @@ impl LibraDB {
             state_store: StateStore::new(Arc::clone(&db)),
             transaction_store: TransactionStore::new(Arc::clone(&db)),
             system_store: SystemStore::new(Arc::clone(&db)),
-            pruner: Pruner::new(Arc::clone(&db), Self::NUM_HISTORICAL_VERSIONS_TO_KEEP),
+            //            pruner: Pruner::new(Arc::clone(&db), Self::NUM_HISTORICAL_VERSIONS_TO_KEEP),
         }
     }
 
@@ -185,7 +185,7 @@ impl LibraDB {
             .get_transaction_info_with_proof(version, ledger_version)?;
         let (account_state_blob, sparse_merkle_proof) = self
             .state_store
-            .get_account_state_with_proof_by_version(address, version)?;
+            .get_account_state_with_proof_by_version(address, txn_info.state_root_hash())?;
         Ok(AccountStateWithProof::new(
             version,
             account_state_blob,
@@ -383,7 +383,7 @@ impl LibraDB {
                 .expect("Counters should be bumped with transactions being saved.")
                 .bump_op_counters();
 
-            self.pruner.wake(last_version);
+            //            self.pruner.wake(last_version);
         }
 
         Ok(())
