@@ -91,7 +91,7 @@ module LibraAccount {
         participants: Vector.T<address>,
     }
 
-    resource OffchainAccount {
+    resource ChannelAccount {
         balance: LibraCoin.T,
     }
 
@@ -648,8 +648,8 @@ module LibraAccount {
         let participants: Vector.T<address>;
         let sender: address;
         let channel: Self.Channel;
-        let sender_account: Self.OffchainAccount;
-        let participant_account: Self.OffchainAccount;
+        let sender_account: Self.ChannelAccount;
+        let participant_account: Self.ChannelAccount;
 
         sender = get_txn_sender();
 
@@ -688,37 +688,37 @@ module LibraAccount {
            locked: false,
            participants: move(participants),
         };
-        sender_account = OffchainAccount{
+        sender_account = ChannelAccount{
             balance: Self.withdraw_from_sender(move(amount)),
         };
-        participant_account = OffchainAccount{
+        participant_account = ChannelAccount{
             balance: LibraCoin.zero(),
         };
         Self.move_to_channel<Self.Channel>(move(channel));
-        ChannelUtil.move_to_participant<Self.OffchainAccount>(move(sender), move(sender_account));
-        ChannelUtil.move_to_participant<Self.OffchainAccount>(move(participant), move(participant_account));
+        ChannelUtil.move_to_participant<Self.ChannelAccount>(move(sender), move(sender_account));
+        ChannelUtil.move_to_participant<Self.ChannelAccount>(move(participant), move(participant_account));
         return;
     }
 
-    // Deposit coin to proposer's OffchainAccount
+    // Deposit coin to proposer's ChannelAccount
     public deposit_to_channel(coin: LibraCoin.T){
         let proposer: address;
-        let channel_account: &mut Self.OffchainAccount;
+        let channel_account: &mut Self.ChannelAccount;
 
         proposer = ChannelTransaction.get_proposer();
-        channel_account = ChannelUtil.borrow_from_participant_mut<Self.OffchainAccount>(copy(proposer));
+        channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
         LibraCoin.deposit(&mut move(channel_account).balance, move(coin));
         return;
     }
 
-    // Withdraw LibraCoin from proposer's OffchainAccount
+    // Withdraw LibraCoin from proposer's ChannelAccount
     public withdraw_from_channel(amount: u64): LibraCoin.T {
         let proposer: address;
-        let channel_account: &mut Self.OffchainAccount;
+        let channel_account: &mut Self.ChannelAccount;
         let withdraw_coin: LibraCoin.T;
 
         proposer = ChannelTransaction.get_proposer();
-        channel_account = ChannelUtil.borrow_from_participant_mut<Self.OffchainAccount>(copy(proposer));
+        channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelAccount>(copy(proposer));
         withdraw_coin = LibraCoin.withdraw(&mut move(channel_account).balance, move(amount));
         return move(withdraw_coin);
     }
