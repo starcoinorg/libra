@@ -33,11 +33,16 @@ pub struct BlockTree {
     main_chain: AtomicRefCell<HashMap<BlockHeight, BlockIndex>>,
     write_storage: Arc<dyn StorageWrite>,
     tail_height: BlockHeight,
-    txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>
+    txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
+    rollback_mode: bool
 }
 
 impl BlockTree {
     pub fn new(write_storage: Arc<dyn StorageWrite>, txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>) -> Self {
+        Self::new_under_rollback(write_storage, txn_manager, false)
+    }
+
+    pub fn new_under_rollback(write_storage: Arc<dyn StorageWrite>, txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>, rollback_mode: bool) -> Self {
         // genesis block info
         let genesis_block_info = BlockInfo::genesis_block_info();
         let genesis_id = genesis_block_info.id();
@@ -67,6 +72,7 @@ impl BlockTree {
             write_storage,
             tail_height: genesis_height,
             txn_manager,
+            rollback_mode,
         }
     }
 
@@ -110,6 +116,17 @@ impl BlockTree {
                 // commit
                 for ancestor in ancestors {
                     let block_info = self.find_block_info_by_block_id(&ancestor).expect("ancestor block info is none.");
+                    self.commit_block(block_info.timestamp_usecs(),
+                                      block_info.output().expect("output is none."),
+                                      block_info.commit_data().expect("commit_data is none.")).await;
+                }
+            } else {
+                if self.rollback_mode && (self.height - self.tail_height) > 2 {//rollback mode
+                    let block_info = self.find_block_info_by_block_id(&new_block_info.parent_id()).expect("Parent block info is none.");
+                    let grandpa_id = block_info.parent_id();
+                    info!("Rollback mode: Block Id {:?} , Parent Id {:?}, Grandpa Id {:?}", new_block_info.id(), new_block_info.parent_id(), grandpa_id);
+                    self.write_storage.rollback_by_block_id(grandpa_id);
+
                     self.commit_block(block_info.timestamp_usecs(),
                                       block_info.output().expect("output is none."),
                                       block_info.commit_data().expect("commit_data is none.")).await;

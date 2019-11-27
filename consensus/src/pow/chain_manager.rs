@@ -28,7 +28,6 @@ pub struct ChainManager {
     state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
     block_tree: Arc<RwLock<BlockTree>>,
     orphan_blocks: Arc<Mutex<HashMap<HashValue, Vec<HashValue>>>>, //key -> parent_block_id, value -> block_id
-    rollback_flag: bool,
     author: AccountAddress,
     read_storage: Arc<dyn StorageRead>,
 }
@@ -39,7 +38,7 @@ impl ChainManager {
         block_store: Arc<ConsensusDB>,
         txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
         state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
-        rollback_flag: bool,
+        rollback_mode: bool,
         author: AccountAddress,
         read_storage: Arc<dyn StorageRead>,
         write_storage: Arc<dyn StorageWrite>
@@ -53,7 +52,6 @@ impl ChainManager {
         let mut genesis_qcs = Vec::new();
         genesis_qcs.push(genesis_block.quorum_cert().clone());
         block_store.save_blocks_and_quorum_certificates(vec![genesis_block], genesis_qcs).expect("save blocks failed.");
-        //block_store.insert_block_index(&genesis_height, &genesis_block_index);
 
         //init main chain
         let mut index_map = HashMap::new();
@@ -69,14 +67,13 @@ impl ChainManager {
         let orphan_blocks = Arc::new(Mutex::new(HashMap::new()));
 
         //block tree
-        let block_tree = Arc::new(RwLock::new(BlockTree::new(write_storage, txn_manager)));
+        let block_tree = Arc::new(RwLock::new(BlockTree::new_under_rollback(write_storage, txn_manager, rollback_mode)));
         ChainManager {
             block_cache_receiver,
             block_store,
             state_computer,
             block_tree,
             orphan_blocks,
-            rollback_flag,
             author,
             read_storage
         }
@@ -94,7 +91,6 @@ impl ChainManager {
             .take()
             .expect("block_cache_receiver is none.");
         let state_computer = self.state_computer.clone();
-        let rollback_flag = self.rollback_flag;
         let author = self.author.clone();
         let block_tree = self.block_tree.clone();
         let chain_fut = async move {
