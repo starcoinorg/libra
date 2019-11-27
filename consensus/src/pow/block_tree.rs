@@ -112,7 +112,9 @@ impl BlockTree {
 
                 let rollback_block_id = pre_block_index.parent_id();
 
+                info!("Rollback : Block Id {:?} , Rollback Id {:?}", new_block_info.id(), rollback_block_id);
                 self.write_storage.rollback_by_block_id(rollback_block_id);
+
                 // commit
                 for ancestor in ancestors {
                     let block_info = self.find_block_info_by_block_id(&ancestor).expect("ancestor block info is none.");
@@ -149,10 +151,18 @@ impl BlockTree {
         // 1. remove tx from mempool
         if commit_data.txns_len() > 0 {
             let signed_txns = commit_data.signed_txns();
+            let signed_txns_len = signed_txns.len();
+            let txns_status_len = vm_output.state_compute_result().status().len();
+
+
+            let mut txns_status = vec![];
+            for i in 0..signed_txns_len {
+                txns_status.push(vm_output.state_compute_result().status()[txns_status_len - signed_txns_len + i].clone());
+            }
             if let Err(e) = self.txn_manager
-                .commit_txns(
+                .commit_txns_with_status(
                     &signed_txns,
-                    &vm_output.state_compute_result(),
+                    txns_status,
                     timestamp_usecs,
                 )
                 .await

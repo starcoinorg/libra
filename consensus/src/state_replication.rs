@@ -10,6 +10,7 @@ use libra_crypto::HashValue;
 use libra_types::block_metadata::BlockMetadata;
 use libra_types::crypto_proxies::{LedgerInfoWithSignatures, ValidatorChangeEventWithProof};
 use std::{pin::Pin, sync::Arc};
+use libra_types::transaction::TransactionStatus;
 
 /// Retrieves and updates the status of transactions on demand (e.g., via talking with Mempool)
 pub trait TxnManager: Send + Sync {
@@ -30,6 +31,14 @@ pub trait TxnManager: Send + Sync {
         &'a self,
         txns: &Self::Payload,
         compute_result: &StateComputeResult,
+        // Monotonic timestamp_usecs of committed blocks is used to GC expired transactions.
+        timestamp_usecs: u64,
+    ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
+
+    fn commit_txns_with_status<'a>(
+        &'a self,
+        txns: &Self::Payload,
+        txns_status: Vec<TransactionStatus>,
         // Monotonic timestamp_usecs of committed blocks is used to GC expired transactions.
         timestamp_usecs: u64,
     ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>>;
