@@ -16,7 +16,6 @@ use crate::{
         loaded_module::LoadedModule,
     },
 };
-use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::{
     access_path::AccessPath,
@@ -35,6 +34,7 @@ use std::collections::HashMap;
 use std::{collections::VecDeque, convert::TryFrom, marker::PhantomData};
 #[cfg(any(test, feature = "instruction_synthesis"))]
 use vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS;
+use vm::transaction_metadata::ChannelMetadataV2;
 use vm::{
     access::ModuleAccess,
     errors::*,
@@ -755,6 +755,13 @@ where
         } else if module_id == *ACCOUNT_MODULE && function_name == SAVE_ACCOUNT_NAME.as_ident_str()
         {
             self.call_save_account(context)
+        } else if module_id == *ACCOUNT_MODULE {
+            // channel native function.
+            match function_name.as_str() {
+                "move_to_channel" => self.call_move_to_channel(context, type_actual_tags),
+                "move_from_channel" => self.call_move_from_channel(context, type_actual_tags),
+                _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
+            }
         } else if module_id == *CHANNEL_ACCOUNT_MODULE {
             match function_name.as_str() {
                 "native_move_to_channel" => {
@@ -771,7 +778,7 @@ where
             }
         } else if module_id == *CHANNEL_TXN_MODULE {
             match function_name.as_str() {
-                "native_is_offchain" => self.call_native_is_offchain(context),
+                "is_offchain" => self.call_is_offchain(context),
                 "native_get_txn_receiver" => self.call_native_get_txn_receiver(),
                 "native_is_channel_txn" => self.call_native_is_channel_txn(),
                 "native_get_txn_receiver_public_key" => {
@@ -780,13 +787,10 @@ where
                 "native_get_txn_channel_sequence_number" => {
                     self.call_native_get_txn_channel_sequence_number()
                 }
-                _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
-            }
-        } else if module_id == *CHANNEL_MODULE {
-            match function_name.as_str() {
-                "generate_channel_address" => self.call_generate_channel_address(),
-                "save_channel" => self.call_save_channel(context),
-                "init_participant" => self.call_init_participant(context),
+                "is_channel_txn" => self.call_is_channel_txn(),
+                "get_txn_channel_sequence_number" => self.call_get_txn_channel_sequence_number(),
+                "get_channel_address" => self.call_get_channel_address(),
+                "get_proposer" => self.call_get_proposer(),
                 _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
             }
         } else {
@@ -866,6 +870,47 @@ where
             ))),
         }
     }
+
+    fn resolve_struct_def(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        mut type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<(&LoadedModule, StructDefinitionIndex, StructDef)> {
+        if type_actual_tags.len() != 1 {
+            return Err(
+                VMStatus::new(StatusCode::VERIFIER_INVARIANT_VIOLATION).with_message(format!(
+                    "resolve_struct_def expects 1 argument got {}.",
+                    type_actual_tags.len()
+                )),
+            );
+        }
+        let type_tag = type_actual_tags.pop().unwrap();
+        match type_tag {
+            TypeTag::Struct(struct_tag) => {
+                let tag = &struct_tag;
+                let module_address = tag.address;
+                let module_name = tag.module.clone();
+                let struct_name = tag.name.clone();
+
+                let module = self
+                    .module_cache
+                    .get_loaded_module(&ModuleId::new(module_address, module_name))?;
+
+                let struct_def_idx = module
+                    .struct_defs_table
+                    .get(&*struct_name)
+                    .ok_or_else(|| VMStatus::new(StatusCode::LINKER_ERROR))?;
+
+                let struct_def =
+                    self.module_cache
+                        .resolve_struct_def(module, *struct_def_idx, context)?;
+
+                Ok((module, *struct_def_idx, struct_def))
+            }
+            _ => Err(VMStatus::new(StatusCode::TYPE_ERROR)
+                .with_message(format!("resolve_struct_def parse struct tag error."))),
+        }
+    }
     /// call `do_move_to_sender`.
     fn call_native_move_to_channel(
         &mut self,
@@ -923,8 +968,8 @@ where
         self.operand_stack.push(Value::global_ref(resource))
     }
 
-    /// call `native_is_offchain`.
-    fn call_native_is_offchain(&mut self, context: &mut dyn InterpreterContext) -> VMResult<()> {
+    /// call `is_offchain`.
+    fn call_is_offchain(&mut self, context: &mut dyn InterpreterContext) -> VMResult<()> {
         let is_offchain = context.vm_mode().is_offchain();
         self.operand_stack.push(Value::bool(is_offchain))
     }
@@ -965,73 +1010,62 @@ where
         }
     }
 
-    /// Generate channel address.
-    fn call_generate_channel_address(&mut self) -> VMResult<()> {
-        let receiver = self.operand_stack.pop_as::<AccountAddress>()?;
-        let sender = self.operand_stack.pop_as::<AccountAddress>()?;
-        let channel_address = Self::generate_channel_address(sender, receiver);
-        self.operand_stack.push(Value::address(channel_address))
+    fn get_channel_metadata(&self) -> VMResult<&ChannelMetadataV2> {
+        self.txn_data.channel_metadata_v2.as_ref().ok_or(
+            VMStatus::new(StatusCode::LINKER_ERROR)
+                .with_message("get channel metadata fail.".to_string()),
+        )
     }
 
-    fn generate_channel_address(participant_1: AccountAddress, participant_2: AccountAddress) -> AccountAddress {
-        let mut addresses = Vec::new();
-        let part1 = participant_1.to_vec();
-        let part2 = participant_2.to_vec();
-        addresses.push(part1);
-        addresses.push(part2);
-        addresses.sort();
-        let mut merged = addresses[0].clone();
-        merged.append(&mut addresses[1]);
-
-        let hash = *HashValue::from_sha3_256(&merged).as_ref();
-        AccountAddress::new(hash)
+    /// call `is_channel_txn`.
+    fn call_is_channel_txn(&mut self) -> VMResult<()> {
+        let is_channel_txn = self.txn_data.is_channel_txn_v2();
+        self.operand_stack.push(Value::bool(is_channel_txn))
     }
 
-    /// Save channel.
-    fn call_save_channel(&mut self, context: &mut dyn InterpreterContext) -> VMResult<()> {
-        let channel_module = self.module_cache.get_loaded_module(&CHANNEL_MODULE)?;
-
-        let channel_resource = self.operand_stack.pop_as::<Struct>()?;
-        let address = self.operand_stack.pop_as::<AccountAddress>()?;
-
-        let channel_struct_id = channel_module
-            .struct_defs_table
-            .get(&*CHANNEL_STRUCT_NAME)
-            .ok_or_else(|| VMStatus::new(StatusCode::LINKER_ERROR))?;
-        let channel_struct_def = self.module_cache.resolve_struct_def(
-            channel_module,
-            *channel_struct_id,
-            context,
-        )?;
-        let channel_path = Self::make_access_path(channel_module, *channel_struct_id, address);
-        context.move_resource_to(&channel_path, channel_struct_def, channel_resource)
+    /// call `get_txn_channel_sequence_number`.
+    fn call_get_txn_channel_sequence_number(&mut self) -> VMResult<()> {
+        self.operand_stack.push(Value::u64(
+            self.get_channel_metadata()?.channel_sequence_number,
+        ))
     }
 
-    /// Init channel participant.
-    fn call_init_participant(&mut self, context: &mut dyn InterpreterContext) -> VMResult<()> {
-        let channel_module = self.module_cache.get_loaded_module(&CHANNEL_MODULE)?;
+    /// call `get_txn_proposer`.
+    fn call_get_channel_address(&mut self) -> VMResult<()> {
+        self.operand_stack
+            .push(Value::address(self.get_channel_metadata()?.channel_address))
+    }
 
-        let channel_account_resource = self.operand_stack.pop_as::<Struct>()?;
-        let participant = self.operand_stack.pop_as::<AccountAddress>()?;
-        let channel_address = self.operand_stack.pop_as::<AccountAddress>()?;
+    /// call `get_txn_proposer`.
+    fn call_get_proposer(&mut self) -> VMResult<()> {
+        self.operand_stack
+            .push(Value::address(self.get_channel_metadata()?.proposer))
+    }
 
-        let channel_account_struct_id = channel_module
-            .struct_defs_table
-            .get(&*CHANNEL_ACCOUNT_STRUCT_NAME)
-            .ok_or_else(|| VMStatus::new(StatusCode::LINKER_ERROR))?;
-        let channel_account_struct_def = self.module_cache.resolve_struct_def(
-            channel_module,
-            *channel_account_struct_id,
-            context,
-        )?;
-        let channel_account_path = Self::make_channel_access_path(
-            channel_module,
-            *channel_account_struct_id,
-            channel_address,
-            participant,
-        );
+    /// call `do_move_to_channel`.
+    fn call_move_to_channel(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let res = self.operand_stack.pop_as::<Struct>()?;
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_access_path(module, idx, channel_address);
+        context.move_resource_to(&ap, struct_def, res)
+    }
 
-        context.move_resource_to(&channel_account_path, channel_account_struct_def, channel_account_resource)
+    /// call `move_from_channel`.
+    fn call_move_from_channel(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_access_path(module, idx, channel_address);
+        let resource = context.move_resource_from(&ap, struct_def)?;
+        self.operand_stack.push(resource)
     }
 
     /// Emit an event if the native function was `write_to_event_store`.
