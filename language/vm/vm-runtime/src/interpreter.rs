@@ -68,6 +68,9 @@ lazy_static! {
     /// The ModuleId for the Channel module
     pub static ref CHANNEL_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("Channel").unwrap()) };
+    /// The ModuleId for the ChannelUtil module
+    pub static ref CHANNEL_UTIL_MODULE: ModuleId =
+        { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelUtil").unwrap()) };
 }
 
 // Names for special functions and structs
@@ -776,6 +779,30 @@ where
                 }
                 _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
             }
+        } else if module_id == *CHANNEL_UTIL_MODULE {
+            match function_name.as_str() {
+                "move_to_participant" => {
+                    self.call_move_to_participant(context, type_actual_tags)
+                }
+                "move_to_shared" => self.call_move_to_shared(context, type_actual_tags),
+                "move_from_participant" => {
+                    self.call_move_from_participant(context, type_actual_tags)
+                }
+                "move_from_shared" => {
+                    self.call_move_from_shared(context, type_actual_tags)
+                }
+                "borrow_from_participant" => {
+                    self.call_borrow_from_participant(context, type_actual_tags)
+                }
+                "borrow_from_participant_mut" => self.call_borrow_from_participant_mut(context, type_actual_tags),
+                "borrow_from_shared" => {
+                    self.call_borrow_from_shared(context, type_actual_tags)
+                }
+                "borrow_from_shared_mut" => {
+                    self.call_borrow_from_shared_mut(context, type_actual_tags)
+                }
+                _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
+            }
         } else if module_id == *CHANNEL_TXN_MODULE {
             match function_name.as_str() {
                 "is_offchain" => self.call_is_offchain(context),
@@ -911,7 +938,115 @@ where
                 .with_message(format!("resolve_struct_def parse struct tag error."))),
         }
     }
-    /// call `do_move_to_sender`.
+    /// call `move_to_participant`.
+    fn call_move_to_participant(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let res = self.operand_stack.pop_as::<Struct>()?;
+        let participant = self.operand_stack.pop_as::<AccountAddress>()?;
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
+        context.move_resource_to(&ap, struct_def, res)
+    }
+    /// call `move_to_shared`.
+    fn call_move_to_shared(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let res = self.operand_stack.pop_as::<Struct>()?;
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let shared_path = channel_address.clone();
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, shared_path);
+        context.move_resource_to(&ap, struct_def, res)
+    }
+    /// call `move_from_participant`.
+    fn call_move_from_participant(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let participant = self.operand_stack.pop_as::<AccountAddress>()?;
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
+        let resource = context.move_resource_from(&ap, struct_def)?;
+        self.operand_stack.push(resource)
+    }
+
+    /// call `move_from_shared`.
+    fn call_move_from_shared(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let shared_path = channel_address.clone();
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, shared_path);
+        let resource = context.move_resource_from(&ap, struct_def)?;
+        self.operand_stack.push(resource)
+    }
+    /// call `borrow_from_participant`.
+    fn call_borrow_from_participant(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let participant = self.operand_stack.pop_as::<AccountAddress>()?;
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
+        let resource = context.borrow_global(&ap, struct_def)?;
+        self.operand_stack.push(Value::global_ref(resource))
+    }
+    /// call `borrow_from_shared`.
+    fn call_borrow_from_shared(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let shared_path = channel_address.clone();
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, shared_path);
+        let resource = context.borrow_global(&ap, struct_def)?;
+        self.operand_stack.push(Value::global_ref(resource))
+    }
+    /// call `borrow_from_participant_mut`.
+    fn call_borrow_from_participant_mut(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let participant = self.operand_stack.pop_as::<AccountAddress>()?;
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
+        let resource = context.borrow_global(&ap, struct_def)?;
+        self.operand_stack.push(Value::global_ref(resource))
+    }
+    /// call `borrow_from_shared_mut`.
+    fn call_borrow_from_shared_mut(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let shared_path = channel_address.clone();
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, shared_path);
+        let resource = context.borrow_global(&ap, struct_def)?;
+        self.operand_stack.push(Value::global_ref(resource))
+    }
+
+
+
+    /// call `native_move_to_channel`.
     fn call_native_move_to_channel(
         &mut self,
         context: &mut dyn InterpreterContext,
