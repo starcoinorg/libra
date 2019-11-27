@@ -165,15 +165,15 @@ impl TransactionData {
         }
     }
 
-    fn account_blobs(&self) -> &HashMap<AccountAddress, AccountStateBlob> {
+    pub fn account_blobs(&self) -> &HashMap<AccountAddress, AccountStateBlob> {
         &self.account_blobs
     }
 
-    fn events(&self) -> &[ContractEvent] {
+    pub fn events(&self) -> &[ContractEvent] {
         &self.events
     }
 
-    fn status(&self) -> &TransactionStatus {
+    pub fn status(&self) -> &TransactionStatus {
         &self.status
     }
 
@@ -185,7 +185,7 @@ impl TransactionData {
         self.event_tree.root_hash()
     }
 
-    fn gas_used(&self) -> u64 {
+    pub fn gas_used(&self) -> u64 {
         self.gas_used
     }
 
@@ -584,6 +584,14 @@ where
         }
         resp_receiver
     }
+
+//    pub fn process_vm_outputs(
+//        transactions: Vec<Transaction>,
+//        output: ProcessedVMOutput,
+//        parent_trees: &ExecutedTrees,
+//    ) -> Result<ProcessedVMOutput> {
+//        BlockProcessor::process_vm_outputs();
+//    }
 }
 
 impl<V> Drop for Executor<V> {

@@ -39,7 +39,7 @@ pub struct MintManager {
     author: AccountAddress,
     self_sender: channel::Sender<failure::Result<Event<ConsensusMsg>>>,
     block_store: Arc<ConsensusDB>,
-    pow_srv: Arc<dyn PowService>,
+    _pow_srv: Arc<dyn PowService>,
     chain_manager: Arc<AtomicRefCell<ChainManager>>,
     mine_state: MineStateManager,
 }
@@ -63,7 +63,7 @@ impl MintManager {
             author,
             self_sender,
             block_store,
-            pow_srv,
+            _pow_srv: pow_srv,
             chain_manager,
             mine_state,
         }
