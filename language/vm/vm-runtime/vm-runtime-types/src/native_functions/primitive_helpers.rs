@@ -107,8 +107,9 @@ pub fn native_compare_address(
         );
         return Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(msg));
     }
-    let arg1 = pop_arg!(arguments, AccountAddress);
+    // pop arg is from back to front
     let arg2 = pop_arg!(arguments, AccountAddress);
+    let arg1 = pop_arg!(arguments, AccountAddress);
     let order = arg1.cmp(&arg2);
     let return_val = match order {
         Ordering::Less => 0,

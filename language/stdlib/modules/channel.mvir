@@ -18,7 +18,7 @@ module Channel {
 
         proposer = ChannelTransaction.get_proposer();
         //should allow deposit to other participant?
-        assert(get_txn_sender() == copy(proposer), 1111);
+        assert(get_txn_sender() == copy(proposer), 1006);
         deposit_coin = LibraAccount.withdraw_from_sender(copy(amount));
 
         LibraAccount.deposit_to_channel(move(deposit_coin));
@@ -31,7 +31,7 @@ module Channel {
         let withdraw_coin: LibraCoin.T;
 
         proposer = ChannelTransaction.get_proposer();
-        assert(get_txn_sender() == copy(proposer), 1111);
+        assert(get_txn_sender() == copy(proposer), 1117);
         withdraw_coin = LibraAccount.withdraw_from_channel(move(amount));
         LibraAccount.deposit(move(proposer), move(withdraw_coin));
         return;
