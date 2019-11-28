@@ -20,11 +20,9 @@ main(){
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
 import 0x0.ChannelTransaction;
 main() {
-   assert(ChannelTransaction.is_channel_txn(), 111);
+   assert(!ChannelTransaction.is_channel_txn(), 100);
    return;
 }
 
@@ -36,3 +34,12 @@ main() {
 
 0x0.LibraAccount.open_channel
 
+//! new-transaction
+//! sender: alice
+//! channel: ch1
+//! proposer: alice
+import 0x0.ChannelTransaction;
+main() {
+   assert(ChannelTransaction.is_channel_txn(), 101);
+   return;
+}
