@@ -51,7 +51,8 @@ use vm::{
 use vm_runtime_types::{
     loaded_data::struct_def::StructDef,
     native_functions::dispatch::resolve_native_function,
-    value::{Locals, ReferenceValue, Struct, Value},
+    native_structs::{NativeStructValue, vector::NativeVector},
+    value::{Locals, MutVal, ReferenceValue, Struct, Value},
 };
 
 // Data to resolve basic account and transaction flow functions and structs
@@ -818,6 +819,8 @@ where
                 "get_txn_channel_sequence_number" => self.call_get_txn_channel_sequence_number(),
                 "get_channel_address" => self.call_get_channel_address(),
                 "get_proposer" => self.call_get_proposer(),
+                "get_public_keys" => self.call_get_public_keys(),
+                "get_signatures" => self.call_get_signatures(),
                 _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
             }
         } else {
@@ -1175,6 +1178,26 @@ where
     fn call_get_proposer(&mut self) -> VMResult<()> {
         self.operand_stack
             .push(Value::address(self.get_channel_metadata()?.proposer))
+    }
+
+    /// call `get_public_keys`.
+    fn call_get_public_keys(&mut self) -> VMResult<()> {
+        let mut val = Vec::new();
+        let length = self.get_channel_metadata()?.public_keys.len();
+        for i in 0..length {
+            let key = self.get_channel_metadata()?.public_keys[i].to_bytes().to_vec();
+            val.push(MutVal::new(Value::byte_array(ByteArray::new(key))));
+        }
+
+        let ret_val = Value::native_struct(NativeStructValue::Vector(
+            NativeVector(val),
+        ));
+        self.operand_stack.push(ret_val)
+    }
+
+    /// call `get_signatures`.
+    fn call_get_signatures(&mut self) -> VMResult<()> {
+        return Err(VMStatus::new(StatusCode::LINKER_ERROR));
     }
 
     /// call `do_move_to_channel`.
