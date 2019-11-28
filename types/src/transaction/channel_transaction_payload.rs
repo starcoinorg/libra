@@ -320,8 +320,8 @@ impl CryptoHash for ChannelActionBody {
 }
 
 pub trait ChannelTransactionSigner {
-    /// sign method should return (participant index, participant public key, participant signature)
-    fn sign(body: &ChannelTransactionPayloadBodyV2) -> (usize, Ed25519PublicKey, Ed25519Signature);
+    /// sign method should return (participant index, participant signature)
+    fn sign(&self, body: &ChannelTransactionPayloadBodyV2) -> (usize, Ed25519Signature);
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
@@ -384,7 +384,25 @@ impl ChannelTransactionPayloadV2 {
     }
 
     pub fn verify(&self) -> Result<()> {
-        unimplemented!()
+        let hash = self.body.hash();
+        for (public_key, signature) in self.public_keys.iter().zip(self.signatures.iter()) {
+            match signature {
+                Some(signature) => {
+                    public_key.verify_signature(&hash, signature)?;
+                }
+                None => {}
+            }
+        }
+        Ok(())
+    }
+
+    pub fn set_signature(&mut self, idx: usize, signature: Ed25519Signature) {
+        self.signatures.insert(idx, Some(signature));
+    }
+
+    pub fn sign(&mut self, signer: Box<dyn ChannelTransactionSigner>) {
+        let (idx, signature) = signer.sign(&self.body);
+        self.set_signature(idx, signature);
     }
 
     pub fn channel_address(&self) -> AccountAddress {

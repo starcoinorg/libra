@@ -47,18 +47,8 @@ pub struct Witness {
 }
 
 impl Witness {
-    pub fn new(
-        channel_sequence_number: u64,
-        write_set: WriteSet,
-        signatures: Vec<Ed25519Signature>,
-    ) -> Self {
-        Self {
-            data: WitnessData {
-                channel_sequence_number,
-                write_set,
-            },
-            signatures,
-        }
+    pub fn new(data: WitnessData, signatures: Vec<Ed25519Signature>) -> Self {
+        Self { data, signatures }
     }
 
     pub fn channel_sequence_number(&self) -> u64 {

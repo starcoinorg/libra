@@ -7,6 +7,8 @@
 use crate::{config::strip, errors::*, genesis_accounts::make_genesis_accounts};
 use language_e2e_tests::account::{Account, AccountData};
 use libra_config::trusted_peers::ConfigHelpers;
+use libra_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
+use libra_crypto::{HashValue, SigningKey};
 use libra_types::account_address::AccountAddress;
 use libra_types::validator_set::ValidatorSet;
 use std::{
@@ -136,9 +138,37 @@ impl FromStr for Entry {
 }
 
 #[derive(Debug)]
-pub struct ChannelData {
+pub struct ChannelParticipant<'a> {
+    pub address: AccountAddress,
+    pub account: &'a Account,
+}
+
+#[derive(Debug)]
+pub struct ChannelConfig {
     pub channel_address: AccountAddress,
     pub participants: Vec<AccountAddress>,
+}
+
+#[derive(Debug)]
+pub struct ChannelData<'a> {
+    pub channel_address: AccountAddress,
+    pub participants: Vec<ChannelParticipant<'a>>,
+}
+
+impl<'a> ChannelData<'a> {
+    pub fn get_participant_public_keys(&self) -> Vec<Ed25519PublicKey> {
+        self.participants
+            .iter()
+            .map(|participant| participant.account.pubkey.clone())
+            .collect()
+    }
+
+    pub fn sign(&self, msg: &HashValue) -> Vec<Ed25519Signature> {
+        self.participants
+            .iter()
+            .map(|participant| participant.account.privkey.sign_message(msg))
+            .collect()
+    }
 }
 
 /// A table of options either shared by all transactions or used to define the testing environment.
@@ -149,7 +179,7 @@ pub struct Config {
     pub genesis_accounts: BTreeMap<String, Account>,
     /// The validator set after genesis
     pub validator_set: ValidatorSet,
-    pub channels: BTreeMap<String, ChannelData>,
+    pub channels: BTreeMap<String, ChannelConfig>,
 }
 
 impl Config {
@@ -203,7 +233,7 @@ impl Config {
                     }
                 }
                 Entry::ChannelDefinition(def) => {
-                    let participants: Vec<AccountAddress> = def
+                    let mut participants: Vec<AccountAddress> = def
                         .participants
                         .iter()
                         .map(|name| {
@@ -216,8 +246,9 @@ impl Config {
                                 )
                         })
                         .collect();
+                    participants.sort();
                     let channel_address = AccountAddress::channel_address(participants.as_slice());
-                    let channel_data = ChannelData {
+                    let channel_data = ChannelConfig {
                         channel_address,
                         participants,
                     };
@@ -261,7 +292,15 @@ impl Config {
             .ok_or_else(|| ErrorKind::Other(format!("account '{}' does not exist", name)).into())
     }
 
-    pub fn get_channel_for_name(&self, name: &str) -> Result<&ChannelData> {
+    pub fn get_account_for_address(&self, addr: &AccountAddress) -> Result<&Account> {
+        self.accounts
+            .iter()
+            .find(|(_, a)| a.address() == addr)
+            .map(|(_, a)| a.account())
+            .ok_or_else(|| ErrorKind::Other(format!("account '{}' does not exist", addr)).into())
+    }
+
+    pub fn get_channel_for_name(&self, name: &str) -> Result<&ChannelConfig> {
         self.channels
             .get(name)
             .ok_or_else(|| ErrorKind::Other(format!("channel '{}' does not exist", name)).into())

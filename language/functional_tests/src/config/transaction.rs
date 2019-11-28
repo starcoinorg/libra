@@ -1,7 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::config::global::ChannelData;
+use crate::config::global::{ChannelData, ChannelParticipant};
 use crate::{
     config::{global::Config as GlobalConfig, strip},
     errors::*,
@@ -142,7 +142,7 @@ pub struct Config<'a> {
     pub max_gas: Option<u64>,
     pub sequence_number: Option<u64>,
     pub receiver: Option<&'a Account>,
-    pub channel: Option<&'a ChannelData>,
+    pub channel: Option<ChannelData<'a>>,
     // Channel txn proposer
     pub proposer: Option<&'a Account>,
 }
@@ -218,7 +218,21 @@ impl<'a> Config<'a> {
                     }
                 },
                 Entry::Channel(name) => match channel {
-                    None => channel = Some(config.get_channel_for_name(name)?),
+                    None => {
+                        let channel_config = config.get_channel_for_name(name)?;
+                        let channel_data = ChannelData {
+                            channel_address: channel_config.channel_address,
+                            participants: channel_config
+                                .participants
+                                .iter()
+                                .map(|addr| ChannelParticipant {
+                                    address: *addr,
+                                    account: config.get_account_for_address(addr).unwrap(),
+                                })
+                                .collect(),
+                        };
+                        channel = Some(channel_data)
+                    }
                     _ => return Err(ErrorKind::Other("channel already set".to_string()).into()),
                 },
                 Entry::Proposer(name) => match proposer {
