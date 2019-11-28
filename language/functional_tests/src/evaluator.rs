@@ -18,9 +18,10 @@ use language_e2e_tests::account::Account;
 use language_e2e_tests::executor::FakeExecutor;
 use libra_config::config::VMPublishingOption;
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
+use libra_crypto::hash::CryptoHash;
 use libra_types::access_path::DataPath;
 use libra_types::channel::channel::ChannelResource;
-use libra_types::channel::witness::Witness;
+use libra_types::channel::witness::{Witness, WitnessData};
 use libra_types::transaction::{
     Action, ChannelActionBody, ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2,
     ScriptAction,
@@ -319,15 +320,26 @@ fn make_channel_transaction_v2(
     channel_sequence_number: u64,
 ) -> Result<SignedTransaction> {
     let params = get_transaction_parameters(exec, config);
-    //TODO construct signature.
-    let witness = Witness::new(channel_sequence_number, WriteSet::default(), vec![]);
+    let witness_data = WitnessData::new(channel_sequence_number, WriteSet::default());
+    let hash = witness_data.hash();
+    let witness = Witness::new(witness_data, channel.sign(&hash));
     let body = ChannelTransactionPayloadBodyV2::new(
         channel.channel_address,
         *config.proposer.unwrap().address(),
         action,
         witness,
     );
-    let payload = ChannelTransactionPayloadV2::new(body, vec![], vec![]);
+    let body_hash = body.hash();
+    let payload = ChannelTransactionPayloadV2::new(
+        body,
+        channel.get_participant_public_keys(),
+        channel
+            .sign(&body_hash)
+            .iter()
+            .cloned()
+            .map(|s| Some(s))
+            .collect(),
+    );
     Ok(RawTransaction::new_channel_v2(
         params.sender_addr,
         params.sequence_number,
@@ -477,6 +489,7 @@ fn eval_transaction(
         let channel_data = transaction
             .config
             .channel
+            .as_ref()
             .expect("channel must exist in channel transaction.");
         let channel_address = channel_data.channel_address;
         let channel_access_path =
