@@ -28,6 +28,7 @@ mod transaction_store;
 #[cfg(test)]
 mod libradb_test;
 
+use crate::pruner::Pruner;
 use crate::{
     change_set::{ChangeSet, SealedChangeSet},
     errors::LibraDbError,
@@ -92,7 +93,7 @@ pub struct LibraDB {
     state_store: StateStore,
     event_store: EventStore,
     system_store: SystemStore,
-    //    pruner: Pruner,
+    pruner: Pruner,
 }
 
 impl LibraDB {
@@ -153,7 +154,7 @@ impl LibraDB {
             state_store: StateStore::new(Arc::clone(&db)),
             transaction_store: TransactionStore::new(Arc::clone(&db)),
             system_store: SystemStore::new(Arc::clone(&db)),
-            //            pruner: Pruner::new(Arc::clone(&db), Self::NUM_HISTORICAL_VERSIONS_TO_KEEP),
+            pruner: Pruner::new(Arc::clone(&db), Self::NUM_HISTORICAL_VERSIONS_TO_KEEP),
         }
     }
 
@@ -383,7 +384,7 @@ impl LibraDB {
                 .expect("Counters should be bumped with transactions being saved.")
                 .bump_op_counters();
 
-            //            self.pruner.wake(last_version);
+            self.pruner.wake(last_version);
         }
 
         Ok(())
@@ -404,6 +405,7 @@ impl LibraDB {
             .collect::<Vec<_>>();
         let state_root_hashes = self.state_store.put_account_state_sets(
             account_state_sets,
+            last_version,
             HashValue::zero(),
             &mut cs,
         )?;
@@ -573,10 +575,10 @@ impl LibraDB {
     pub fn get_account_state_with_proof_by_version(
         &self,
         address: AccountAddress,
-        version: Version,
+        hash: HashValue,
     ) -> Result<(Option<AccountStateBlob>, SparseMerkleProof)> {
         self.state_store
-            .get_account_state_with_proof_by_version(address, version)
+            .get_account_state_with_proof_by_version(address, hash)
     }
 
     /// Gets information needed from storage during the startup of the executor or state

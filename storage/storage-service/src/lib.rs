@@ -191,7 +191,8 @@ impl StorageService {
 
         let (account_state_blob, sparse_merkle_proof) = self
             .db
-            .get_account_state_with_proof_by_version(rust_req.address, rust_req.version)?;
+            //TODO fix version to hash
+            .get_account_state_with_proof_by_version(rust_req.address, HashValue::zero())?;
 
         let rust_resp = storage_proto::GetAccountStateWithProofByVersionResponse {
             account_state_blob,

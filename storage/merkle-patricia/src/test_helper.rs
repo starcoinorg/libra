@@ -28,13 +28,14 @@ pub fn init_mock_db(kvs: &HashMap<HashValue, AccountStateBlob>) -> (MockTreeStor
 
     let db = MockTreeStore::default();
     let tree = MerklePatriciaTree::new(&db);
-
-    for (_i, (key, value)) in kvs.iter().enumerate() {
-        let (_root_hash, write_batch) = tree
-            .put_blob_set(HashValue::zero(), vec![(*key, value.clone())])
-            .unwrap();
-        db.write_tree_update_batch(write_batch).unwrap();
+    let mut blog_set_vec = Vec::new();
+    for (key, val) in kvs.clone().iter_mut() {
+        blog_set_vec.push(vec![(*key, val.clone())]);
     }
+    let (_root_hash, write_batch) = tree
+        .put_blob_sets(blog_set_vec, 0 as Version, HashValue::zero())
+        .unwrap();
+    db.write_tree_update_batch(write_batch).unwrap();
 
     (db, (kvs.len() - 1) as Version)
 }

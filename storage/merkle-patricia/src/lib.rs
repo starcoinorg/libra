@@ -80,6 +80,7 @@ mod tree_cache;
 
 use failure::prelude::*;
 use libra_crypto::{hash::CryptoHash, HashValue};
+use libra_types::transaction::Version;
 use libra_types::{
     account_state_blob::AccountStateBlob,
     proof::{SparseMerkleProof, SparseMerkleRangeProof},
@@ -90,7 +91,6 @@ use node_type::{Child, Children, InternalNode, LeafNode, Node, NodeKey};
 use proptest_derive::Arbitrary;
 use std::collections::{BTreeMap, BTreeSet};
 use tree_cache::TreeCache;
-use libra_types::transaction::Version;
 
 /// The hardcoded maximum height of a [`JellyfishMerkleTree`] in nibbles.
 const ROOT_NIBBLE_HEIGHT: usize = HashValue::LENGTH * 2;
@@ -126,7 +126,7 @@ pub type StaleNodeIndexBatch = BTreeSet<StaleNodeIndex>;
 
 /// Indicates a node becomes stale since `stale_since_version`.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-#[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
+//#[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 pub struct StaleNodeIndex {
     /// The version since when the node is overwritten and becomes stale.
     pub stale_since_version: Version,
@@ -170,7 +170,7 @@ where
         first_hash: HashValue,
         blob_set: Vec<(HashValue, AccountStateBlob)>,
     ) -> Result<(HashValue, TreeUpdateBatch)> {
-        let (root_hashes, tree_update_batch) = self.put_blob_sets(vec![blob_set], 0,first_hash)?;
+        let (root_hashes, tree_update_batch) = self.put_blob_sets(vec![blob_set], 0, first_hash)?;
         assert_eq!(
             root_hashes.len(),
             1,
@@ -227,6 +227,14 @@ where
         first_hash: HashValue,
     ) -> Result<(Vec<HashValue>, TreeUpdateBatch)> {
         let mut tree_cache = TreeCache::new(self.reader, first_hash, first_version);
+        //init root node
+        if first_hash == HashValue::zero() {
+            Self::put(
+                HashValue::zero(),
+                AccountStateBlob::from(vec![0]),
+                &mut tree_cache,
+            );
+        }
         for (_idx, blob_set) in blob_sets.into_iter().enumerate() {
             assert!(
                 !blob_set.is_empty(),
@@ -492,65 +500,82 @@ where
         &self,
         key: HashValue,
     ) -> Result<(Option<AccountStateBlob>, SparseMerkleProof)> {
-        // Empty tree just returns proof with no sibling hash.
-        let mut next_node_key = NodeKey::new_empty_path(key);
-        let mut siblings = vec![];
         let nibble_path = NibblePath::new(key.to_vec());
-        let mut nibble_iter = nibble_path.nibbles();
-
-        // We limit the number of loops here deliberately to avoid potential cyclic graph bugs
-        // in the tree structure.
-        for nibble_depth in 0..=ROOT_NIBBLE_HEIGHT {
-            let next_node = self.reader.get_node(&next_node_key)?;
-            match next_node {
-                Node::Internal(internal_node) => {
-                    let queried_child_index = nibble_iter
-                        .next()
-                        .ok_or_else(|| format_err!("ran out of nibbles"))?;
-                    let (child_node_key, mut siblings_in_internal) =
-                        internal_node.get_child_with_siblings(&next_node_key, queried_child_index);
-                    siblings.append(&mut siblings_in_internal);
-                    next_node_key = match child_node_key {
-                        Some(node_key) => node_key,
-                        None => {
-                            return Ok((
-                                None,
-                                SparseMerkleProof::new(None, {
-                                    siblings.reverse();
-                                    siblings
-                                }),
-                            ))
-                        }
-                    };
-                }
-                Node::Leaf(leaf_node) => {
-                    return Ok((
-                        if leaf_node.account_key() == key {
-                            Some(leaf_node.blob().clone())
-                        } else {
-                            None
-                        },
-                        SparseMerkleProof::new(
-                            Some((leaf_node.account_key(), leaf_node.blob_hash())),
-                            {
-                                siblings.reverse();
-                                siblings
-                            },
-                        ),
-                    ));
-                }
-                Node::Null => {
-                    if nibble_depth == 0 {
-                        return Ok((None, SparseMerkleProof::new(None, vec![])));
-                    } else {
-                        bail!(
-                            "Non-root null node exists with node key {:?}",
-                            next_node_key
-                        );
-                    }
-                }
+        let next_node_key = NodeKey::new(key, nibble_path);
+        let node = self.reader.get_node(&next_node_key)?;
+        //TODO search siblings
+        let mut siblings = vec![];
+        match node {
+            Node::Leaf(leaf) => {
+                return Ok((
+                    Some(leaf.blob().clone()),
+                    SparseMerkleProof::new(Some((leaf.account_key(), leaf.blob_hash())), {
+                        siblings.reverse();
+                        siblings
+                    }),
+                ));
             }
+
+            _ => {}
         }
+        //        // Empty tree just returns proof with no sibling hash.
+        //        let mut next_node_key = NodeKey::new_empty_path(key);
+        //        let mut siblings = vec![];
+        //        let mut nibble_iter = nibble_path.nibbles();
+        //
+        //        // We limit the number of loops here deliberately to avoid potential cyclic graph bugs
+        //        // in the tree structure.
+        //        for nibble_depth in 0..=ROOT_NIBBLE_HEIGHT {
+        //            let next_node = self.reader.get_node(&next_node_key)?;
+        //            match next_node {
+        //                Node::Internal(internal_node) => {
+        //                    let queried_child_index = nibble_iter
+        //                        .next()
+        //                        .ok_or_else(|| format_err!("ran out of nibbles"))?;
+        //                    let (child_node_key, mut siblings_in_internal) =
+        //                        internal_node.get_child_with_siblings(&next_node_key, queried_child_index);
+        //                    siblings.append(&mut siblings_in_internal);
+        //                    next_node_key = match child_node_key {
+        //                        Some(node_key) => node_key,
+        //                        None => {
+        //                            return Ok((
+        //                                None,
+        //                                SparseMerkleProof::new(None, {
+        //                                    siblings.reverse();
+        //                                    siblings
+        //                                }),
+        //                            ))
+        //                        }
+        //                    };
+        //                }
+        //                Node::Leaf(leaf_node) => {
+        //                    return Ok((
+        //                        if leaf_node.account_key() == key {
+        //                            Some(leaf_node.blob().clone())
+        //                        } else {
+        //                            None
+        //                        },
+        //                        SparseMerkleProof::new(
+        //                            Some((leaf_node.account_key(), leaf_node.blob_hash())),
+        //                            {
+        //                                siblings.reverse();
+        //                                siblings
+        //                            },
+        //                        ),
+        //                    ));
+        //                }
+        //                Node::Null => {
+        //                    if nibble_depth == 0 {
+        //                        return Ok((None, SparseMerkleProof::new(None, vec![])));
+        //                    } else {
+        //                        bail!(
+        //                            "Non-root null node exists with node key {:?}",
+        //                            next_node_key
+        //                        );
+        //                    }
+        //                }
+        //            }
+        //        }
         bail!("Jellyfish Merkle tree has cyclic graph inside.");
     }
 

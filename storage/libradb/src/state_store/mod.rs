@@ -38,7 +38,7 @@ impl StateStore {
     /// Get the account state blob given account address and root hash of state Merkle tree
     pub fn get_account_state_with_proof_by_version(
         &self,
-        address: AccountAddress,
+        _address: AccountAddress,
         root_hash: HashValue,
     ) -> Result<(Option<AccountStateBlob>, SparseMerkleProof)> {
         let (blob, proof) = MerklePatriciaTree::new(self).get_with_proof(root_hash)?;
@@ -50,6 +50,7 @@ impl StateStore {
     pub fn put_account_state_sets(
         &self,
         account_state_sets: Vec<HashMap<AccountAddress, AccountStateBlob>>,
+        first_version: Version,
         first_hash: HashValue,
         cs: &mut ChangeSet,
     ) -> Result<Vec<HashValue>> {
@@ -64,7 +65,7 @@ impl StateStore {
             .collect::<Vec<_>>();
 
         let (new_root_hash_vec, tree_update_batch) =
-            MerklePatriciaTree::new(self).put_blob_sets(blob_sets, first_hash)?;
+            MerklePatriciaTree::new(self).put_blob_sets(blob_sets, first_version, first_hash)?;
 
         cs.counter_bumps.bump(
             LedgerCounter::NewStateNodes,
