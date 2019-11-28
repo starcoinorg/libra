@@ -1213,7 +1213,21 @@ where
 
     /// call `get_signatures`.
     fn call_get_signatures(&mut self) -> VMResult<()> {
-        return Err(VMStatus::new(StatusCode::LINKER_ERROR));
+        let mut val = Vec::new();
+        let mut sig_bytes: Vec<u8>;
+        let length = self.get_channel_metadata()?.signatures.len();
+        for i in 0..length {
+            match &self.get_channel_metadata()?.signatures[i] {
+                Some(sig) => sig_bytes = sig.to_bytes().to_vec(),
+                None => sig_bytes = Vec::new(),  //empty u8 vec
+            }
+            val.push(MutVal::new(Value::byte_array(ByteArray::new(sig_bytes))));
+        }
+
+        let ret_val = Value::native_struct(NativeStructValue::Vector(
+            NativeVector(val),
+        ));
+        self.operand_stack.push(ret_val)
     }
 
     /// call `do_move_to_channel`.

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::gas_schedule::{AbstractMemorySize, GasAlgebra, GasCarrier, GasPrice, GasUnits};
-use libra_crypto::ed25519::{compat, Ed25519PublicKey};
+use libra_crypto::ed25519::{compat, Ed25519PublicKey, Ed25519Signature};
 use libra_types::{
     account_address::AccountAddress,
     transaction::{SignedTransaction, TransactionPayload},
@@ -19,6 +19,7 @@ pub struct ChannelMetadataV2 {
     pub channel_sequence_number: u64,
     pub proposer: AccountAddress,
     pub public_keys: Vec<Ed25519PublicKey>,
+    pub signatures: Vec<Option<Ed25519Signature>>,
 }
 
 pub struct TransactionMetadata {
@@ -49,6 +50,7 @@ impl TransactionMetadata {
                 channel_sequence_number: channel_payload.channel_sequence_number(),
                 proposer: channel_payload.proposer(),
                 public_keys: channel_payload.public_keys().to_vec(),
+                signatures: channel_payload.signatures().to_vec(),
             }),
             _ => None,
         };

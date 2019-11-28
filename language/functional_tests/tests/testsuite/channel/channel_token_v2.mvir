@@ -102,19 +102,19 @@ main(){
 //! sender: alice
 //! channel: ch1
 //! proposer: alice
-import 0x0.ChannelTransaction;
-main() {
-   assert(ChannelTransaction.is_channel_txn(), 111);
-   return;
-}
+//! args: {{bob}},50000,50000
+
+0x0.LibraAccount.open_channel
 
 //! new-transaction
 //! sender: alice
 //! channel: ch1
 //! proposer: alice
-//! args: {{bob}},50000,50000
-
-0x0.LibraAccount.open_channel
+import 0x0.ChannelTransaction;
+main() {
+   assert(ChannelTransaction.is_channel_txn(), 111);
+   return;
+}
 
 //! new-transaction
 //! sender: alice
