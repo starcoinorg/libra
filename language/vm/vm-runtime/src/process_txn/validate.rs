@@ -10,7 +10,7 @@ use crate::{
 use libra_config::config::{VMMode, VMPublishingOption};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
-use libra_types::channel::witness::Witness;
+use libra_types::channel::Witness;
 use libra_types::{
     account_address::AccountAddress,
     transaction::{

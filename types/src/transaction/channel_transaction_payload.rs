@@ -6,7 +6,7 @@ use libra_crypto::{
     HashValue, SigningKey, VerifyingKey,
 };
 
-use crate::channel::witness::Witness;
+use crate::channel::Witness;
 use crate::transaction::script_action::ScriptAction;
 use crate::{account_address::AccountAddress, transaction::Script, write_set::WriteSet};
 use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey, Ed25519Signature};
