@@ -1,2 +1,5 @@
-pub mod channel;
-pub mod witness;
+mod channel;
+mod witness;
+
+pub use channel::*;
+pub use witness::{Witness, WitnessData};

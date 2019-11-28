@@ -35,7 +35,7 @@
 //! On the other hand, if you want to query only <Alice>/a/*, `address` will be set to Alice and
 //! `path` will be set to "/a" and use the `get_prefix()` method from statedb
 
-use crate::channel::channel::channel_struct_tag;
+use crate::channel::channel_struct_tag;
 use crate::{
     account_address::{AccountAddress, ADDRESS_LENGTH},
     account_config::{
