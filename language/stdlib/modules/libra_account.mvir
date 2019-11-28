@@ -83,7 +83,7 @@ module LibraAccount {
         guid: bytearray,
     }
 
-    // Channel Resources
+    // Channel Resource on chain
     resource Channel {
         channel_sequence_number: u64,
         closed: bool,
@@ -91,6 +91,12 @@ module LibraAccount {
         participants: Vector.T<address>,
     }
 
+    // Channel Resource mirror, keep in channel's shared resource, update at offchain.
+    resource ChannelMirror {
+        channel_sequence_number: u64,
+    }
+
+    // Channel participant account in channel
     resource ChannelParticipantAccount {
         balance: LibraCoin.T,
     }
@@ -448,7 +454,7 @@ module LibraAccount {
     // - The account's auth key matches the transaction's public key
     // - That the account has enough balance to pay for all of the gas
     // - That the sequence number matches the transaction's sequence key
-    prologue() acquires T {
+    prologue() acquires T,Channel {
         let transaction_sender: address;
         let transaction_sender_exists: bool;
         let sender_account: &mut Self.T;
@@ -495,12 +501,16 @@ module LibraAccount {
         transaction_sequence_number_value = get_txn_sequence_number();
         assert(copy(transaction_sequence_number_value) >= copy(sequence_number_value), 3);
         assert(move(transaction_sequence_number_value) == move(sequence_number_value), 4);
+
+        if(ChannelTransaction.is_channel_txn()){
+            Self.channel_prologue();
+        }
         return;
     }
 
     // The epilogue is invoked at the end of transactions.
     // It collects gas and bumps the sequence number
-    epilogue() acquires T {
+    epilogue() acquires T,Channel {
         let transaction_sender: address;
         let sender_account: &mut Self.T;
         let transaction_fee_account: &mut Self.T;
@@ -515,7 +525,7 @@ module LibraAccount {
 
 
         // Not charge when tx execute on offchain vm.
-        if(!ChannelTransaction.native_is_offchain()){
+        if(!ChannelTransaction.is_offchain()){
              transaction_sender = get_txn_sender();
 
             // Load the transaction sender's account
@@ -539,7 +549,9 @@ module LibraAccount {
         transaction_fee_account = borrow_global_mut<T>(0xFEE);
         LibraCoin.deposit(&mut move(transaction_fee_account).balance, move(transaction_fee));
         }
-
+        if(ChannelTransaction.is_channel_txn()){
+            Self.channel_epilogue();
+        }
         return;
     }
 
@@ -725,6 +737,7 @@ module LibraAccount {
         let participants: Vector.T<address>;
         let sender: address;
         let channel: Self.Channel;
+        let channel_mirror: Self.ChannelMirror;
         let sender_channel_account: Self.ChannelParticipantAccount;
         let participant_channel_account: Self.ChannelParticipantAccount;
 
@@ -751,6 +764,9 @@ module LibraAccount {
            locked: false,
            participants: move(participants),
         };
+        channel_mirror = ChannelMirror {
+            channel_sequence_number: 0,
+        };
         sender_channel_account = ChannelParticipantAccount{
             balance: Self.withdraw_from_sender(move(sender_amount)),
         };
@@ -758,6 +774,7 @@ module LibraAccount {
             balance: Self.withdraw_from_participant(copy(participant), move(participant_amount)),
         };
         Self.move_to_channel<Self.Channel>(move(channel));
+        ChannelUtil.move_to_shared<Self.ChannelMirror>(move(channel_mirror));
         ChannelUtil.move_to_participant<Self.ChannelParticipantAccount>(copy(sender), move(sender_channel_account));
         ChannelUtil.move_to_participant<Self.ChannelParticipantAccount>(copy(participant), move(participant_channel_account));
         Self.add_channel(move(sender), copy(channel_address));
@@ -852,43 +869,52 @@ module LibraAccount {
     channel_prologue() acquires Channel {
         let txn_channel_sequence_number: u64;
         let channel_sequence_number: u64;
+        let mirror_channel_sequence_number: u64;
         let channel_address: address;
         let channel: & Self.Channel;
+        let channel_mirror: &Self.ChannelMirror;
 
         txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
         channel_address = ChannelTransaction.get_channel_address();
 
         // txn_sequence_number 0 should be open channel txn.
         if(copy(txn_channel_sequence_number) == 0){
-            assert(!exists<Channel>(copy(channel_address)), 1011);
+            assert(!Self.exists(copy(channel_address)), 1011);
+            //assert(!exists<Channel>(copy(channel_address)), 1011);
             return;
         }else{
             channel = borrow_global<Channel>(copy(channel_address));
-            channel_sequence_number = *(&copy(channel).channel_sequence_number);
+            channel_mirror = ChannelUtil.borrow_from_shared<Self.ChannelMirror>();
 
-            if(ChannelTransaction.is_offchain()){
-                assert(copy(txn_channel_sequence_number) == copy(channel_sequence_number), 1012);
-            }else{
-                assert(copy(txn_channel_sequence_number) >= copy(channel_sequence_number), 1013);
-            }
+            channel_sequence_number = *(&copy(channel).channel_sequence_number);
+            mirror_channel_sequence_number = *(&copy(channel_mirror).channel_sequence_number);
+
+            assert(copy(txn_channel_sequence_number) == copy(mirror_channel_sequence_number), 1012);
+            assert(copy(mirror_channel_sequence_number) >= copy(channel_sequence_number), 1013);
             return;
         }
     }
 
     channel_epilogue() acquires Channel {
         let channel: &mut Self.Channel;
+        let channel_mirror: &mut Self.ChannelMirror;
+        let sender: address;
         let txn_channel_sequence_number: u64;
         let new_channel_sequence_number: u64;
         let channel_address: address;
 
+        sender = get_txn_sender();
         channel_address = ChannelTransaction.get_channel_address();
         channel = borrow_global_mut<Channel>(copy(channel_address));
+        channel_mirror = ChannelUtil.borrow_from_shared_mut<Self.ChannelMirror>();
+
         txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
 
         new_channel_sequence_number = move(txn_channel_sequence_number) + 1;
-        *(&mut copy(channel).channel_sequence_number) = move(new_channel_sequence_number);
+        *(&mut copy(channel_mirror).channel_sequence_number) = copy(new_channel_sequence_number);
 
         if(!ChannelTransaction.is_offchain()){
+            *(&mut copy(channel).channel_sequence_number) = copy(new_channel_sequence_number);
             if(!Self.has_authorized_by_participants()){
                 *(&mut copy(channel).locked) = true;
                 //TODO write locked_by
