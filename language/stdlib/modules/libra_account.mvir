@@ -625,7 +625,7 @@ module LibraAccount {
 
     // Enable channel feature for sender
     public enable_channel(){
-        assert(!Self.is_channel_enable(get_txn_sender()), 1111);
+        assert(!Self.is_channel_enable(get_txn_sender()), 1000);
         move_to_sender<UserChannels>(UserChannels{
             channels: Vector.empty<address>(),
         });
@@ -641,7 +641,7 @@ module LibraAccount {
         let user_channels: &mut Self.UserChannels;
 
         user_channels = borrow_global_mut<UserChannels>(copy(addr));
-        assert(!Vector.contains<address>(&copy(user_channels).channels, &channel_address), 1111);
+        assert(!Vector.contains<address>(&copy(user_channels).channels, &channel_address), 1001);
         Vector.push_back<address>(&mut move(user_channels).channels, move(channel_address));
         return;
     }
@@ -650,7 +650,7 @@ module LibraAccount {
         let user_channels: &mut Self.UserChannels;
 
         user_channels = borrow_global_mut<UserChannels>(copy(addr));
-        assert(Vector.contains<address>(&move(user_channels).channels, &channel_address), 1111);
+        assert(Vector.contains<address>(&move(user_channels).channels, &channel_address), 10002);
         //TODO wait Vector.remove
         return;
     }
@@ -688,6 +688,33 @@ module LibraAccount {
         return move(channel_address);
     }
 
+    public new_participants_vector(one: address, two: address): Vector.T<address>{
+        let participants: Vector.T<address>;
+
+        assert(copy(one) != copy(two), 1003);
+        participants = Vector.empty<address>();
+        if(AddressUtil.compare_address(copy(one), copy(two)) == 0){
+            Vector.push_back<address>(
+                &mut participants,
+                copy(one)
+            );
+            Vector.push_back<address>(
+                &mut participants,
+                copy(two)
+            );
+        }else{
+            Vector.push_back<address>(
+                &mut participants,
+                copy(two)
+            );
+            Vector.push_back<address>(
+                &mut participants,
+                copy(one)
+            );
+        }
+        return move(participants);
+    }
+
     native move_to_channel<R:resource>(r: R);
     native move_from_channel<R:resource>():R;
 
@@ -703,37 +730,19 @@ module LibraAccount {
 
         sender = get_txn_sender();
 
-        assert(copy(sender) != copy(participant), 1111);
-        assert(copy(sender) == ChannelTransaction.get_proposer(), 1111);
+        assert(copy(sender) != copy(participant), 1003);
+        assert(copy(sender) == ChannelTransaction.get_proposer(), 1004);
 
-        assert(Self.is_channel_enable(copy(sender)), 1111);
-        assert(Self.is_channel_enable(copy(participant)), 1111);
+        assert(Self.is_channel_enable(copy(sender)), 1113);
+        assert(Self.is_channel_enable(copy(participant)), 1114);
 
-        participants = Vector.empty<address>();
-        if(AddressUtil.compare_address(copy(sender), copy(participant)) == 0){
-            Vector.push_back<address>(
-                &mut participants,
-                copy(sender)
-            );
-            Vector.push_back<address>(
-                &mut participants,
-                copy(participant)
-            );
-        }else{
-            Vector.push_back<address>(
-                &mut participants,
-                copy(participant)
-            );
-            Vector.push_back<address>(
-                &mut participants,
-                copy(sender)
-            );
-        }
+        participants = Self.new_participants_vector(copy(sender), copy(participant));
+
         txn_channel_address = ChannelTransaction.get_channel_address();
         channel_address = Self.generate_channel_address(&participants);
 
-        assert(move(txn_channel_address) == copy(channel_address), 1111);
-        assert(ChannelTransaction.get_txn_channel_sequence_number() == 0, 1111);
+        assert(move(txn_channel_address) == copy(channel_address), 1005);
+        assert(ChannelTransaction.get_txn_channel_sequence_number() == 0, 1006);
 
         Self.create_account(copy(channel_address));
         channel = Channel {
@@ -795,9 +804,9 @@ module LibraAccount {
         channel = borrow_global<Channel>(copy(channel_address));
         locked_by = borrow_global<ChannelLockedBy>(copy(channel_address));
 
-        assert(*&copy(channel).locked, 101);
-        assert(*&copy(locked_by).participant != copy(proposer), 100);
-        assert(move(txn_channel_sequence_number) >= *(&copy(channel).channel_sequence_number), 102);
+        assert(*&copy(channel).locked, 1007);
+        assert(*&copy(locked_by).participant != copy(proposer), 1008);
+        assert(move(txn_channel_sequence_number) >= *(&copy(channel).channel_sequence_number), 1009);
 
         challenged_by = ChannelChallengedBy {
             participant: copy(proposer),
@@ -817,7 +826,7 @@ module LibraAccount {
         let txn_channel_sequence_number:u64;
         let locked_by: Self.ChannelLockedBy;
 
-        assert(Self.has_authorized_by_participants(), 100);
+        assert(Self.has_authorized_by_participants(), 1010);
 
         channel_address = ChannelTransaction.get_channel_address();
         txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
@@ -851,16 +860,16 @@ module LibraAccount {
 
         // txn_sequence_number 0 should be open channel txn.
         if(copy(txn_channel_sequence_number) == 0){
-            assert(!exists<Channel>(copy(channel_address)), 400);
+            assert(!exists<Channel>(copy(channel_address)), 1011);
             return;
         }else{
             channel = borrow_global<Channel>(copy(channel_address));
             channel_sequence_number = *(&copy(channel).channel_sequence_number);
 
             if(ChannelTransaction.is_offchain()){
-                assert(copy(txn_channel_sequence_number) == copy(channel_sequence_number), 403);
+                assert(copy(txn_channel_sequence_number) == copy(channel_sequence_number), 1012);
             }else{
-                assert(copy(txn_channel_sequence_number) >= copy(channel_sequence_number), 404);
+                assert(copy(txn_channel_sequence_number) >= copy(channel_sequence_number), 1013);
             }
             return;
         }
