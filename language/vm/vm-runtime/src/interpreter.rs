@@ -802,6 +802,9 @@ where
                 "borrow_from_shared_mut" => {
                     self.call_borrow_from_shared_mut(context, type_actual_tags)
                 }
+                "exist_channel_participant" => {
+                    self.call_exist_channel_participant(context, type_actual_tags)
+                }
                 _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
             }
         } else if module_id == *CHANNEL_TXN_MODULE {
@@ -1047,7 +1050,20 @@ where
         self.operand_stack.push(Value::global_ref(resource))
     }
 
+    /// call `exist_channel_participant`.
+    fn call_exist_channel_participant(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        type_actual_tags: Vec<TypeTag>,
+    ) -> VMResult<()> {
+        let participant = self.operand_stack.pop_as::<AccountAddress>()?;
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
 
+        let (exists, _memsize) = context.resource_exists(&ap, struct_def)?;
+        self.operand_stack.push(Value::bool(exists))
+    }
 
     /// call `native_move_to_channel`.
     fn call_native_move_to_channel(
