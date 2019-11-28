@@ -7,6 +7,7 @@ use crate::{
 use failure::prelude::*;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 
 lazy_static! {
     // Channel
@@ -18,6 +19,9 @@ lazy_static! {
 
     static ref CHANNEL_PARTICIPANT_MODULE_NAME: Identifier = Identifier::new("LibraAccount").unwrap();
     static ref CHANNEL_PARTICIPANT_STRUCT_NAME: Identifier = Identifier::new("ChannelParticipantAccount").unwrap();
+
+    static ref USER_CHANNELS_MODULE_NAME: Identifier = Identifier::new("LibraAccount").unwrap();
+    static ref USER_CHANNELS_STRUCT_NAME: Identifier = Identifier::new("UserChannels").unwrap();
 }
 
 pub fn channel_module_name() -> &'static IdentStr {
@@ -67,6 +71,23 @@ pub fn channel_participant_struct_tag() -> StructTag {
         address: core_code_address(),
         module: channel_participant_module_name().to_owned(),
         name: channel_participant_struct_name().to_owned(),
+        type_params: vec![],
+    }
+}
+
+pub fn user_channels_module_name() -> &'static IdentStr {
+    &*USER_CHANNELS_MODULE_NAME
+}
+
+pub fn user_channels_struct_name() -> &'static IdentStr {
+    &*USER_CHANNELS_STRUCT_NAME
+}
+
+pub fn user_channels_struct_tag() -> StructTag {
+    StructTag {
+        address: core_code_address(),
+        module: user_channels_module_name().to_owned(),
+        name: user_channels_struct_name().to_owned(),
         type_params: vec![],
     }
 }
@@ -171,5 +192,34 @@ impl ChannelParticipantAccountResource {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         lcs::to_bytes(self).unwrap()
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UserChannelsResource {
+    channels: Vec<AccountAddress>,
+}
+
+impl UserChannelsResource {
+    pub fn new(channels: Vec<AccountAddress>) -> Self {
+        Self { channels }
+    }
+
+    pub fn channels(&self) -> &[AccountAddress] {
+        &self.channels
+    }
+}
+
+impl TryFrom<&[u8]> for UserChannelsResource {
+    type Error = Error;
+
+    fn try_from(value: &[u8]) -> Result<Self> {
+        lcs::from_bytes(value).map_err(|e| Into::into(e))
+    }
+}
+
+impl Into<Vec<AccountAddress>> for UserChannelsResource {
+    fn into(self) -> Vec<AccountAddress> {
+        self.channels
     }
 }
