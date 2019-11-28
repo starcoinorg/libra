@@ -15,4 +15,6 @@ module ChannelUtil{
     native public borrow_from_shared<T:resource>(): & T;
 
     native public borrow_from_shared_mut<T:resource>(): &mut T;
+
+    native public exist_channel_participant<T: resource>(participant: address): bool;
 }

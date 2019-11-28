@@ -562,6 +562,16 @@ lazy_static! {
             vec![],
             vec![MutableReference(Box::new(TypeParameter(0)))]
         );
+        add!(m, addr, "ChannelUtil", "exist_channel_participant",
+          |_, _| {
+                Err(VMStatus::new(StatusCode::UNREACHABLE).with_message(
+                            "exist_channel_participant does not have a native implementation"
+                                .to_string()))
+             },
+            vec![Kind::Resource],
+            vec![Address],
+            vec![Bool]
+        );
         m
     };
 }
