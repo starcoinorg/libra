@@ -6,7 +6,12 @@ module ChannelScript {
     import 0x0.HashTimeLock;
     import 0x0.ChannelTransaction;
 
-   // Transfer LibraCoin from proposer's LibraAccount to ChannelParticipantAccount
+    public open(participant: address, sender_amount: u64, participant_amount: u64){
+        LibraAccount.open_channel(move(participant), move(sender_amount), move(participant_amount));
+        return;
+    }
+
+    // Transfer LibraCoin from proposer's LibraAccount to ChannelParticipantAccount
     public deposit(amount: u64){
         let deposit_coin: LibraCoin.T;
         let proposer: address;

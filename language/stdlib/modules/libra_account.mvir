@@ -730,7 +730,7 @@ module LibraAccount {
     native move_to_channel<R:resource>(r: R);
     native move_from_channel<R:resource>():R;
 
-    //only support one participant
+    //only support one participant currently.
     public open_channel(participant: address, sender_amount: u64, participant_amount: u64) acquires T, UserChannels {
         let txn_channel_address: address;
         let channel_address: address;
@@ -809,6 +809,12 @@ module LibraAccount {
         return move(withdraw_coin);
     }
 
+    // Channel participant balance.
+    public channel_balance(participant: address): u64 {
+        let channel_account: & Self.ChannelParticipantAccount;
+        channel_account = ChannelUtil.borrow_from_participant<Self.ChannelParticipantAccount>(copy(participant));
+        return LibraCoin.value(&move(channel_account).balance);
+    }
 
     public challenge() acquires Channel,ChannelLockedBy {
         let channel: &Self.Channel;
