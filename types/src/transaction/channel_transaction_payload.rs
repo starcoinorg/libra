@@ -383,7 +383,9 @@ impl ChannelTransactionPayloadV2 {
         }
     }
 
+    /// Verify Witness and body's signature.
     pub fn verify(&self) -> Result<()> {
+        self.body.witness.verify(self.public_keys())?;
         let hash = self.body.hash();
         for (public_key, signature) in self.public_keys.iter().zip(self.signatures.iter()) {
             match signature {
