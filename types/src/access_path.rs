@@ -495,11 +495,24 @@ impl AccessPath {
     }
 
     pub fn channel_resource_access_path(
-        account: AccountAddress,
+        channel_address: AccountAddress,
         participant: AccountAddress,
         tag: StructTag,
     ) -> AccessPath {
-        Self::new_for_data_path(account, DataPath::channel_resource_path(participant, tag))
+        Self::new_for_data_path(
+            channel_address,
+            DataPath::channel_resource_path(participant, tag),
+        )
+    }
+
+    pub fn channel_shared_resource_access_path(
+        channel_address: AccountAddress,
+        tag: StructTag,
+    ) -> AccessPath {
+        Self::new_for_data_path(
+            channel_address,
+            DataPath::channel_resource_path(channel_address, tag),
+        )
     }
 
     pub fn is_code(&self) -> bool {

@@ -67,9 +67,18 @@ impl WriteSet {
     }
 
     /// Check whether the write set modifies the `participant_address`'s private channel resources.
-    /// FIXME: implement me.
-    pub fn contains_channel_resource(&self, _participant_address: &AccountAddress) -> bool {
-        unimplemented!()
+    pub fn contains_channel_resource(&self, participant_address: &AccountAddress) -> bool {
+        for (ap, _op) in self {
+            if ap
+                .data_path()
+                .and_then(|data_path| data_path.participant())
+                .and_then(|addr| Some(&addr == participant_address))
+                .unwrap_or(false)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     pub fn contains_onchain_resource(&self) -> bool {
