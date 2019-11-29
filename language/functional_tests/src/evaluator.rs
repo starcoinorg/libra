@@ -17,21 +17,18 @@ use ir_to_bytecode_syntax::ast::ScriptOrModule;
 use language_e2e_tests::account::Account;
 use language_e2e_tests::executor::FakeExecutor;
 use libra_config::config::VMPublishingOption;
-use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
-use libra_crypto::hash::CryptoHash;
-use libra_types::access_path::DataPath;
-use libra_types::channel::channel::ChannelResource;
-use libra_types::channel::witness::{Witness, WitnessData};
-use libra_types::transaction::{
-    Action, ChannelActionBody, ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2,
-    ScriptAction,
+use libra_crypto::{
+    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
+    hash::CryptoHash,
 };
 use libra_types::{
-    access_path::AccessPath,
+    access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
+    channel::{ChannelResource, Witness, WitnessData},
     channel_account::{channel_account_struct_tag, ChannelAccountResource},
     transaction::{
-        Module as TransactionModule, RawTransaction, Script as TransactionScript,
+        Action, ChannelActionBody, ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2,
+        Module as TransactionModule, RawTransaction, Script as TransactionScript, ScriptAction,
         SignedTransaction, TransactionOutput, TransactionStatus,
     },
     vm_error::StatusCode,

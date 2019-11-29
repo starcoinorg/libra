@@ -1,6 +1,8 @@
 use crate::write_set::WriteSet;
+use failure::prelude::*;
+use libra_crypto::ed25519::Ed25519PublicKey;
 use libra_crypto::hash::CryptoHash;
-use libra_crypto::{ed25519::Ed25519Signature, hash::HashValue};
+use libra_crypto::{ed25519::Ed25519Signature, hash::HashValue, VerifyingKey};
 use libra_crypto_derive::CryptoHasher;
 use serde::{Deserialize, Serialize};
 
@@ -65,5 +67,24 @@ impl Witness {
 
     pub fn signatures(&self) -> &[Ed25519Signature] {
         self.signatures.as_slice()
+    }
+
+    pub fn verify(&self, public_keys: &[Ed25519PublicKey]) -> Result<()> {
+        if self.data.channel_sequence_number == 0 {
+            ensure!(
+                self.data.write_set().is_empty(),
+                "witness write_set must empty at channel_sequence_number 0"
+            );
+        } else {
+            ensure!(
+                self.signatures.len() == public_keys.len(),
+                "witness signature len must equals public_keys."
+            );
+            let hash = self.data.hash();
+            for (public_key, signature) in public_keys.iter().zip(self.signatures.iter()) {
+                public_key.verify_signature(&hash, signature)?;
+            }
+        }
+        return Ok(());
     }
 }

@@ -10,7 +10,7 @@ use crate::{
 use libra_config::config::{VMMode, VMPublishingOption};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
-use libra_types::channel::Witness;
+use libra_types::transaction::ChannelTransactionPayloadV2;
 use libra_types::{
     account_address::AccountAddress,
     transaction::{
@@ -216,7 +216,7 @@ where
                 mode,
                 vm_mode,
                 || {
-                    Self::check_channel_write_set_v2(channel_payload.witness())?;
+                    Self::check_channel_payload(channel_payload)?;
                     Ok(())
                 },
             )?),
@@ -240,9 +240,27 @@ where
         Ok(())
     }
 
-    fn check_channel_write_set_v2(_witness: &Witness) -> Result<(), VMStatus> {
-        // check write_set resource ownership
-        //TODO
+    fn check_channel_payload(
+        channel_payload: &ChannelTransactionPayloadV2,
+    ) -> Result<(), VMStatus> {
+        let channel_address = channel_payload.channel_address();
+        let witness = channel_payload.witness();
+        match channel_payload.verify() {
+            Err(e) => {
+                warn!("[VM] Verify channel payload signature fail: {:?}", e);
+                return Err(
+                    VMStatus::new(StatusCode::INVALID_SIGNATURE).with_message(format!("{:?}", e))
+                );
+            }
+            Ok(_) => {}
+        }
+        let write_set = witness.write_set();
+        for (ap, _op) in write_set {
+            if &ap.address != &channel_address {
+                warn!("[VM] Attempt to access a resource out of channel.");
+                return Err(VMStatus::new(StatusCode::INVALID_WRITE_SET));
+            }
+        }
         Ok(())
     }
 
