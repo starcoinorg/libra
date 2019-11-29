@@ -98,22 +98,16 @@ pub fn user_channels_struct_tag() -> StructTag {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ChannelResource {
     channel_sequence_number: u64,
-    closed: bool,
-    locked: bool,
+    // 0 open, 1 locked, 2 closed.
+    stage: u64,
     participants: Vec<AccountAddress>,
 }
 
 impl ChannelResource {
-    pub fn new(
-        channel_sequence_number: u64,
-        closed: bool,
-        locked: bool,
-        participants: Vec<AccountAddress>,
-    ) -> Self {
+    pub fn new(channel_sequence_number: u64, participants: Vec<AccountAddress>) -> Self {
         Self {
             channel_sequence_number,
-            closed,
-            locked,
+            stage: 0,
             participants,
         }
     }
@@ -123,11 +117,11 @@ impl ChannelResource {
     }
 
     pub fn closed(&self) -> bool {
-        self.closed
+        self.stage == 2
     }
 
     pub fn locked(&self) -> bool {
-        self.locked
+        self.stage == 1
     }
 
     pub fn participants(&self) -> &[AccountAddress] {

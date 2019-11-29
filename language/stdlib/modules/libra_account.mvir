@@ -86,8 +86,8 @@ module LibraAccount {
     // Channel Resource on chain
     resource Channel {
         channel_sequence_number: u64,
-        closed: bool,
-        locked: bool,
+        // 0 open 1 locked 2 closed
+        stage: u64,
         participants: Vector.T<address>,
     }
 
@@ -760,8 +760,7 @@ module LibraAccount {
         Self.create_account(copy(channel_address));
         channel = Channel {
            channel_sequence_number: 0,
-           closed: false,
-           locked: false,
+           stage: 0,
            participants: move(participants),
         };
         channel_mirror = ChannelMirror {
@@ -831,7 +830,8 @@ module LibraAccount {
         channel = borrow_global<Channel>(copy(channel_address));
         locked_by = borrow_global<ChannelLockedBy>(copy(channel_address));
 
-        assert(*&copy(channel).locked, 1007);
+        // channel stage must is locked
+        assert(*&copy(channel).stage == 1, 1007);
         assert(*&copy(locked_by).participant != copy(proposer), 1008);
         assert(move(txn_channel_sequence_number) >= *(&copy(channel).channel_sequence_number), 1009);
 
@@ -859,7 +859,7 @@ module LibraAccount {
         txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
 
         channel = borrow_global_mut<Channel>(copy(channel_address));
-        *(&mut copy(channel).locked) = false;
+        *(&mut copy(channel).stage) = 0;
         locked_by = Self.move_from_channel<Self.ChannelLockedBy>();
         Self.destroy_locked_by(move(locked_by));
         return;
@@ -926,7 +926,8 @@ module LibraAccount {
         if(!ChannelTransaction.is_offchain()){
             *(&mut copy(channel).channel_sequence_number) = copy(new_channel_sequence_number);
             if(!Self.has_authorized_by_participants()){
-                *(&mut copy(channel).locked) = true;
+                // set channel stage to locked
+                *(&mut copy(channel).stage) = 1;
                 //TODO write locked_by
             }
         }
