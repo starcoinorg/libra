@@ -89,6 +89,7 @@ module LibraAccount {
         // 0 open 1 locked 2 closed
         stage: u64,
         participants: Vector.T<address>,
+        events: Self.EventHandle<Self.ChannelEvent>,
     }
 
     // Channel Resource mirror, keep in channel's shared resource, update at offchain.
@@ -112,6 +113,16 @@ module LibraAccount {
     // A resource to keep user's channels, etc
     resource UserChannels {
         channels: Vector.T<address>,
+    }
+
+    // track global channel event
+    resource ChannelGlobalEvents {
+        events: Self.EventHandle<Self.ChannelEvent>,
+    }
+
+    struct ChannelEvent {
+        channel_address: address,
+        stage: u64,
     }
 
     // Creates a new LibraAccount.T
@@ -510,7 +521,7 @@ module LibraAccount {
 
     // The epilogue is invoked at the end of transactions.
     // It collects gas and bumps the sequence number
-    epilogue() acquires T,Channel {
+    epilogue() acquires T,Channel,ChannelGlobalEvents {
         let transaction_sender: address;
         let sender_account: &mut Self.T;
         let transaction_fee_account: &mut Self.T;
@@ -635,6 +646,22 @@ module LibraAccount {
 
     //Channel functions
 
+    // execute in genesis function
+    initialize_channel() acquires T {
+        let channel_global_account: &mut Self.T;
+        let channel_global_events: Self.ChannelGlobalEvents;
+        let sender: address;
+
+        sender = get_txn_sender();
+        assert(copy(sender) == 0x1D9, 11);
+        channel_global_account = borrow_global_mut<T>(0x1D9);
+        channel_global_events = ChannelGlobalEvents{
+            events: Self.new_event_handle_impl<Self.ChannelEvent>(&mut move(channel_global_account).event_generator, copy(sender)),
+        };
+        move_to_sender<ChannelGlobalEvents>(move(channel_global_events));
+        return;
+    }
+
     // Enable channel feature for sender
     public enable_channel(){
         assert(!Self.is_channel_enable(get_txn_sender()), 1000);
@@ -731,7 +758,7 @@ module LibraAccount {
     native move_from_channel<R:resource>():R;
 
     //only support one participant currently.
-    public open_channel(participant: address, sender_amount: u64, participant_amount: u64) acquires T, UserChannels {
+    public open_channel(participant: address, sender_amount: u64, participant_amount: u64) acquires T,Channel, UserChannels, ChannelGlobalEvents {
         let txn_channel_address: address;
         let channel_address: address;
         let participants: Vector.T<address>;
@@ -740,6 +767,7 @@ module LibraAccount {
         let channel_mirror: Self.ChannelMirror;
         let sender_channel_account: Self.ChannelParticipantAccount;
         let participant_channel_account: Self.ChannelParticipantAccount;
+        let channel_account: &mut Self.T;
 
         sender = get_txn_sender();
 
@@ -758,10 +786,13 @@ module LibraAccount {
         assert(ChannelTransaction.get_txn_channel_sequence_number() == 0, 1006);
 
         Self.create_account(copy(channel_address));
+        channel_account = borrow_global_mut<T>(copy(channel_address));
+
         channel = Channel {
            channel_sequence_number: 0,
            stage: 0,
            participants: move(participants),
+           events: Self.new_event_handle_impl<Self.ChannelEvent>(&mut move(channel_account).event_generator, copy(channel_address)),
         };
         channel_mirror = ChannelMirror {
             channel_sequence_number: 0,
@@ -777,7 +808,31 @@ module LibraAccount {
         ChannelUtil.move_to_participant<Self.ChannelParticipantAccount>(copy(sender), move(sender_channel_account));
         ChannelUtil.move_to_participant<Self.ChannelParticipantAccount>(copy(participant), move(participant_channel_account));
         Self.add_channel(move(sender), copy(channel_address));
-        Self.add_channel(move(participant), move(channel_address));
+        Self.add_channel(move(participant), copy(channel_address));
+        Self.emit_channel_event(move(channel_address));
+        return;
+    }
+
+    emit_channel_event(channel_address: address) acquires Channel, ChannelGlobalEvents {
+        let channel: &mut Self.Channel;
+        channel = borrow_global_mut<Channel>(copy(channel_address));
+        Self.do_emit_channel_event(move(channel_address), move(channel));
+        return;
+    }
+
+    do_emit_channel_event(channel_address: address, channel: &mut Self.Channel) acquires ChannelGlobalEvents {
+        let global_events: &mut Self.ChannelGlobalEvents;
+        let event: Self.ChannelEvent;
+
+        global_events = borrow_global_mut<ChannelGlobalEvents>(0x1D9);
+
+        event = ChannelEvent{
+            channel_address: copy(channel_address),
+            stage: *&copy(channel).stage,
+        };
+
+        Self.emit_event<Self.ChannelEvent>(&mut move(channel).events, copy(event));
+        Self.emit_event<Self.ChannelEvent>(&mut move(global_events).events, copy(event));
         return;
     }
 
@@ -815,8 +870,8 @@ module LibraAccount {
         return LibraCoin.value(&move(channel_account).balance);
     }
 
-    public challenge() acquires Channel,ChannelLockedBy {
-        let channel: &Self.Channel;
+    public challenge() acquires Channel,ChannelLockedBy,ChannelGlobalEvents {
+        let channel: &mut Self.Channel;
         let channel_address: address;
         let proposer: address;
         let txn_channel_sequence_number: u64;
@@ -827,7 +882,7 @@ module LibraAccount {
         proposer = ChannelTransaction.get_proposer();
         txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
 
-        channel = borrow_global<Channel>(copy(channel_address));
+        channel = borrow_global_mut<Channel>(copy(channel_address));
         locked_by = borrow_global<ChannelLockedBy>(copy(channel_address));
 
         // channel stage must is locked
@@ -839,7 +894,7 @@ module LibraAccount {
             participant: copy(proposer),
         };
         Self.move_to_channel<Self.ChannelChallengedBy>(move(challenged_by));
-        Self.close();
+        Self.do_close(copy(channel_address), move(channel));
         return;
     }
 
@@ -866,7 +921,7 @@ module LibraAccount {
         return true;
     }
 
-    public resolve() acquires Channel {
+    public resolve() acquires Channel, ChannelGlobalEvents {
         let channel: &mut Self.Channel;
         let channel_address: address;
         let txn_channel_sequence_number:u64;
@@ -881,6 +936,7 @@ module LibraAccount {
         *(&mut copy(channel).stage) = 0;
         locked_by = Self.move_from_channel<Self.ChannelLockedBy>();
         Self.destroy_locked_by(move(locked_by));
+        Self.do_emit_channel_event(copy(channel_address), copy(channel));
         return;
     }
 
@@ -890,7 +946,19 @@ module LibraAccount {
         return;
     }
 
-    public close(){
+    do_close(channel_address: address, channel: &mut Self.Channel) acquires ChannelGlobalEvents{
+        *(&mut copy(channel).stage) = 2;
+        Self.do_emit_channel_event(copy(channel_address), copy(channel));
+        return;
+    }
+
+    public close() acquires Channel, ChannelGlobalEvents {
+        let channel_address: address;
+        let channel: &mut Self.Channel;
+
+        channel_address = ChannelTransaction.get_channel_address();
+        channel = borrow_global_mut<Channel>(copy(channel_address));
+        Self.do_close(move(channel_address), move(channel));
         return;
     }
 
@@ -949,7 +1017,7 @@ module LibraAccount {
         }
     }
 
-    channel_epilogue() acquires Channel {
+    channel_epilogue() acquires Channel,ChannelGlobalEvents {
         let channel: &mut Self.Channel;
         let channel_mirror: &mut Self.ChannelMirror;
         let sender: address;
@@ -972,6 +1040,7 @@ module LibraAccount {
             if(!Self.has_authorized_by_participants()){
                 // set channel stage to locked
                 *(&mut copy(channel).stage) = 1;
+                Self.do_emit_channel_event(copy(channel_address), copy(channel));
                 //TODO write locked_by
             }
         }

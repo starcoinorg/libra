@@ -1,3 +1,4 @@
+use crate::event::EventHandle;
 use crate::{
     account_address::AccountAddress,
     account_config::core_code_address,
@@ -101,14 +102,20 @@ pub struct ChannelResource {
     // 0 open, 1 locked, 2 closed.
     stage: u64,
     participants: Vec<AccountAddress>,
+    events: EventHandle,
 }
 
 impl ChannelResource {
-    pub fn new(channel_sequence_number: u64, participants: Vec<AccountAddress>) -> Self {
+    pub fn new(
+        channel_sequence_number: u64,
+        participants: Vec<AccountAddress>,
+        events: EventHandle,
+    ) -> Self {
         Self {
             channel_sequence_number,
             stage: 0,
             participants,
+            events,
         }
     }
 
