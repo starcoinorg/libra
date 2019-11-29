@@ -844,6 +844,25 @@ module LibraAccount {
     }
 
     public has_authorized_by_participants(): bool {
+        let participant_signatures: Vector.T<bytearray>;
+        let participant_signatures_ref: &Vector.T<bytearray>;
+        let signature: bytearray;
+        let len: u64;
+        let index: u64;
+
+        participant_signatures = ChannelTransaction.get_signatures();
+        participant_signatures_ref = &participant_signatures;
+        len = Vector.length<bytearray>(copy(participant_signatures_ref));
+        index = 0;
+        while (copy(index) < copy(len)) {
+            signature = Vector.get<bytearray>(copy(participant_signatures_ref), copy(index));
+            // signature is an empty bytearray if the txn is not authorized by the participant
+            if (move(signature) == h"") {
+                return false;
+            }
+            index = copy(index) + 1;
+        }
+
         return true;
     }
 
