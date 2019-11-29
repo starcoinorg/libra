@@ -876,13 +876,22 @@ module LibraAccount {
     }
 
     // The prologue is invoked at the beginning of every channel transaction
-    channel_prologue() acquires Channel {
+    channel_prologue() acquires T,Channel {
         let txn_channel_sequence_number: u64;
         let channel_sequence_number: u64;
         let mirror_channel_sequence_number: u64;
         let channel_address: address;
         let channel: & Self.Channel;
         let channel_mirror: &Self.ChannelMirror;
+        let participants: &Vector.T<address>;
+        let participant: address;
+        let participant_account: &Self.T;
+        let participant_public_keys: Vector.T<bytearray>;
+        let participant_public_keys_ref: &Vector.T<bytearray>;
+        let public_key: bytearray;
+        let public_key_hash: bytearray;
+        let len: u64;
+        let index: u64;
 
         txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
         channel_address = ChannelTransaction.get_channel_address();
@@ -901,6 +910,22 @@ module LibraAccount {
 
             assert(copy(txn_channel_sequence_number) == copy(mirror_channel_sequence_number), 1012);
             assert(copy(mirror_channel_sequence_number) >= copy(channel_sequence_number), 1013);
+
+            // Check that the transaction's public keys matches the participants' current auth key
+            participants = &copy(channel).participants;
+            participant_public_keys = ChannelTransaction.get_public_keys();
+            participant_public_keys_ref = &participant_public_keys;
+            len = Vector.length<address>(copy(participants));
+            index = 0;
+            while (copy(index) < copy(len)) {
+                public_key = Vector.get<bytearray>(copy(participant_public_keys_ref), copy(index));
+                public_key_hash = Hash.sha3_256(copy(public_key));
+                participant = Vector.get<address>(copy(participants), copy(index));
+                participant_account = borrow_global<T>(copy(participant));
+                assert(move(public_key_hash) == *(&move(participant_account).authentication_key), 1014);
+                index = copy(index) + 1;
+            }
+
             return;
         }
     }
