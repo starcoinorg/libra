@@ -1,17 +1,12 @@
-// The module for the channel resource
-module Channel {
+// The module for keep the channel scripts.
+module ChannelScript {
     import 0x0.LibraAccount;
     import 0x0.LibraCoin;
     import 0x0.LibraSystem;
     import 0x0.HashTimeLock;
     import 0x0.ChannelTransaction;
 
-    //just for test
-    public do_nothing(){
-        return;
-    }
-
-   // Transfer LibraCoin from proposer's LibraAccount to OffchainAccount
+   // Transfer LibraCoin from proposer's LibraAccount to ChannelParticipantAccount
     public deposit(amount: u64){
         let deposit_coin: LibraCoin.T;
         let proposer: address;
@@ -25,7 +20,7 @@ module Channel {
         return;
     }
 
-    // Transfer LibraCoin from proposer's OffchainAccount to LibraAccount
+    // Transfer LibraCoin from proposer's ChannelParticipantAccount to LibraAccount
     public withdraw(amount: u64){
         let proposer: address;
         let withdraw_coin: LibraCoin.T;
@@ -37,6 +32,7 @@ module Channel {
         return;
     }
 
+    // Send payment to channel participant at payee
     public send_payment(payee: address, amount: u64, hash_lock: bytearray){
         let proposer: address;
         let coin: LibraCoin.T;
@@ -48,6 +44,7 @@ module Channel {
         return;
     }
 
+    // Receive payment from channel.
     public receive_payment(preimage: bytearray){
         let proposer: address;
         let coin: LibraCoin.T;
@@ -58,6 +55,7 @@ module Channel {
         return;
     }
 
+    // Cancel send payment.
     public cancel_payment_after_timeout(){
         let proposer: address;
         let coin: LibraCoin.T;
@@ -65,6 +63,17 @@ module Channel {
         proposer = ChannelTransaction.get_proposer();
         coin = HashTimeLock.unlock_in_channel_after_timeout();
         LibraAccount.deposit_to_channel(move(coin));
+        return;
+    }
+
+    //TODO remove this function after transfer by hash time lock.
+    //Transfer proposer's coin to payee at channel directly.
+    //This operation need payee to conform.
+    public transfer(payee: address, amount: u64){
+        let coin: LibraCoin.T;
+
+        coin = LibraAccount.withdraw_from_channel(copy(amount));
+        LibraAccount.deposit_to_participant(copy(payee), move(coin));
         return;
     }
 }

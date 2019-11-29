@@ -43,8 +43,8 @@ lazy_static! {
         make_module_definition!("../modules/channel_util.mvir");
     static ref HASH_TIME_LOCK_MODULE: ModuleDefinition =
         make_module_definition!("../modules/hash_time_lock.mvir");
-    static ref CHANNEL_MODULE: ModuleDefinition =
-        make_module_definition!("../modules/channel.mvir");
+    static ref CHANNEL_SCRIPT_MODULE: ModuleDefinition =
+        make_module_definition!("../modules/channel_script.mvir");
     static ref MODULE_DEFS: Vec<&'static ModuleDefinition> = {
         // Note: a module can depend on earlier modules in the list, but not vice versa. Don't try
         // to rearrange without considering this!
@@ -65,7 +65,7 @@ lazy_static! {
             &*TRANSACTION_FEE_DISTRIBUTION_MODULE, // depends on Block, ValidatorSet, LibraCoin, LibraAccount,
             &*CHANNEL_ACCOUNT_MODULE,
             &*HASH_TIME_LOCK_MODULE,
-            &*CHANNEL_MODULE,
+            &*CHANNEL_SCRIPT_MODULE,
         ]
     };
 }
@@ -114,8 +114,8 @@ pub fn channel_account_module() -> ModuleDefinition {
     CHANNEL_ACCOUNT_MODULE.clone()
 }
 
-pub fn channel_module() -> ModuleDefinition {
-    CHANNEL_MODULE.clone()
+pub fn channel_script_module() -> ModuleDefinition {
+    CHANNEL_SCRIPT_MODULE.clone()
 }
 
 pub fn channel_txn_module() -> ModuleDefinition {
