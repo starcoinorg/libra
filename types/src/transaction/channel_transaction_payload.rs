@@ -346,6 +346,10 @@ impl ChannelTransactionPayloadBodyV2 {
             witness,
         }
     }
+
+    pub fn witness(&self) -> &Witness {
+        &self.witness
+    }
 }
 
 impl CryptoHash for ChannelTransactionPayloadBodyV2 {
