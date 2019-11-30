@@ -165,15 +165,15 @@ impl TransactionData {
         }
     }
 
-    fn account_blobs(&self) -> &HashMap<AccountAddress, AccountStateBlob> {
+    pub fn account_blobs(&self) -> &HashMap<AccountAddress, AccountStateBlob> {
         &self.account_blobs
     }
 
-    fn events(&self) -> &[ContractEvent] {
+    pub fn events(&self) -> &[ContractEvent] {
         &self.events
     }
 
-    fn status(&self) -> &TransactionStatus {
+    pub fn status(&self) -> &TransactionStatus {
         &self.status
     }
 
@@ -185,7 +185,7 @@ impl TransactionData {
         self.event_tree.root_hash()
     }
 
-    fn gas_used(&self) -> u64 {
+    pub fn gas_used(&self) -> u64 {
         self.gas_used
     }
 
@@ -440,6 +440,7 @@ where
                         parent_trees,
                         parent_id,
                         id,
+                        pbft: true,
                     },
                     resp_sender,
                 })
@@ -561,28 +562,6 @@ where
     pub fn committed_trees(&self) -> ExecutedTrees {
         (*self.committed_trees.lock().unwrap()).clone()
     }
-
-    /// Rollback
-    pub fn rollback_by_block_id(&self, block_id: HashValue) -> oneshot::Receiver<Result<()>> {
-        let (resp_sender, resp_receiver) = oneshot::channel();
-        match self
-            .command_sender
-            .lock()
-            .expect("Failed to lock mutex.")
-            .as_ref()
-        {
-            Some(sender) => sender
-                .send(Command::RollbackBlock {
-                    block_id,
-                    resp_sender,
-                })
-                .expect("Did block processor thread panic?"),
-            None => resp_sender
-                .send(Err(format_err!("Executor is shutting down.")))
-                .expect("Failed to send error message."),
-        }
-        resp_receiver
-    }
 }
 
 impl<V> Drop for Executor<V> {
@@ -628,6 +607,7 @@ struct ExecutableBlock {
     parent_id: HashValue,
     parent_trees: ExecutedTrees,
     transactions: Vec<Transaction>,
+    pbft: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -662,10 +642,6 @@ enum Command {
     },
     ExecuteAndCommitChunk {
         chunk: Chunk,
-        resp_sender: oneshot::Sender<Result<()>>,
-    },
-    RollbackBlock {
-        block_id: HashValue,
         resp_sender: oneshot::Sender<Result<()>>,
     },
 }

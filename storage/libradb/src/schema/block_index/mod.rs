@@ -1,8 +1,8 @@
-use super::ensure_slice_len_eq;
-use super::BLOCK_INDEX_CF_NAME;
+use crate::schema::{ensure_slice_len_eq, BLOCK_INDEX_CF_NAME};
 use byteorder::{BigEndian, ReadBytesExt};
 use failure::prelude::*;
 use libra_crypto::HashValue;
+use libra_types::block_index::BlockIndex;
 use schemadb::{
     define_schema,
     schema::{KeyCodec, ValueCodec},
@@ -14,17 +14,11 @@ define_schema!(BlockIndexSchema, Height, BlockIndex, BLOCK_INDEX_CF_NAME);
 
 type Height = u64;
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct BlockIndex {
-    pub id: HashValue,
-    pub parent_block_id: HashValue,
-}
-
 impl ValueCodec<BlockIndexSchema> for BlockIndex {
     fn encode_value(&self) -> Result<Vec<u8>> {
         let mut encode_value = Vec::with_capacity(HashValue::LENGTH + HashValue::LENGTH);
-        encode_value.write_all(&self.id.to_vec().as_slice())?;
-        encode_value.write_all(&self.parent_block_id.to_vec().as_slice())?;
+        encode_value.write_all(&self.id().to_vec().as_slice())?;
+        encode_value.write_all(&self.parent_id().to_vec().as_slice())?;
         Ok(encode_value)
     }
 
@@ -34,10 +28,7 @@ impl ValueCodec<BlockIndexSchema> for BlockIndex {
         let block_id = HashValue::from_slice(&data[..HashValue::LENGTH])?;
         let parent_block_id = HashValue::from_slice(&data[HashValue::LENGTH..])?;
 
-        Ok(BlockIndex {
-            id: block_id,
-            parent_block_id,
-        })
+        Ok(BlockIndex::new(&block_id, &parent_block_id))
     }
 }
 

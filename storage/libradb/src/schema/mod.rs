@@ -6,6 +6,7 @@
 //!
 //! All schemas are `pub(crate)` so not shown in rustdoc, refer to the source code to see details.
 
+pub(crate) mod block_index;
 pub(crate) mod epoch_by_version;
 pub(crate) mod event;
 pub(crate) mod event_accumulator;
@@ -36,6 +37,7 @@ pub(super) const TRANSACTION_BY_ACCOUNT_CF_NAME: ColumnFamilyName = "transaction
 pub(super) const TRANSACTION_INFO_CF_NAME: ColumnFamilyName = "transaction_info";
 pub(super) const VALIDATOR_CF_NAME: ColumnFamilyName = "validator";
 pub const LEDGER_HISTORY_CF_NAME: ColumnFamilyName = "ledger_history";
+pub(super) const BLOCK_INDEX_CF_NAME: ColumnFamilyName = "block_index";
 
 pub fn ensure_slice_len_eq(data: &[u8], len: usize) -> Result<()> {
     ensure!(

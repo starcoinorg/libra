@@ -15,7 +15,7 @@ use cuckoo::consensus::{PowCuckoo, PowService, Proof};
 use futures::channel::mpsc;
 use futures::{stream::select, SinkExt, StreamExt, TryStreamExt};
 use libra_crypto::hash::CryptoHash;
-use libra_crypto::hash::{GENESIS_BLOCK_ID, PRE_GENESIS_BLOCK_ID};
+use libra_crypto::hash::PRE_GENESIS_BLOCK_ID;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_prost_ext::MessageExt;
@@ -33,6 +33,7 @@ use network::{
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::{convert::TryFrom, path::PathBuf};
+use storage_client::{StorageRead, StorageWrite};
 use tokio::runtime::TaskExecutor;
 
 pub struct EventProcessor {
@@ -64,6 +65,8 @@ impl EventProcessor {
         storage_dir: PathBuf,
         rollback_flag: bool,
         mine_state: MineStateManager,
+        read_storage: Arc<dyn StorageRead>,
+        write_storage: Arc<dyn StorageWrite>,
     ) -> Self {
         let (block_cache_sender, block_cache_receiver) = mpsc::channel(10);
 
@@ -80,6 +83,8 @@ impl EventProcessor {
             state_computer.clone(),
             rollback_flag,
             author.clone(),
+            read_storage,
+            write_storage,
         )));
 
         let sync_manager = Arc::new(AtomicRefCell::new(SyncManager::new(
@@ -160,11 +165,13 @@ impl EventProcessor {
                                 //TODO:verify block and sign
                                 let block: Block<BlockPayloadExt> =
                                     Block::try_from(new_block).expect("parse block pb err.");
+
                                 debug!(
-                                    "Self is {:?}, Peer Id is {:?}, Block Id is {:?}",
+                                    "Self is {:?}, Peer Id is {:?}, Block Id is {:?}, height {}",
                                     self_peer_id,
                                     peer_id,
-                                    block.id()
+                                    block.id(),
+                                    block.round()
                                 );
 
                                 let payload = block.payload().expect("payload is none");
@@ -185,12 +192,23 @@ impl EventProcessor {
                                     if self_peer_id != peer_id {
                                         let (height, block_index) =
                                             chain_manager.borrow().chain_height_and_root().await;
+
+                                        debug!(
+                                            "Self is {:?}, height is {}, Peer Id is {:?}, Block Id is {:?}, verify {}, height {}",
+                                            self_peer_id,
+                                            height,
+                                            peer_id,
+                                            block.id(),
+                                            verify,
+                                            block.round()
+                                        );
+
                                         if height < block.round()
-                                            && block.parent_id() != block_index.id
+                                            && block.parent_id() != block_index.id()
                                         {
                                             if let Err(err) = sync_signal_sender
                                                 .clone()
-                                                .send((peer_id, (block.round(), block.id())))
+                                                .send((peer_id, (block.round(), HashValue::zero())))
                                                 .await
                                             {
                                                 error!("send sync signal err: {:?}", err);
@@ -240,7 +258,7 @@ impl EventProcessor {
                                             None
                                         };
                                     let mut not_exist_flag = false;
-                                    for _i in 1..block_req.num_blocks() {
+                                    for _i in 0..block_req.num_blocks() {
                                         let block = match latest_block {
                                             Some(child_hash) => {
                                                 if child_hash == *PRE_GENESIS_BLOCK_ID {
@@ -269,7 +287,7 @@ impl EventProcessor {
                                         latest_block = Some(block.parent_id());
                                         blocks.push(block.into());
 
-                                        if latest_block.unwrap() == *GENESIS_BLOCK_ID {
+                                        if latest_block.unwrap() == *PRE_GENESIS_BLOCK_ID {
                                             break;
                                         }
                                     }
@@ -321,7 +339,7 @@ impl EventProcessor {
                         debug!("RpcRequest from {:?} ", peer_id);
                     }
                     Event::NewPeer(peer_id) => {
-                        debug!("Peer {:?} connected", peer_id);
+                        debug!("Peer {:?} connected111", peer_id);
                     }
                     Event::LostPeer(peer_id) => {
                         debug!("Peer {:?} disconnected", peer_id);
@@ -359,7 +377,6 @@ impl EventProcessor {
         ignore_peers: Vec<PeerId>,
     ) {
         if self_flag {
-            //let event_msg = Ok(Event::PowMessage((self_peer_id, pow_ctx.expect("Pow context not set"), msg.clone())));
             let event_msg = Ok(Event::Message((self_peer_id, msg.clone())));
             if let Err(err) = self_sender.send(event_msg).await {
                 error!("Error delivering a self proposal: {:?}", err);

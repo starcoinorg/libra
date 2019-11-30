@@ -200,10 +200,17 @@ pub fn setup_environment(node_config: &mut NodeConfig) -> LibraHandle {
 
     // Some of our code uses the rayon global thread pool. Name the rayon threads so it doesn't
     // cause confusion, otherwise the threads would have their parent's name.
-    rayon::ThreadPoolBuilder::new()
+    match rayon::ThreadPoolBuilder::new()
         .thread_name(|index| format!("rayon-global-{}", index))
         .build_global()
-        .expect("Building rayon global thread pool should work.");
+    {
+        Ok(_) => {
+            debug!("ThreadPool build succ.");
+        }
+        Err(e) => {
+            warn!("ThreadPoolBuild err: {:?}", e);
+        }
+    }
 
     let mut instant = Instant::now();
     let storage = start_storage_service(&node_config);

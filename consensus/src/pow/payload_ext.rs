@@ -1,3 +1,4 @@
+use consensus_types::block::Block;
 use libra_crypto::hash::{BlockPayloadExtHasher, CryptoHash, CryptoHasher};
 use libra_crypto::HashValue;
 use libra_types::transaction::SignedTransaction;
@@ -60,4 +61,9 @@ impl CryptoHash for BlockPayloadExt {
         state.write(bytes.as_ref());
         state.finish()
     }
+}
+
+pub fn genesis_id() -> HashValue {
+    let genesis_block: Block<BlockPayloadExt> = Block::make_genesis_block();
+    genesis_block.id()
 }
