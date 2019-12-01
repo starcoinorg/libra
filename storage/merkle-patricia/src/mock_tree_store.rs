@@ -17,7 +17,6 @@ pub struct MockTreeStore(RwLock<(HashMap<NodeKey, Node>, BTreeSet<StaleNodeIndex
 
 impl TreeReader for MockTreeStore {
     fn get_node_option(&self, node_key: &NodeKey) -> Result<Option<Node>> {
-        let keys = self.0.read().unwrap().0.keys();
         Ok(self.0.read().unwrap().0.get(node_key).cloned())
     }
 
@@ -54,7 +53,6 @@ impl MockTreeStore {
         match self.0.write().unwrap().0.entry(node_key) {
             Entry::Occupied(o) => bail!("Key {:?} exists.", o.key()),
             Entry::Vacant(v) => {
-                let node_type = node.get_node_type();
                 v.insert(node);
             }
         }

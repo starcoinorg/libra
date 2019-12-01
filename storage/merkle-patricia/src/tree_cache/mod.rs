@@ -172,6 +172,10 @@ where
         self.parent_node.insert(node_key, parent_key);
         Ok(())
     }
+    /// Get node parent node
+    pub fn get_parent_key(&mut self, node_key: NodeKey) -> &NodeKey {
+        self.parent_node.get(&node_key).unwrap()
+    }
 
     /// Gets a node with given node key. If it doesn't exist in node cache, read from `reader`.
     pub fn get_node(&self, node_key: &NodeKey) -> Result<Node> {

@@ -5,13 +5,8 @@ use super::*;
 use libra_crypto::HashValue;
 use libra_nibble::Nibble;
 use mock_tree_store::MockTreeStore;
-use proptest::{
-    collection::{hash_map, vec},
-    prelude::*,
-};
-use rand::{rngs::StdRng, Rng, SeedableRng};
+use rand::{rngs::StdRng, SeedableRng};
 use std::collections::HashMap;
-use test_helper::{init_mock_db, plus_one};
 
 fn update_nibble(original_key: &HashValue, n: usize, nibble: u8) -> HashValue {
     assert!(nibble < 16);
@@ -168,7 +163,7 @@ fn batch_proof_verify(
         }
         let hash = index.node_key.hash();
         let account_key = HashValue::from_slice(np_bytes).unwrap();
-        let (value, proof) = tree.get_with_proof(hash).unwrap();
+        let (_value, proof) = tree.get_with_proof(hash).unwrap();
         let v = kvs_map.get(&account_key);
         assert!(proof.verify(root, account_key, v).is_ok());
     }
@@ -184,9 +179,9 @@ fn test_existent_keys_impl<'a>(
     tree: &MerklePatriciaTree<'a, MockTreeStore>,
     vec_hash: Vec<HashValue>,
 ) {
-    let root_hash = tree.get_root_hash().unwrap();
+    let _root_hash = tree.get_root_hash().unwrap();
     for hash in vec_hash.iter() {
-        let (account, proof) = tree.get_with_proof(*hash).unwrap();
+        let (account, _proof) = tree.get_with_proof(*hash).unwrap();
         assert!(account.is_some());
     }
 }

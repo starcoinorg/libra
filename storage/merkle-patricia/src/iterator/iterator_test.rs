@@ -3,12 +3,10 @@
 
 use crate::{
     iterator::JellyfishMerkleIterator, mock_tree_store::MockTreeStore, test_helper::plus_one,
-    MerklePatriciaTree,
 };
 use failure::prelude::*;
 use libra_crypto::HashValue;
 use libra_types::{account_state_blob::AccountStateBlob, transaction::Version};
-use rand::{rngs::StdRng, SeedableRng};
 use std::collections::BTreeMap;
 
 fn run_tests(db: &MockTreeStore, btree: &BTreeMap<HashValue, AccountStateBlob>, _version: Version) {

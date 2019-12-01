@@ -79,10 +79,8 @@ mod test_helper;
 mod tree_cache;
 
 use failure::prelude::*;
-use libra_crypto::{
-    hash::{CryptoHash, SPARSE_MERKLE_PLACEHOLDER_HASH},
-    HashValue,
-};
+use libra_crypto::hash::SPARSE_MERKLE_PLACEHOLDER_HASH;
+use libra_crypto::{hash::CryptoHash, HashValue};
 use libra_types::transaction::Version;
 use libra_types::{
     account_state_blob::AccountStateBlob,
@@ -91,7 +89,6 @@ use libra_types::{
 use nibble_path::{skip_common_prefix, NibbleIterator, NibblePath};
 use node_type::{Child, Children, InternalNode, LeafNode, Node, NodeKey};
 #[cfg(any(test, feature = "fuzzing"))]
-use proptest_derive::Arbitrary;
 use std::collections::{BTreeMap, BTreeSet};
 use tree_cache::TreeCache;
 
@@ -494,7 +491,6 @@ where
         key: HashValue,
     ) -> Result<(Option<AccountStateBlob>, SparseMerkleProof)> {
         let nibble_path = NibblePath::new(key.to_vec());
-        let vec = key.to_vec();
         let next_node_key = NodeKey::new_empty_path(key);
         let node = self.reader.get_node(&next_node_key)?;
         //TODO search siblings
@@ -519,10 +515,9 @@ where
                     );
                 }
             }
-            Node::Internal(internal) => {
+            Node::Internal(_internal) => {
                 bail!("node type error key {:?}", next_node_key);
             }
-            _ => {}
         }
         bail!("Merkle Patricia tree has cyclic graph inside.");
     }
@@ -555,7 +550,6 @@ where
 
     #[cfg(test)]
     pub fn get(&self, key: HashValue) -> Result<Option<AccountStateBlob>> {
-        let vec = key.to_vec();
         Ok(self.get_with_proof(key)?.0)
     }
 
