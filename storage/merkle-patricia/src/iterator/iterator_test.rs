@@ -11,56 +11,6 @@ use libra_types::{account_state_blob::AccountStateBlob, transaction::Version};
 use rand::{rngs::StdRng, SeedableRng};
 use std::collections::BTreeMap;
 
-#[test]
-fn test_iterator_same_version() {
-    for i in (1..100).step_by(11) {
-        test_n_leaves_same_version(i);
-    }
-}
-
-#[test]
-fn test_iterator_multiple_versions() {
-    test_n_leaves_multiple_versions(50);
-}
-
-fn test_n_leaves_same_version(n: usize) {
-    let db = MockTreeStore::default();
-    let tree = MerklePatriciaTree::new(&db);
-
-    let mut rng = StdRng::from_seed([1; 32]);
-
-    let mut btree = BTreeMap::new();
-    for i in 0..n {
-        let key = HashValue::random_with_rng(&mut rng);
-        let value = AccountStateBlob::from(i.to_be_bytes().to_vec());
-        assert_eq!(btree.insert(key, value), None);
-    }
-
-    let (_root_hash, batch) = tree
-        .put_blob_set(HashValue::zero(), btree.clone().into_iter().collect())
-        .unwrap();
-    db.write_tree_update_batch(batch).unwrap();
-
-    run_tests(&db, &btree, 0 /* version */);
-}
-
-fn test_n_leaves_multiple_versions(n: usize) {
-    let db = MockTreeStore::default();
-    let tree = MerklePatriciaTree::new(&db);
-
-    let mut rng = StdRng::from_seed([1; 32]);
-
-    let mut btree = BTreeMap::new();
-    for i in 0..n {
-        let key = HashValue::random_with_rng(&mut rng);
-        let value = AccountStateBlob::from(i.to_be_bytes().to_vec());
-        assert_eq!(btree.insert(key, value.clone()), None);
-        let (_root_hash, batch) = tree.put_blob_set(key, vec![(key, value)]).unwrap();
-        db.write_tree_update_batch(batch).unwrap();
-        run_tests(&db, &btree, i as Version);
-    }
-}
-
 fn run_tests(db: &MockTreeStore, btree: &BTreeMap<HashValue, AccountStateBlob>, _version: Version) {
     {
         let iter = JellyfishMerkleIterator::new(db, HashValue::zero()).unwrap();

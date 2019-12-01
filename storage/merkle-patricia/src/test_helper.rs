@@ -23,7 +23,9 @@ pub fn plus_one(key: HashValue) -> HashValue {
 }
 
 /// Initializes a DB with a set of key-value pairs by inserting one key at each version.
-pub fn init_mock_db(kvs: &HashMap<HashValue, AccountStateBlob>) -> (MockTreeStore, Version) {
+pub fn init_mock_db(
+    kvs: &HashMap<HashValue, AccountStateBlob>,
+) -> (Vec<HashValue>, MockTreeStore, Version) {
     assert!(!kvs.is_empty());
 
     let db = MockTreeStore::default();
@@ -32,10 +34,10 @@ pub fn init_mock_db(kvs: &HashMap<HashValue, AccountStateBlob>) -> (MockTreeStor
     for (key, val) in kvs.clone().iter_mut() {
         blog_set_vec.push(vec![(*key, val.clone())]);
     }
-    let (_root_hash, write_batch) = tree
+    let (root_hash, write_batch) = tree
         .put_blob_sets(blog_set_vec, 0 as Version, HashValue::zero())
         .unwrap();
     db.write_tree_update_batch(write_batch).unwrap();
 
-    (db, (kvs.len() - 1) as Version)
+    (root_hash, db, (kvs.len() - 1) as Version)
 }

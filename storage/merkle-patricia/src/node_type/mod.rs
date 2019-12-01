@@ -534,7 +534,7 @@ impl CryptoHash for LeafNode {
 
 #[repr(u8)]
 #[derive(FromPrimitive, ToPrimitive)]
-enum NodeTag {
+pub enum NodeTag {
     Null = 0,
     Internal = 1,
     Leaf = 2,
@@ -591,6 +591,15 @@ impl Node {
             Node::Leaf(_) => true,
             _ => false,
         }
+    }
+    /// Returns nodeType
+    pub fn get_node_type(&self) -> NodeTag {
+        match self {
+            Node::Internal(_) => NodeTag::Internal,
+            Node::Leaf(_) => NodeTag::Leaf,
+            Node::Null => NodeTag::Null,
+        }
+        //        bail!("error node type");
     }
 
     /// Serializes to bytes for physical storage.
