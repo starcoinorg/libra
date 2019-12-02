@@ -35,6 +35,7 @@
 //! On the other hand, if you want to query only <Alice>/a/*, `address` will be set to Alice and
 //! `path` will be set to "/a" and use the `get_prefix()` method from statedb
 
+use crate::account_config::channel_global_events_address;
 use crate::channel::channel_struct_tag;
 use crate::{
     account_address::{AccountAddress, ADDRESS_LENGTH},
@@ -42,6 +43,7 @@ use crate::{
         account_struct_tag, association_address, ACCOUNT_RECEIVED_EVENT_PATH,
         ACCOUNT_SENT_EVENT_PATH,
     },
+    channel::{CHANNEL_EVENT_PATH, CHANNEL_GLOBAL_EVENT_PATH},
     channel_account::channel_account_struct_tag,
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, ResourceKey, StructTag},
@@ -451,6 +453,19 @@ impl AccessPath {
     /// events for a given account.
     pub fn new_for_received_event(address: AccountAddress) -> Self {
         Self::new(address, ACCOUNT_RECEIVED_EVENT_PATH.to_vec())
+    }
+
+    ///  Create an AccessPath to the event for channel event.
+    pub fn new_for_channel_event(address: AccountAddress) -> Self {
+        Self::new(address, CHANNEL_EVENT_PATH.to_vec())
+    }
+
+    ///  Create an AccessPath to the event for channel global event.
+    pub fn new_for_channel_global_event() -> Self {
+        Self::new(
+            channel_global_events_address(),
+            CHANNEL_GLOBAL_EVENT_PATH.to_vec(),
+        )
     }
 
     pub fn resource_access_vec(tag: &StructTag, accesses: &Accesses) -> Vec<u8> {

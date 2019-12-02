@@ -1,3 +1,4 @@
+use crate::access_path::{AccessPath, Accesses};
 use crate::event::EventHandle;
 use crate::{
     account_address::AccountAddress,
@@ -15,14 +16,25 @@ lazy_static! {
     static ref CHANNEL_MODULE_NAME: Identifier = Identifier::new("LibraAccount").unwrap();
     static ref CHANNEL_STRUCT_NAME: Identifier = Identifier::new("Channel").unwrap();
 
-    static ref CHANNEL_MIRROR_MODULE_NAME: Identifier = Identifier::new("LibraAccount").unwrap();
     static ref CHANNEL_MIRROR_STRUCT_NAME: Identifier = Identifier::new("ChannelMirror").unwrap();
 
-    static ref CHANNEL_PARTICIPANT_MODULE_NAME: Identifier = Identifier::new("LibraAccount").unwrap();
     static ref CHANNEL_PARTICIPANT_STRUCT_NAME: Identifier = Identifier::new("ChannelParticipantAccount").unwrap();
 
-    static ref USER_CHANNELS_MODULE_NAME: Identifier = Identifier::new("LibraAccount").unwrap();
     static ref USER_CHANNELS_STRUCT_NAME: Identifier = Identifier::new("UserChannels").unwrap();
+
+    static ref CHANNEL_GLOBAL_EVENTS_STRUCT_NAME: Identifier = Identifier::new("ChannelGlobalEvents").unwrap();
+
+    pub static ref CHANNEL_EVENT_PATH: Vec<u8> = {
+        let mut path = channel_resource_path();
+        path.extend_from_slice(b"/events_count/");
+        path
+    };
+
+    pub static ref CHANNEL_GLOBAL_EVENT_PATH: Vec<u8> = {
+        let mut path = channel_global_events_resource_path();
+        path.extend_from_slice(b"/events_count/");
+        path
+    };
 }
 
 pub fn channel_module_name() -> &'static IdentStr {
@@ -31,6 +43,10 @@ pub fn channel_module_name() -> &'static IdentStr {
 
 pub fn channel_struct_name() -> &'static IdentStr {
     &*CHANNEL_STRUCT_NAME
+}
+
+pub fn channel_global_events_struct_name() -> &'static IdentStr {
+    &*CHANNEL_GLOBAL_EVENTS_STRUCT_NAME
 }
 
 pub fn channel_struct_tag() -> StructTag {
@@ -42,8 +58,21 @@ pub fn channel_struct_tag() -> StructTag {
     }
 }
 
-pub fn channel_mirror_module_name() -> &'static IdentStr {
-    &*CHANNEL_MIRROR_MODULE_NAME
+pub fn channel_global_events_struct_tag() -> StructTag {
+    StructTag {
+        address: core_code_address(),
+        module: channel_module_name().to_owned(),
+        name: channel_global_events_struct_name().to_owned(),
+        type_params: vec![],
+    }
+}
+
+pub fn channel_resource_path() -> Vec<u8> {
+    AccessPath::resource_access_vec(&channel_struct_tag(), &Accesses::empty())
+}
+
+pub fn channel_global_events_resource_path() -> Vec<u8> {
+    AccessPath::resource_access_vec(&channel_global_events_struct_tag(), &Accesses::empty())
 }
 
 pub fn channel_mirror_struct_name() -> &'static IdentStr {
@@ -53,14 +82,10 @@ pub fn channel_mirror_struct_name() -> &'static IdentStr {
 pub fn channel_mirror_struct_tag() -> StructTag {
     StructTag {
         address: core_code_address(),
-        module: channel_mirror_module_name().to_owned(),
+        module: channel_module_name().to_owned(),
         name: channel_mirror_struct_name().to_owned(),
         type_params: vec![],
     }
-}
-
-pub fn channel_participant_module_name() -> &'static IdentStr {
-    &*CHANNEL_PARTICIPANT_MODULE_NAME
 }
 
 pub fn channel_participant_struct_name() -> &'static IdentStr {
@@ -70,14 +95,10 @@ pub fn channel_participant_struct_name() -> &'static IdentStr {
 pub fn channel_participant_struct_tag() -> StructTag {
     StructTag {
         address: core_code_address(),
-        module: channel_participant_module_name().to_owned(),
+        module: channel_module_name().to_owned(),
         name: channel_participant_struct_name().to_owned(),
         type_params: vec![],
     }
-}
-
-pub fn user_channels_module_name() -> &'static IdentStr {
-    &*USER_CHANNELS_MODULE_NAME
 }
 
 pub fn user_channels_struct_name() -> &'static IdentStr {
@@ -87,7 +108,7 @@ pub fn user_channels_struct_name() -> &'static IdentStr {
 pub fn user_channels_struct_tag() -> StructTag {
     StructTag {
         address: core_code_address(),
-        module: user_channels_module_name().to_owned(),
+        module: channel_module_name().to_owned(),
         name: user_channels_struct_name().to_owned(),
         type_params: vec![],
     }
@@ -141,6 +162,42 @@ impl ChannelResource {
 
     pub fn to_bytes(&self) -> Vec<u8> {
         lcs::to_bytes(self).unwrap()
+    }
+
+    pub fn get_event_handle_by_query_path(&self, query_path: &[u8]) -> Result<&EventHandle> {
+        if *CHANNEL_EVENT_PATH == query_path {
+            Ok(&self.events)
+        } else {
+            bail!("Unrecognized query path: {:?}", query_path);
+        }
+    }
+}
+
+// A resource to keep Channel global events handle.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ChannelGlobalEventsResource {
+    events: EventHandle,
+}
+
+impl ChannelGlobalEventsResource {
+    pub fn new(events: EventHandle) -> Self {
+        Self { events }
+    }
+
+    pub fn make_from(bytes: Vec<u8>) -> Result<Self> {
+        lcs::from_bytes(bytes.as_slice()).map_err(|e| Into::into(e))
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        lcs::to_bytes(self).unwrap()
+    }
+
+    pub fn get_event_handle_by_query_path(&self, query_path: &[u8]) -> Result<&EventHandle> {
+        if *CHANNEL_GLOBAL_EVENT_PATH == query_path {
+            Ok(&self.events)
+        } else {
+            bail!("Unrecognized query path: {:?}", query_path);
+        }
     }
 }
 

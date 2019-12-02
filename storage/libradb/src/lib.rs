@@ -49,7 +49,12 @@ use lazy_static::lazy_static;
 use libra_crypto::hash::{CryptoHash, HashValue};
 use libra_logger::prelude::*;
 use libra_metrics::OpMetrics;
+use libra_types::account_config::channel_global_events_address;
 use libra_types::block_index::BlockIndex;
+use libra_types::channel::{
+    channel_global_events_resource_path, channel_resource_path, ChannelGlobalEventsResource,
+    ChannelResource,
+};
 use libra_types::{
     access_path::AccessPath,
     account_address::AccountAddress,
@@ -68,6 +73,8 @@ use libra_types::{
     },
 };
 use schemadb::{ColumnFamilyOptions, ColumnFamilyOptionsMap, DB, DEFAULT_CF_NAME};
+use std::collections::BTreeMap;
+use std::convert::TryFrom;
 use std::{convert::TryInto, iter::Iterator, path::Path, sync::Arc, time::Instant};
 use storage_proto::StartupInfo;
 use storage_proto::TreeState;
@@ -217,14 +224,43 @@ impl LibraDB {
         let get_latest = !ascending && start_seq_num == u64::max_value();
         let account_state =
             self.get_account_state_with_proof(query_path.address, ledger_version, ledger_version)?;
-        let account_resource = if let Some(account_blob) = &account_state.blob {
-            AccountResource::make_from(&(&account_blob.try_into()?))?
+        let (account_resource, account_state_tree) = if let Some(account_blob) = &account_state.blob
+        {
+            (
+                AccountResource::make_from(&(&account_blob.try_into()?))?,
+                BTreeMap::<Vec<u8>, Vec<u8>>::try_from(account_blob)?,
+            )
         } else {
             bail!("Nothing stored under address: {}", query_path.address);
         };
-        let event_key = account_resource
-            .get_event_handle_by_query_path(&query_path.path)?
-            .key();
+        //TODO(jole) refactor this after Event AccessPath refactor.
+        let event_handle = account_resource
+            .get_event_handle_by_query_path(&query_path.path)
+            .map(|r| r.clone())
+            .or_else(|e| {
+                let channel_resource_bytes =
+                    account_state_tree.get(&channel_resource_path()).ok_or(e)?;
+                let channel_resource = ChannelResource::make_from(channel_resource_bytes.to_vec())?;
+                channel_resource
+                    .get_event_handle_by_query_path(&query_path.path)
+                    .map(|r| r.clone())
+            })
+            .or_else(|e| {
+                if query_path.address == channel_global_events_address() {
+                    let channel_global_events_resource_bytes = account_state_tree
+                        .get(&channel_global_events_resource_path())
+                        .ok_or(e)?;
+                    let channel_global_events_resource = ChannelGlobalEventsResource::make_from(
+                        channel_global_events_resource_bytes.to_vec(),
+                    )?;
+                    channel_global_events_resource
+                        .get_event_handle_by_query_path(&query_path.path)
+                        .map(|r| r.clone())
+                } else {
+                    Err(e)
+                }
+            })?;
+        let event_key = event_handle.key();
         let cursor = if get_latest {
             // Caller wants the latest, figure out the latest seq_num.
             // In the case of no events on that path, use 0 and expect empty result below.
