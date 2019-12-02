@@ -123,6 +123,7 @@ module LibraAccount {
     struct ChannelEvent {
         channel_address: address,
         stage: u64,
+        balances: Vector.T<u64>,
     }
 
     // Creates a new LibraAccount.T
@@ -823,12 +824,24 @@ module LibraAccount {
     do_emit_channel_event(channel_address: address, channel: &mut Self.Channel) acquires ChannelGlobalEvents {
         let global_events: &mut Self.ChannelGlobalEvents;
         let event: Self.ChannelEvent;
+        let balances: Vector.T<u64>;
+        let len: u64;
+        let index: u64;
 
         global_events = borrow_global_mut<ChannelGlobalEvents>(0x1D9);
+        balances = Vector.empty<u64>();
+
+        len = Vector.length<address>(&copy(channel).participants);
+        index = 0;
+        while (copy(index) < copy(len)) {
+            Vector.push_back<u64>(&mut balances, Self.channel_balance(Vector.get<address>(&copy(channel).participants, copy(index))));
+            index = copy(index) + 1;
+        }
 
         event = ChannelEvent{
             channel_address: copy(channel_address),
             stage: *&copy(channel).stage,
+            balances: move(balances),
         };
 
         Self.emit_event<Self.ChannelEvent>(&mut move(channel).events, copy(event));
@@ -837,22 +850,23 @@ module LibraAccount {
     }
 
     // Deposit coin to proposer's ChannelParticipantAccount
-    public deposit_to_channel(coin: LibraCoin.T){
+    public deposit_to_channel(coin: LibraCoin.T) acquires Channel, ChannelGlobalEvents {
         Self.deposit_to_participant(ChannelTransaction.get_proposer(), move(coin));
         return;
     }
 
     // TODO set this function to private.
-    public deposit_to_participant(participant: address, coin: LibraCoin.T){
+    public deposit_to_participant(participant: address, coin: LibraCoin.T) acquires Channel, ChannelGlobalEvents {
         let channel_account: &mut Self.ChannelParticipantAccount;
 
         channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelParticipantAccount>(copy(participant));
         LibraCoin.deposit(&mut move(channel_account).balance, move(coin));
+        Self.emit_channel_event(ChannelTransaction.get_channel_address());
         return;
     }
 
     // Withdraw LibraCoin from proposer's ChannelParticipantAccount
-    public withdraw_from_channel(amount: u64): LibraCoin.T {
+    public withdraw_from_channel(amount: u64): LibraCoin.T acquires Channel, ChannelGlobalEvents {
         let proposer: address;
         let channel_account: &mut Self.ChannelParticipantAccount;
         let withdraw_coin: LibraCoin.T;
@@ -860,6 +874,7 @@ module LibraAccount {
         proposer = ChannelTransaction.get_proposer();
         channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelParticipantAccount>(copy(proposer));
         withdraw_coin = LibraCoin.withdraw(&mut move(channel_account).balance, move(amount));
+        Self.emit_channel_event(ChannelTransaction.get_channel_address());
         return move(withdraw_coin);
     }
 
