@@ -850,23 +850,23 @@ module LibraAccount {
     }
 
     // Deposit coin to proposer's ChannelParticipantAccount
-    public deposit_to_channel(coin: LibraCoin.T) acquires Channel, ChannelGlobalEvents {
+    public deposit_to_channel(coin: LibraCoin.T){
         Self.deposit_to_participant(ChannelTransaction.get_proposer(), move(coin));
         return;
     }
 
     // TODO set this function to private.
-    public deposit_to_participant(participant: address, coin: LibraCoin.T) acquires Channel, ChannelGlobalEvents {
+    public deposit_to_participant(participant: address, coin: LibraCoin.T) {
         let channel_account: &mut Self.ChannelParticipantAccount;
 
         channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelParticipantAccount>(copy(participant));
         LibraCoin.deposit(&mut move(channel_account).balance, move(coin));
-        Self.emit_channel_event(ChannelTransaction.get_channel_address());
+        //Self.emit_channel_event(ChannelTransaction.get_channel_address());
         return;
     }
 
     // Withdraw LibraCoin from proposer's ChannelParticipantAccount
-    public withdraw_from_channel(amount: u64): LibraCoin.T acquires Channel, ChannelGlobalEvents {
+    public withdraw_from_channel(amount: u64): LibraCoin.T {
         let proposer: address;
         let channel_account: &mut Self.ChannelParticipantAccount;
         let withdraw_coin: LibraCoin.T;
@@ -874,7 +874,7 @@ module LibraAccount {
         proposer = ChannelTransaction.get_proposer();
         channel_account = ChannelUtil.borrow_from_participant_mut<Self.ChannelParticipantAccount>(copy(proposer));
         withdraw_coin = LibraCoin.withdraw(&mut move(channel_account).balance, move(amount));
-        Self.emit_channel_event(ChannelTransaction.get_channel_address());
+        //Self.emit_channel_event(ChannelTransaction.get_channel_address());
         return move(withdraw_coin);
     }
 
