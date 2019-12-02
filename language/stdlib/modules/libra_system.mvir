@@ -2,6 +2,7 @@ module LibraSystem {
     import 0x0.LibraAccount;
     import 0x0.ValidatorConfig;
     import 0x0.Vector;
+    //import 0x0.ConsensusConfig;
 
     struct ValidatorInfo {
         addr: address,
@@ -97,6 +98,7 @@ module LibraSystem {
       Self.process_block_prologue(move(timestamp), move(new_block_hash), move(previous_block_votes), move(proposer));
       // triggers a reconfiguration if the validator keys or validator set has changed
       Self.reconfigure();
+      //ConsensusConfig.subsidy(Self.get_current_block_height(), Self.get_current_proposer());
       return;
     }
 
