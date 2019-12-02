@@ -80,7 +80,7 @@ lazy_static! {
     static ref ACCOUNT_STRUCT_NAME: Identifier = Identifier::new("T").unwrap();
     static ref EMIT_EVENT_NAME: Identifier = Identifier::new("write_to_event_store").unwrap();
     static ref SAVE_ACCOUNT_NAME: Identifier = Identifier::new("save_account").unwrap();
-    static ref CHANNEL_STRUCT_NAME: Identifier = Identifier::new("T").unwrap();
+    static ref CHANNEL_STRUCT_NAME: Identifier = Identifier::new("Channel").unwrap();
     static ref CHANNEL_ACCOUNT_STRUCT_NAME: Identifier = Identifier::new("ChannelAccount").unwrap();
 }
 
@@ -944,6 +944,20 @@ where
                 .with_message(format!("resolve_struct_def parse struct tag error."))),
         }
     }
+
+    fn is_authorized(
+        &mut self,
+        context: &mut dyn InterpreterContext,
+        participant: AccountAddress
+    ) -> bool {
+        let proposer = self.txn_data.channel_metadata_v2.as_ref().unwrap().proposer;
+        let authorized = &self.txn_data.channel_metadata_v2.as_ref().unwrap().authorized;
+        if context.vm_mode().is_offchain() || participant == proposer || *authorized {
+            return true;
+        }
+        return false;
+    }
+
     /// call `move_to_participant`.
     fn call_move_to_participant(
         &mut self,
@@ -952,10 +966,15 @@ where
     ) -> VMResult<()> {
         let res = self.operand_stack.pop_as::<Struct>()?;
         let participant = self.operand_stack.pop_as::<AccountAddress>()?;
-        let channel_address = self.get_channel_metadata()?.channel_address;
-        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
-        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
-        context.move_resource_to(&ap, struct_def, res)
+        if !self.is_authorized(context, participant) {
+            Err(VMStatus::new(StatusCode::MISSING_SIGNATURE_ERROR)
+                .with_message(format!("Access to private resource not authorized.")))
+        } else {
+            let channel_address = self.get_channel_metadata()?.channel_address;
+            let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+            let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
+            context.move_resource_to(&ap, struct_def, res)
+        }
     }
     /// call `move_to_shared`.
     fn call_move_to_shared(
@@ -977,11 +996,16 @@ where
         type_actual_tags: Vec<TypeTag>,
     ) -> VMResult<()> {
         let participant = self.operand_stack.pop_as::<AccountAddress>()?;
-        let channel_address = self.get_channel_metadata()?.channel_address;
-        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
-        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
-        let resource = context.move_resource_from(&ap, struct_def)?;
-        self.operand_stack.push(resource)
+        if !self.is_authorized(context, participant) {
+            Err(VMStatus::new(StatusCode::MISSING_SIGNATURE_ERROR)
+                .with_message(format!("Access to private resource not authorized.")))
+        } else {
+            let channel_address = self.get_channel_metadata()?.channel_address;
+            let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+            let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
+            let resource = context.move_resource_from(&ap, struct_def)?;
+            self.operand_stack.push(resource)
+        }
     }
 
     /// call `move_from_shared`.
@@ -1004,11 +1028,16 @@ where
         type_actual_tags: Vec<TypeTag>,
     ) -> VMResult<()> {
         let participant = self.operand_stack.pop_as::<AccountAddress>()?;
-        let channel_address = self.get_channel_metadata()?.channel_address;
-        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
-        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
-        let resource = context.borrow_global(&ap, struct_def)?;
-        self.operand_stack.push(Value::global_ref(resource))
+        if !self.is_authorized(context, participant) {
+            Err(VMStatus::new(StatusCode::MISSING_SIGNATURE_ERROR)
+                .with_message(format!("Access to private resource not authorized.")))
+        } else {
+            let channel_address = self.get_channel_metadata()?.channel_address;
+            let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+            let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
+            let resource = context.borrow_global(&ap, struct_def)?;
+            self.operand_stack.push(Value::global_ref(resource))
+        }
     }
     /// call `borrow_from_shared`.
     fn call_borrow_from_shared(
@@ -1030,11 +1059,16 @@ where
         type_actual_tags: Vec<TypeTag>,
     ) -> VMResult<()> {
         let participant = self.operand_stack.pop_as::<AccountAddress>()?;
-        let channel_address = self.get_channel_metadata()?.channel_address;
-        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
-        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
-        let resource = context.borrow_global(&ap, struct_def)?;
-        self.operand_stack.push(Value::global_ref(resource))
+        if !self.is_authorized(context, participant) {
+            Err(VMStatus::new(StatusCode::MISSING_SIGNATURE_ERROR)
+                .with_message(format!("Access to private resource not authorized.")))
+        } else {
+            let channel_address = self.get_channel_metadata()?.channel_address;
+            let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+            let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
+            let resource = context.borrow_global(&ap, struct_def)?;
+            self.operand_stack.push(Value::global_ref(resource))
+        }
     }
     /// call `borrow_from_shared_mut`.
     fn call_borrow_from_shared_mut(
@@ -1184,7 +1218,7 @@ where
         ))
     }
 
-    /// call `get_txn_proposer`.
+    /// call `get_channel_address`.
     fn call_get_channel_address(&mut self) -> VMResult<()> {
         self.operand_stack
             .push(Value::address(self.get_channel_metadata()?.channel_address))

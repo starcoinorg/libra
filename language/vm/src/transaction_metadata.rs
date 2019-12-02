@@ -20,6 +20,7 @@ pub struct ChannelMetadataV2 {
     pub proposer: AccountAddress,
     pub public_keys: Vec<Ed25519PublicKey>,
     pub signatures: Vec<Option<Ed25519Signature>>,
+    pub authorized: bool, //is authorized by participants
 }
 
 pub struct TransactionMetadata {
@@ -51,6 +52,7 @@ impl TransactionMetadata {
                 proposer: channel_payload.proposer(),
                 public_keys: channel_payload.public_keys().to_vec(),
                 signatures: channel_payload.signatures().to_vec(),
+                authorized: channel_payload.is_authorized(),
             }),
             _ => None,
         };
