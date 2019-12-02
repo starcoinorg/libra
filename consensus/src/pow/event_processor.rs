@@ -162,7 +162,6 @@ impl EventProcessor {
 
                         match msg.clone() {
                             ConsensusMsg_oneof::NewBlock(new_block) => {
-                                //TODO:verify block and sign
                                 let block: Block<BlockPayloadExt> =
                                     Block::try_from(new_block).expect("parse block pb err.");
 

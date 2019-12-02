@@ -6,7 +6,7 @@ use crate::state_replication::{StateComputer, TxnManager};
 use atomic_refcell::AtomicRefCell;
 use consensus_types::{block::Block, quorum_cert::QuorumCert, vote_data::VoteData};
 use cuckoo::consensus::PowService;
-use libra_crypto::hash::CryptoHash;
+use libra_crypto::{hash::CryptoHash, x25519::compat};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
@@ -14,7 +14,7 @@ use libra_types::account_config::association_address;
 use libra_types::block_info::BlockInfo;
 use libra_types::block_metadata::BlockMetadata;
 use libra_types::crypto_proxies::ValidatorSigner;
-use libra_types::ledger_info::{LedgerInfo, LedgerInfoWithSignatures};
+use libra_types::{ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, validator_public_keys::ValidatorPublicKeys, validator_set::ValidatorSet};
 use libra_types::transaction::SignedTransaction;
 use miner::types::{MineCtx, MineState, MineStateManager};
 use network::{
@@ -31,6 +31,8 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use tokio::runtime::TaskExecutor;
+use rand::{rngs::StdRng, SeedableRng};
+use libra_crypto::x25519::{X25519StaticPrivateKey, X25519StaticPublicKey};
 
 pub struct MintManager {
     txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
@@ -81,7 +83,7 @@ impl MintManager {
         let mint_fut = async move {
             let chain_manager_clone = chain_manager.clone();
             loop {
-                match mint_txn_manager.pull_txns(1, vec![]).await {
+                match mint_txn_manager.pull_txns(100, vec![]).await {
                     Ok(txns) => {
                         let (height, parent_block) =
                             chain_manager_clone.borrow().chain_height_and_root().await;
@@ -127,14 +129,11 @@ impl MintManager {
                                     executed_trees.txn_accumulator().root_hash();
                                 let txn_len = executed_trees.version().expect("version err.");
 
-                                let parent_li = quorum_cert.ledger_info().ledger_info().clone();
                                 let parent_vd = quorum_cert.vote_data();
                                 let epoch = parent_vd.parent().epoch();
-                                let v_s = match parent_li.next_validator_set() {
-                                    Some(n_v_s) => Some(n_v_s.clone()),
-                                    None => None,
-                                };
+                                let signer = ValidatorSigner::genesis(); //TODO:change signer
 
+                                let (_tmp_pri_key, tmp_pub_key) = network_keypair();
                                 // vote data
                                 let parent_block_info = parent_vd.proposed().clone();
                                 let current_block_info = BlockInfo::new(
@@ -144,12 +143,13 @@ impl MintManager {
                                     txn_accumulator_hash,
                                     txn_len,
                                     timestamp_usecs,
-                                    v_s.clone(),
+                                    Some(ValidatorSet::new(vec![ValidatorPublicKeys::new(signer.author(),
+                                                                                         signer.public_key(), 100,signer.public_key(), tmp_pub_key)])),
                                 );
                                 let vote_data =
                                     VoteData::new(current_block_info.clone(), parent_block_info);
                                 let li = LedgerInfo::new(current_block_info, state_id);
-                                let signer = ValidatorSigner::genesis(); //TODO:change signer
+
                                 let signature = signer
                                     .sign_message(li.hash())
                                     .expect("Fail to sign genesis ledger info");
@@ -177,7 +177,7 @@ impl MintManager {
                                     height + 1,
                                     timestamp_usecs,
                                     new_qc,
-                                    &ValidatorSigner::from_int(1),
+                                    &signer,
                                 );
 
                                 info!(
@@ -226,4 +226,10 @@ fn generate_nonce() -> u64 {
     let mut rng = rand::thread_rng();
     rng.gen::<u64>();
     rng.gen_range(0, u64::max_value())
+}
+
+fn network_keypair() -> (X25519StaticPrivateKey, X25519StaticPublicKey) {
+    let seed = [0u8; 32];
+    let mut fast_rng = StdRng::from_seed(seed);
+    compat::generate_keypair(&mut fast_rng)
 }
