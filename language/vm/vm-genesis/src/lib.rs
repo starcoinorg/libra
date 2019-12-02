@@ -199,7 +199,7 @@ pub fn encode_genesis_transaction_with_validator(
     public_key: Ed25519PublicKey,
     validator_set: ValidatorSet,
 ) -> SignatureCheckedTransaction {
-    const INIT_BALANCE: u64 = 1_000_000_000;
+    const INIT_BALANCE: u64 = 1_000_000_000 * 2;
 
     // Compile the needed stdlib modules.
     let modules = stdlib_modules();
