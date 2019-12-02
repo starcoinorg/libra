@@ -438,4 +438,15 @@ impl ChannelTransactionPayloadV2 {
     pub fn channel_sequence_number(&self) -> u64 {
         self.body.witness.channel_sequence_number()
     }
+
+    pub fn is_authorized(&self) -> bool {
+        let mut result = true;
+        for signature in &self.signatures {
+            match signature {
+                Some(_signature) => {},
+                None => result = false,
+            }
+        }
+        return result;
+    }
 }
