@@ -23,7 +23,7 @@ use std::{
 };
 
 use failure::_core::sync::atomic::Ordering;
-use merkle_patricia::StaleNodeIndex;
+use jellyfish_merkle::StaleNodeIndex;
 #[cfg(test)]
 use std::thread::sleep;
 use std::{
