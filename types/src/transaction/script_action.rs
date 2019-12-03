@@ -10,32 +10,82 @@ use failure::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
-pub struct ScriptAction {
-    module: ModuleId,
-    function: Identifier,
-    args: Vec<TransactionArgument>,
+pub enum Action {
+    // module, function
+    Call(ModuleId, Identifier),
+    Code(Vec<u8>),
 }
 
-impl ScriptAction {
-    pub fn new(module: ModuleId, function: Identifier, args: Vec<TransactionArgument>) -> Self {
-        Self {
-            module,
-            function,
-            args,
-        }
-    }
-
-    pub fn parse(action: &str) -> Result<Self> {
-        let parts: Vec<&str> = action.trim().split(' ').collect();
-        let call_parts: Vec<&str> = parts[0].trim().split('.').collect();
+impl Action {
+    pub fn parse_call(call: &str) -> Result<Self> {
+        let call_parts: Vec<&str> = call.trim().split('.').collect();
         ensure!(
             call_parts.len() == 3,
-            "expect action format: address.ModuleName.FunctionName arg1 arg2 ..  but got: {}",
-            action
+            "expect call format: address.ModuleName.FunctionName  but got: {}",
+            call
         );
         let address = AccountAddress::from_hex_literal(call_parts[0])?;
         let module_name = IdentStr::new(call_parts[1])?;
         let function_name = IdentStr::new(call_parts[2])?;
+        Ok(Action::Call(
+            ModuleId::new(address, module_name.to_owned()),
+            function_name.to_owned(),
+        ))
+    }
+}
+
+impl std::fmt::Display for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Action::Call(module, function) => {
+                write!(
+                    f,
+                    "call {}.{}.{}",
+                    module.address(),
+                    module.name(),
+                    function
+                )?;
+            }
+            Action::Code(code) => {
+                write!(f, "code {}", &hex::encode(code))?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+pub struct ScriptAction {
+    action: Action,
+    args: Vec<TransactionArgument>,
+}
+
+impl ScriptAction {
+    pub fn new(action: Action, args: Vec<TransactionArgument>) -> Self {
+        Self { action, args }
+    }
+
+    pub fn new_call(
+        module: ModuleId,
+        function: Identifier,
+        args: Vec<TransactionArgument>,
+    ) -> Self {
+        Self {
+            action: Action::Call(module, function),
+            args,
+        }
+    }
+
+    pub fn new_code(code: Vec<u8>, args: Vec<TransactionArgument>) -> Self {
+        Self {
+            action: Action::Code(code),
+            args,
+        }
+    }
+
+    pub fn parse_call_with_args(action: &str) -> Result<Self> {
+        let parts: Vec<&str> = action.trim().split(' ').collect();
+        let call = Action::parse_call(parts[0])?;
         let args_result: Result<Vec<TransactionArgument>> = if parts.len() > 1 {
             parts[1..]
                 .iter()
@@ -44,39 +94,25 @@ impl ScriptAction {
         } else {
             Ok(vec![])
         };
-        Ok(Self {
-            module: ModuleId::new(address, module_name.to_owned()),
-            function: function_name.to_owned(),
-            args: args_result?,
-        })
+        Ok(Self::new(call, args_result?))
     }
 
-    pub fn module(&self) -> &ModuleId {
-        &self.module
-    }
-
-    pub fn function(&self) -> &IdentStr {
-        &self.function
+    pub fn action(&self) -> &Action {
+        &self.action
     }
 
     pub fn args(&self) -> &[TransactionArgument] {
         &self.args
     }
 
-    pub fn into_inner(self) -> (ModuleId, Identifier, Vec<TransactionArgument>) {
-        (self.module, self.function, self.args)
+    pub fn into_inner(self) -> (Action, Vec<TransactionArgument>) {
+        (self.action, self.args)
     }
 }
 
 impl std::fmt::Display for ScriptAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}.{}.{}",
-            self.module.address(),
-            self.module.name(),
-            self.function
-        )?;
+        write!(f, "{}", self.action)?;
         for arg in &self.args {
             write!(f, " ")?;
             write!(f, "{}", arg)?;
@@ -98,7 +134,7 @@ mod test_script_action {
     fn test_action_parse() {
         let test_pairs: Vec<(ScriptAction, &str)> = vec![
             (
-                ScriptAction::new(
+                ScriptAction::new_call(
                     ModuleId::new(AccountAddress::default(), ident("M")),
                     ident("f"),
                     vec![],
@@ -106,7 +142,7 @@ mod test_script_action {
                 "0x0.M.f",
             ),
             (
-                ScriptAction::new(
+                ScriptAction::new_call(
                     ModuleId::new(AccountAddress::default(), ident("M")),
                     ident("f"),
                     vec![
@@ -129,7 +165,7 @@ mod test_script_action {
     }
 
     fn do_test(action: &ScriptAction, action_str: &str) -> Result<()> {
-        assert_eq!(action, &ScriptAction::parse(action_str)?);
+        assert_eq!(action, &ScriptAction::parse_call_with_args(action_str)?);
         Ok(())
     }
 }

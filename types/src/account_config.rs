@@ -62,6 +62,11 @@ pub fn validator_set_address() -> AccountAddress {
         .expect("Parsing valid hex literal should always succeed")
 }
 
+pub fn channel_global_events_address() -> AccountAddress {
+    AccountAddress::from_hex_literal("0x1D9")
+        .expect("Parsing valid hex literal should always succeed")
+}
+
 pub fn coin_struct_tag() -> StructTag {
     StructTag {
         module: coin_module_name().to_owned(),
