@@ -88,7 +88,6 @@ use libra_types::{
 };
 use nibble_path::{skip_common_prefix, NibbleIterator, NibblePath};
 use node_type::{Child, Children, InternalNode, LeafNode, Node, NodeKey};
-#[cfg(any(test, feature = "fuzzing"))]
 use std::collections::{BTreeMap, BTreeSet};
 use tree_cache::TreeCache;
 
