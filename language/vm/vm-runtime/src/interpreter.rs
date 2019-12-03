@@ -51,7 +51,7 @@ use vm::{
 use vm_runtime_types::{
     loaded_data::struct_def::StructDef,
     native_functions::dispatch::resolve_native_function,
-    native_structs::{NativeStructValue, vector::NativeVector},
+    native_structs::{vector::NativeVector, NativeStructValue},
     value::{Locals, MutVal, ReferenceValue, Struct, Value},
 };
 
@@ -782,23 +782,19 @@ where
             }
         } else if module_id == *CHANNEL_UTIL_MODULE {
             match function_name.as_str() {
-                "move_to_participant" => {
-                    self.call_move_to_participant(context, type_actual_tags)
-                }
+                "move_to_participant" => self.call_move_to_participant(context, type_actual_tags),
                 "move_to_shared" => self.call_move_to_shared(context, type_actual_tags),
                 "move_from_participant" => {
                     self.call_move_from_participant(context, type_actual_tags)
                 }
-                "move_from_shared" => {
-                    self.call_move_from_shared(context, type_actual_tags)
-                }
+                "move_from_shared" => self.call_move_from_shared(context, type_actual_tags),
                 "borrow_from_participant" => {
                     self.call_borrow_from_participant(context, type_actual_tags)
                 }
-                "borrow_from_participant_mut" => self.call_borrow_from_participant_mut(context, type_actual_tags),
-                "borrow_from_shared" => {
-                    self.call_borrow_from_shared(context, type_actual_tags)
+                "borrow_from_participant_mut" => {
+                    self.call_borrow_from_participant_mut(context, type_actual_tags)
                 }
+                "borrow_from_shared" => self.call_borrow_from_shared(context, type_actual_tags),
                 "borrow_from_shared_mut" => {
                     self.call_borrow_from_shared_mut(context, type_actual_tags)
                 }
@@ -948,10 +944,15 @@ where
     fn is_authorized(
         &mut self,
         context: &mut dyn InterpreterContext,
-        participant: AccountAddress
+        participant: AccountAddress,
     ) -> bool {
         let proposer = self.txn_data.channel_metadata_v2.as_ref().unwrap().proposer;
-        let authorized = &self.txn_data.channel_metadata_v2.as_ref().unwrap().authorized;
+        let authorized = &self
+            .txn_data
+            .channel_metadata_v2
+            .as_ref()
+            .unwrap()
+            .authorized;
         if context.vm_mode().is_offchain() || participant == proposer || *authorized {
             return true;
         }
@@ -1028,16 +1029,11 @@ where
         type_actual_tags: Vec<TypeTag>,
     ) -> VMResult<()> {
         let participant = self.operand_stack.pop_as::<AccountAddress>()?;
-        if !self.is_authorized(context, participant) {
-            Err(VMStatus::new(StatusCode::MISSING_SIGNATURE_ERROR)
-                .with_message(format!("Access to private resource not authorized.")))
-        } else {
-            let channel_address = self.get_channel_metadata()?.channel_address;
-            let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
-            let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
-            let resource = context.borrow_global(&ap, struct_def)?;
-            self.operand_stack.push(Value::global_ref(resource))
-        }
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
+        let resource = context.borrow_global(&ap, struct_def)?;
+        self.operand_stack.push(Value::global_ref(resource))
     }
     /// call `borrow_from_shared`.
     fn call_borrow_from_shared(
@@ -1235,13 +1231,13 @@ where
         let mut val = Vec::new();
         let length = self.get_channel_metadata()?.public_keys.len();
         for i in 0..length {
-            let key = self.get_channel_metadata()?.public_keys[i].to_bytes().to_vec();
+            let key = self.get_channel_metadata()?.public_keys[i]
+                .to_bytes()
+                .to_vec();
             val.push(MutVal::new(Value::byte_array(ByteArray::new(key))));
         }
 
-        let ret_val = Value::native_struct(NativeStructValue::Vector(
-            NativeVector(val),
-        ));
+        let ret_val = Value::native_struct(NativeStructValue::Vector(NativeVector(val)));
         self.operand_stack.push(ret_val)
     }
 
@@ -1253,14 +1249,12 @@ where
         for i in 0..length {
             match &self.get_channel_metadata()?.signatures[i] {
                 Some(sig) => sig_bytes = sig.to_bytes().to_vec(),
-                None => sig_bytes = Vec::new(),  //empty u8 vec
+                None => sig_bytes = Vec::new(), //empty u8 vec
             }
             val.push(MutVal::new(Value::byte_array(ByteArray::new(sig_bytes))));
         }
 
-        let ret_val = Value::native_struct(NativeStructValue::Vector(
-            NativeVector(val),
-        ));
+        let ret_val = Value::native_struct(NativeStructValue::Vector(NativeVector(val)));
         self.operand_stack.push(ret_val)
     }
 

@@ -1043,12 +1043,13 @@ module LibraAccount {
     channel_epilogue() acquires Channel,ChannelGlobalEvents {
         let channel: &mut Self.Channel;
         let channel_mirror: &mut Self.ChannelMirror;
-        let sender: address;
+        let proposer: address;
         let txn_channel_sequence_number: u64;
         let new_channel_sequence_number: u64;
         let channel_address: address;
+        let locked_by: Self.ChannelLockedBy;
 
-        sender = get_txn_sender();
+        proposer = ChannelTransaction.get_proposer();
         channel_address = ChannelTransaction.get_channel_address();
         channel = borrow_global_mut<Channel>(copy(channel_address));
         channel_mirror = ChannelUtil.borrow_from_shared_mut<Self.ChannelMirror>();
@@ -1064,7 +1065,10 @@ module LibraAccount {
                 // set channel stage to locked
                 *(&mut copy(channel).stage) = 1;
                 Self.do_emit_channel_event(copy(channel_address), copy(channel));
-                //TODO write locked_by
+                locked_by = ChannelLockedBy{
+                    participant: copy(proposer),
+                };
+                Self.move_to_channel<Self.ChannelLockedBy>(move(locked_by));
             }
         }
         return;
