@@ -22,6 +22,7 @@ module ChannelScript {
         deposit_coin = LibraAccount.withdraw_from_sender(copy(amount));
 
         LibraAccount.deposit_to_channel(move(deposit_coin));
+        LibraAccount.emit_channel_event(ChannelTransaction.get_channel_address());
         return;
     }
 
@@ -34,6 +35,7 @@ module ChannelScript {
         assert(get_txn_sender() == copy(proposer), 1117);
         withdraw_coin = LibraAccount.withdraw_from_channel(move(amount));
         LibraAccount.deposit(move(proposer), move(withdraw_coin));
+        LibraAccount.emit_channel_event(ChannelTransaction.get_channel_address());
         return;
     }
 
