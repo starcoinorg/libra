@@ -2,7 +2,8 @@ module LibraSystem {
     import 0x0.LibraAccount;
     import 0x0.ValidatorConfig;
     import 0x0.Vector;
-    //import 0x0.ConsensusConfig;
+    import 0x0.ConsensusConfig;
+    import 0x0.LibraCoin;
 
     struct ValidatorInfo {
         addr: address,
@@ -21,7 +22,6 @@ module LibraSystem {
         change_events: LibraAccount.EventHandle<Self.ValidatorSetChangeEvent>,
     }
 
-
     resource BlockMetadata {
       // Height of the current block
       // TODO: Should we keep the height?
@@ -36,6 +36,25 @@ module LibraSystem {
 
       // Proposer of the current block.
       proposer: address,
+    }
+
+    resource SubsidyDetail {
+        withdrawal_capability: LibraAccount.WithdrawalCapability,
+        subsidy_height: u64,
+        heights: Vector.T<u64>,
+        miners: Vector.T<address>,
+    }
+
+    public initialize_subsidy_detail() {
+        assert(get_txn_sender() == 0x6d696e74, 1);
+
+        move_to_sender<SubsidyDetail>(SubsidyDetail {
+            withdrawal_capability: LibraAccount.extract_sender_withdrawal_capability(),
+            subsidy_height: 0,
+            heights: Vector.empty<u64>(),
+            miners: Vector.empty<address>(),
+        });
+        return;
     }
 
     // This can only be invoked by the Association address, and only a single time.
@@ -68,6 +87,70 @@ module LibraSystem {
       return;
     }
 
+    public subsidy() acquires BlockMetadata, SubsidyDetail {
+        let subsidy_detail: &mut Self.SubsidyDetail;
+        let tmp_height: u64;
+        let heights_ref: &mut Vector.T<u64>;
+        let miners_ref: &mut Vector.T<address>;
+        let start_height: u64;
+        let subsidy_coin: u64;
+        let subsidy_miner: address;
+        let subsidy_flag: bool;
+        let libra_coin: LibraCoin.T;
+        let current_height: u64;
+        let current_miner: address;
+
+        current_height = Self.get_current_block_height();
+
+        if (copy(current_height) > 0 && ConsensusConfig.is_pow()) {
+            subsidy_detail = borrow_global_mut<SubsidyDetail>(0x6d696e74);
+            assert(!Vector.contains<u64>(&copy(subsidy_detail).heights, &current_height), 1);
+            assert((Vector.length<u64>(&copy(subsidy_detail).heights) <= ConsensusConfig.subsidy_delay()), 1);
+
+            subsidy_flag = false;
+
+            start_height = *&copy(subsidy_detail).subsidy_height + 1;
+            subsidy_coin = ConsensusConfig.subsidy_coin(copy(start_height));
+
+            if (Vector.length<u64>(&copy(subsidy_detail).heights) == ConsensusConfig.subsidy_delay()) {//pay
+                tmp_height = copy(start_height) + ConsensusConfig.subsidy_delay();
+                assert(copy(current_height) == copy(tmp_height), 1);
+
+                tmp_height = Vector.get<u64>(&copy(subsidy_detail).heights, 0);
+                assert(copy(start_height) == copy(tmp_height), 1);
+
+                subsidy_flag = true;
+            }
+
+            heights_ref = &mut move(subsidy_detail).heights;
+            if (copy(subsidy_flag)) {
+                //remove:height
+                Vector.remove_head<u64>(copy(heights_ref));
+            }
+            Vector.push_back<u64>(move(heights_ref), move(current_height));
+
+            subsidy_detail = borrow_global_mut<SubsidyDetail>(0x6d696e74);
+            if (copy(subsidy_flag)) {
+                assert(copy(subsidy_coin) > 0, 1);
+                subsidy_miner = Vector.get<address>(&copy(subsidy_detail).miners, 0);
+                libra_coin = LibraAccount.withdraw_with_capability(&copy(subsidy_detail).withdrawal_capability, move(subsidy_coin));
+                LibraAccount.deposit(move(subsidy_miner), move(libra_coin));
+
+                //remove:miner
+                miners_ref = &mut move(subsidy_detail).miners;
+                Vector.remove_head<address>(copy(miners_ref));
+            } else {
+                miners_ref = &mut move(subsidy_detail).miners;
+            }
+
+            current_miner = Self.get_current_proposer();
+            Vector.push_back<address>(move(miners_ref), move(current_miner));
+            return;
+        }
+
+        return;
+    }
+
     public get_consensus_pubkey(v: &Self.ValidatorInfo): &bytearray {
       return &move(v).consensus_pubkey;
     }
@@ -94,11 +177,11 @@ module LibraSystem {
         new_block_hash: bytearray,
         previous_block_votes: bytearray,
         proposer: address
-    ) acquires BlockMetadata, ValidatorSet {
+    ) acquires BlockMetadata, ValidatorSet, SubsidyDetail {
       Self.process_block_prologue(move(timestamp), move(new_block_hash), move(previous_block_votes), move(proposer));
       // triggers a reconfiguration if the validator keys or validator set has changed
       Self.reconfigure();
-      //ConsensusConfig.subsidy(Self.get_current_block_height(), Self.get_current_proposer());
+      Self.subsidy();
       return;
     }
 

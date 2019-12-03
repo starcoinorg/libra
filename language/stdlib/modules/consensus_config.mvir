@@ -1,43 +1,27 @@
 module ConsensusConfig {
     import 0x0.LibraAccount;
     import 0x0.Vector;
-    import 0x0.LibraCoin;
 
     resource T {
         consensus_type_pow: bool,
         subsidy_halving_interval: u64,
         subsidy_base: u64,
-        withdrawal_capability: LibraAccount.WithdrawalCapability,
-        subsidy_height: u64,
         subsidy_delay: u64,
-        heights: Vector.T<u64>,
-        miners: Vector.T<address>,
         already_set: bool,
     }
 
     public initialize() {
-        let withdrawal_capability: LibraAccount.WithdrawalCapability;
         let transaction_sender: address;
-        let init_heights: Vector.T<u64>;
-        let init_miners: Vector.T<address>;
 
-        assert(get_txn_sender() == 0x6d696e74, 0);
+    //    assert(get_txn_sender() == 0x6d696e74, 0);
         transaction_sender = get_txn_sender();
         assert(!exists<T>(copy(transaction_sender)), 1);
-
-        withdrawal_capability = LibraAccount.extract_sender_withdrawal_capability();
-        init_miners = Vector.empty<address>();
-        init_heights = Vector.empty<u64>();
 
         move_to_sender<T>(T {
             consensus_type_pow: false,
             subsidy_halving_interval: 0,
             subsidy_base: 0,
-            withdrawal_capability: move(withdrawal_capability),
-            subsidy_height: 0,
             subsidy_delay: 0,
-            heights: move(init_heights),
-            miners: move(init_miners),
             already_set: false,
         });
 
@@ -48,7 +32,7 @@ module ConsensusConfig {
         let transaction_sender:address;
         let consensus_account: &mut Self.T;
 
-        assert(get_txn_sender() == 0x6d696e74, 0);
+    //    assert(get_txn_sender() == 0x6d696e74, 0);
         transaction_sender = get_txn_sender();
         assert(exists<T>(copy(transaction_sender)), 1);
 
@@ -71,70 +55,15 @@ module ConsensusConfig {
         return;
     }
 
-    public subsidy(current_height: u64, current_miner: address) acquires T {
-        let consensus_account: &mut Self.T;
-        let consensus_account_ref: &Self.T;
-        let tmp_height: u64;
-        let heights_ref: &mut Vector.T<u64>;
-        let miners_ref: &mut Vector.T<address>;
-        let b: u64;
-        let begin_height: u64;
-        let subsidy_coin: u64;
-        let subsidy_miner: address;
-        let subsidy_flag: bool;
-        let libra_coin: LibraCoin.T;
-
-        if (copy(current_height) > 0) {
-            consensus_account = borrow_global_mut<T>(0x6d696e74);
-            assert(*&copy(consensus_account).already_set, 1);
-            assert(*&copy(consensus_account).consensus_type_pow, 1);
-            assert(!Vector.contains<u64>(&copy(consensus_account).heights, &current_height), 1);
-            assert((Vector.length<u64>(&copy(consensus_account).heights) <= *&copy(consensus_account).subsidy_delay), 1);
-
-            subsidy_flag = false;
-
-            begin_height = *&copy(consensus_account).subsidy_height + 1;
-            subsidy_coin = Self.subsidy_coin(copy(begin_height), 1, *&copy(consensus_account).subsidy_base);
-
-            if (Vector.length<u64>(&copy(consensus_account).heights) == *&copy(consensus_account).subsidy_delay) {//pay
-                tmp_height = copy(begin_height) + *&copy(consensus_account).subsidy_delay;
-                assert(copy(current_height) == copy(tmp_height), 1);
-
-                tmp_height = Vector.get<u64>(&copy(consensus_account).heights, 0);
-                assert(copy(begin_height) == copy(tmp_height), 1);
-
-                subsidy_flag = true;
-            }
-
-            heights_ref = &mut move(consensus_account).heights;
-            if (copy(subsidy_flag)) {
-                //remove:height
-                Vector.remove_head<u64>(copy(heights_ref));
-            }
-            Vector.push_back<u64>(move(heights_ref), move(current_height));
-
-            consensus_account = borrow_global_mut<T>(0x6d696e74);
-            if (copy(subsidy_flag)) {
-                assert(copy(subsidy_coin) > 0, 1);
-                subsidy_miner = Vector.get<address>(&copy(consensus_account).miners, 0);
-                libra_coin = LibraAccount.withdraw_with_capability(&copy(consensus_account).withdrawal_capability, move(subsidy_coin));
-                LibraAccount.deposit(move(subsidy_miner), move(libra_coin));
-
-                //remove:miner
-                miners_ref = &mut move(consensus_account).miners;
-                Vector.remove_head<address>(copy(miners_ref));
-            } else {
-                miners_ref = &mut move(consensus_account).miners;
-            }
-            Vector.push_back<address>(move(miners_ref), move(current_miner));
-        }
-
-        return;
-    }
-
-    subsidy_coin(height:u64, halving:u64, subsidy:u64): u64 {
+    public subsidy_coin(height:u64): u64 acquires T {
+        let halving:u64;
+        let subsidy:u64;
         let times: u64;
         let index: u64;
+
+        halving = Self.subsidy_halving();
+        subsidy = Self.subsidy_base();
+
         assert(copy(height) > 0, 1);
         assert(copy(halving) > 0, 1);
         assert(copy(subsidy) > 0, 1);
@@ -153,5 +82,21 @@ module ConsensusConfig {
 
     public is_pow() : bool acquires T {
         return *&(borrow_global<T>(0x6d696e74)).consensus_type_pow;
+    }
+
+    public subsidy_halving(): u64 acquires T {
+        return *&(borrow_global<T>(0x6d696e74)).subsidy_halving_interval;
+    }
+
+    public subsidy_base(): u64 acquires T {
+        return *&(borrow_global<T>(0x6d696e74)).subsidy_base;
+    }
+
+    public subsidy_delay(): u64 acquires T {
+        return *&(borrow_global<T>(0x6d696e74)).subsidy_delay;
+    }
+
+    public already_set(): bool acquires T {
+        return *&(borrow_global<T>(0x6d696e74)).already_set;
     }
 }

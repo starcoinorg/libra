@@ -55,10 +55,10 @@ lazy_static! {
             &*GAS_SCHEDULE, // depends on Vector
             &*CHANNEL_TXN_MODULE,
             &*ACCOUNT_MODULE, // depends on LibraCoin, Event, AddressUtil, BytearrayUtil, U64Util, ChannelTransaction
+            &*CONSENSUS_CONF_MODULE, // depends on LibraAccount, Vector
             &*LIBRA_SYSTEM_MODULE, // depends on LibraAccount, ValidatorConfig
             &*TRANSACTION_FEE_DISTRIBUTION_MODULE, // depends on Block, ValidatorSet, LibraCoin, LibraAccount,
             &*CHANNEL_ACCOUNT_MODULE,
-            &*CONSENSUS_CONF_MODULE,
         ]
     };
 }
