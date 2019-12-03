@@ -886,6 +886,13 @@ module LibraAccount {
         return LibraCoin.value(&move(channel_account).balance);
     }
 
+    // Check current channel is locked
+    public channel_is_locked():bool acquires Channel {
+        let channel: &Self.Channel;
+        channel = borrow_global<Channel>(ChannelTransaction.get_channel_address());
+        return *&copy(channel).stage == 1;
+    }
+
     public challenge() acquires Channel,ChannelLockedBy,ChannelGlobalEvents {
         let channel: &mut Self.Channel;
         let channel_address: address;
