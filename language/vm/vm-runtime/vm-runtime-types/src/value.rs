@@ -497,7 +497,6 @@ impl MutVal {
     // Work around to make NativeVector visible from interpret. Need fix later.
     // pub(crate) fn new(v: Value) -> Self {
     pub fn new(v: Value) -> Self {
-
         MutVal(Rc::new(RefCell::new(v.0)))
     }
 
