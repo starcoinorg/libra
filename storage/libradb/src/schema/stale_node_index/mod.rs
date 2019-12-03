@@ -20,8 +20,8 @@
 use crate::schema::{ensure_slice_len_eq, STALE_NODE_INDEX_CF_NAME};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use failure::prelude::*;
-use jellyfish_merkle::{node_type::NodeKey, StaleNodeIndex};
 use libra_types::transaction::Version;
+use merkle_patricia::{node_type::NodeKey, StaleNodeIndex};
 use schemadb::{
     define_schema,
     schema::{KeyCodec, SeekKeyCodec, ValueCodec},

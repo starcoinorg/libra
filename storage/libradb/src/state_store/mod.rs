@@ -14,14 +14,14 @@ use crate::{
     },
 };
 use failure::prelude::*;
-use jellyfish_merkle::{
-    node_type::{LeafNode, Node, NodeKey},
-    JellyfishMerkleTree, TreeReader,
-};
 use libra_crypto::{hash::CryptoHash, HashValue};
 use libra_types::{
     account_address::AccountAddress, account_state_blob::AccountStateBlob,
     proof::SparseMerkleProof, transaction::Version,
+};
+use merkle_patricia::{
+    node_type::{LeafNode, Node, NodeKey},
+    MerklePatriciaTree, TreeReader,
 };
 use schemadb::DB;
 use std::{collections::HashMap, sync::Arc};
@@ -38,11 +38,10 @@ impl StateStore {
     /// Get the account state blob given account address and root hash of state Merkle tree
     pub fn get_account_state_with_proof_by_version(
         &self,
-        address: AccountAddress,
-        version: Version,
+        _address: AccountAddress,
+        root_hash: HashValue,
     ) -> Result<(Option<AccountStateBlob>, SparseMerkleProof)> {
-        let (blob, proof) =
-            JellyfishMerkleTree::new(self).get_with_proof(address.hash(), version)?;
+        let (blob, proof) = MerklePatriciaTree::new(self).get_with_proof(root_hash)?;
         Ok((blob, proof))
     }
 
@@ -52,6 +51,7 @@ impl StateStore {
         &self,
         account_state_sets: Vec<HashMap<AccountAddress, AccountStateBlob>>,
         first_version: Version,
+        first_hash: HashValue,
         cs: &mut ChangeSet,
     ) -> Result<Vec<HashValue>> {
         let blob_sets = account_state_sets
@@ -65,7 +65,7 @@ impl StateStore {
             .collect::<Vec<_>>();
 
         let (new_root_hash_vec, tree_update_batch) =
-            JellyfishMerkleTree::new(self).put_blob_sets(blob_sets, first_version)?;
+            MerklePatriciaTree::new(self).put_blob_sets(blob_sets, first_version, first_hash)?;
 
         cs.counter_bumps.bump(
             LedgerCounter::NewStateNodes,

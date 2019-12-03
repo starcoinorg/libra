@@ -10,7 +10,7 @@
 
 use crate::schema::JELLYFISH_MERKLE_NODE_CF_NAME;
 use failure::prelude::*;
-use jellyfish_merkle::node_type::{Node, NodeKey};
+use merkle_patricia::node_type::{Node, NodeKey};
 use schemadb::{
     define_schema,
     schema::{KeyCodec, ValueCodec},

@@ -29,6 +29,7 @@ mod transaction_store;
 #[cfg(test)]
 mod libradb_test;
 
+use crate::pruner::Pruner;
 use crate::{
     block_index_store::BlockIndexStore,
     change_set::{ChangeSet, SealedChangeSet},
@@ -36,7 +37,7 @@ use crate::{
     event_store::EventStore,
     ledger_counters::LedgerCounters,
     ledger_store::LedgerStore,
-    pruner::Pruner,
+    //    pruner::Pruner,
     schema::*,
     state_store::StateStore,
     system_store::SystemStore,
@@ -191,7 +192,7 @@ impl LibraDB {
             .get_transaction_info_with_proof(version, ledger_version)?;
         let (account_state_blob, sparse_merkle_proof) = self
             .state_store
-            .get_account_state_with_proof_by_version(address, version)?;
+            .get_account_state_with_proof_by_version(address, txn_info.state_root_hash())?;
         Ok(AccountStateWithProof::new(
             version,
             account_state_blob,
@@ -408,9 +409,12 @@ impl LibraDB {
             .iter()
             .map(|txn_to_commit| txn_to_commit.account_states().clone())
             .collect::<Vec<_>>();
-        let state_root_hashes =
-            self.state_store
-                .put_account_state_sets(account_state_sets, first_version, &mut cs)?;
+        let state_root_hashes = self.state_store.put_account_state_sets(
+            account_state_sets,
+            last_version,
+            HashValue::zero(),
+            &mut cs,
+        )?;
 
         // Event updates. Gather event accumulator root hashes.
         let event_root_hashes = zip_eq(first_version..=last_version, txns_to_commit)
@@ -577,10 +581,10 @@ impl LibraDB {
     pub fn get_account_state_with_proof_by_version(
         &self,
         address: AccountAddress,
-        version: Version,
+        hash: HashValue,
     ) -> Result<(Option<AccountStateBlob>, SparseMerkleProof)> {
         self.state_store
-            .get_account_state_with_proof_by_version(address, version)
+            .get_account_state_with_proof_by_version(address, hash)
     }
 
     /// Gets information needed from storage during the startup of the executor or state
