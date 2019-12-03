@@ -1,6 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::channel::channel_participant_struct_tag;
 use crate::test_helpers::assert_canonical_encode_decode;
 use crate::{
     access_path::AccessPath,
@@ -51,4 +52,40 @@ fn test_write_set_merge() {
     } else {
         panic!("unexpect write_op.")
     }
+}
+
+#[test]
+fn test_contains_channel_resource() {
+    let account1 = AccountAddress::random();
+    let account2 = AccountAddress::random();
+    let channel_address = AccountAddress::channel_address(vec![account1, account2].as_slice());
+
+    let vec = vec![
+        (
+            AccessPath::channel_resource_access_path(
+                channel_address,
+                account1,
+                channel_participant_struct_tag(),
+            ),
+            WriteOp::Value(vec![1]),
+        ),
+        (
+            AccessPath::channel_resource_access_path(
+                channel_address,
+                account2,
+                channel_participant_struct_tag(),
+            ),
+            WriteOp::Value(vec![2]),
+        ),
+    ];
+    let write_set = WriteSetMut::new(vec).freeze().unwrap();
+    assert!(write_set.contains_channel_resource(&account1));
+    assert!(!write_set.contains_channel_resource(&AccountAddress::random()));
+
+    let vec2 = vec![(
+        AccessPath::new_for_account(account1),
+        WriteOp::Value(vec![1]),
+    )];
+    let write_set2 = WriteSetMut::new(vec2).freeze().unwrap();
+    assert!(!write_set2.contains_channel_resource(&account1));
 }
