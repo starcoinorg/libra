@@ -12,7 +12,6 @@ use libra_crypto::hash::PRE_GENESIS_BLOCK_ID;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
-use libra_types::account_config::association_address;
 use libra_types::block_index::BlockIndex;
 use libra_types::block_metadata::BlockMetadata;
 use libra_types::transaction::TransactionToCommit;
@@ -126,13 +125,16 @@ impl ChainManager {
                                 Some(t) => t.get_txns(),
                                 None => vec![],
                             };
-                            let block_meta_data = BlockMetadata::new(b.parent_id().clone(), b.timestamp_usecs(), BTreeMap::new(), association_address());
+
+                            let miner_address = b.quorum_cert().commit_info().next_validator_set().expect("validator_set err.").payload().clone()[0].account_address();
+                            let block_meta_data = BlockMetadata::new(b.parent_id().clone(), b.timestamp_usecs(), BTreeMap::new(), miner_address.clone());
                             commit_txn_vec.push((block_meta_data, tmp_txns));
                         }
 
                         let pre_compute_grandpa_block_id = pre_block_index.parent_id();
                         let pre_compute_parent_block_id = pre_block_index.id();
-                        let block_meta_data = BlockMetadata::new(parent_block_id.clone(), block.timestamp_usecs(), BTreeMap::new(), association_address());
+                        let miner_address = block.quorum_cert().commit_info().next_validator_set().expect("validator_set err.").payload().clone()[0].account_address();
+                        let block_meta_data = BlockMetadata::new(parent_block_id.clone(), block.timestamp_usecs(), BTreeMap::new(), miner_address.clone());
                         commit_txn_vec.push((block_meta_data.clone(), payload.clone()));
 
                         // 4. call pre_compute

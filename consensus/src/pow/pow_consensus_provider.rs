@@ -68,6 +68,12 @@ impl PowConsensusProvider {
                 mine_client.start().await
             });
         }
+
+        let self_pri_key = node_config
+            .consensus
+            .consensus_keypair
+            .take_consensus_private()
+            .expect("private key is none.");
         let event_handle = EventProcessor::new(
             network_sender,
             network_events,
@@ -79,6 +85,7 @@ impl PowConsensusProvider {
             mine_state,
             read_storage,
             write_storage,
+            self_pri_key,
         );
         Self {
             runtime,
@@ -91,7 +98,7 @@ impl PowConsensusProvider {
         match self.event_handle.take() {
             Some(mut handle) => {
                 //mint
-                handle.mint_manager.mint(executor.clone());
+                handle.mint_manager.borrow_mut().mint(executor.clone());
 
                 //msg
                 handle.event_process(executor.clone());

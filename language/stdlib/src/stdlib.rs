@@ -45,6 +45,7 @@ lazy_static! {
         make_module_definition!("../modules/hash_time_lock.mvir");
     static ref CHANNEL_SCRIPT_MODULE: ModuleDefinition =
         make_module_definition!("../modules/channel_script.mvir");
+    static ref CONSENSUS_CONF_MODULE: ModuleDefinition = make_module_definition!("../modules/consensus_config.mvir");
     static ref MODULE_DEFS: Vec<&'static ModuleDefinition> = {
         // Note: a module can depend on earlier modules in the list, but not vice versa. Don't try
         // to rearrange without considering this!
@@ -61,6 +62,7 @@ lazy_static! {
             &*CHANNEL_TXN_MODULE,
             &*CHANNEL_UTIL_MODULE,
             &*ACCOUNT_MODULE, // depends on LibraCoin, Event, AddressUtil, BytearrayUtil, U64Util, ChannelTransaction
+            &*CONSENSUS_CONF_MODULE, // depends on LibraAccount, Vector
             &*LIBRA_SYSTEM_MODULE, // depends on LibraAccount, ValidatorConfig
             &*TRANSACTION_FEE_DISTRIBUTION_MODULE, // depends on Block, ValidatorSet, LibraCoin, LibraAccount,
             &*CHANNEL_ACCOUNT_MODULE,

@@ -14,6 +14,7 @@ use consensus_types::block_retrieval::{
 use cuckoo::consensus::{PowCuckoo, PowService, Proof};
 use futures::channel::mpsc;
 use futures::{stream::select, SinkExt, StreamExt, TryStreamExt};
+use libra_crypto::ed25519::Ed25519PrivateKey;
 use libra_crypto::hash::CryptoHash;
 use libra_crypto::hash::PRE_GENESIS_BLOCK_ID;
 use libra_crypto::HashValue;
@@ -52,7 +53,7 @@ pub struct EventProcessor {
 
     pow_srv: Arc<dyn PowService>,
     pub chain_manager: Arc<AtomicRefCell<ChainManager>>,
-    pub mint_manager: Arc<MintManager>,
+    pub mint_manager: Arc<AtomicRefCell<MintManager>>,
 }
 
 impl EventProcessor {
@@ -67,6 +68,7 @@ impl EventProcessor {
         mine_state: MineStateManager,
         read_storage: Arc<dyn StorageRead>,
         write_storage: Arc<dyn StorageWrite>,
+        pri_key: Ed25519PrivateKey,
     ) -> Self {
         let (block_cache_sender, block_cache_receiver) = mpsc::channel(10);
 
@@ -97,7 +99,7 @@ impl EventProcessor {
             chain_manager.clone(),
         )));
         let pow_srv = Arc::new(PowCuckoo::new(MAX_EDGE, CYCLE_LENGTH));
-        let mint_manager = Arc::new(MintManager::new(
+        let mint_manager = Arc::new(AtomicRefCell::new(MintManager::new(
             txn_manager.clone(),
             state_computer.clone(),
             network_sender.clone(),
@@ -107,7 +109,8 @@ impl EventProcessor {
             pow_srv.clone(),
             chain_manager.clone(),
             mine_state,
-        ));
+            pri_key,
+        )));
         EventProcessor {
             block_cache_sender,
             block_store,
@@ -162,7 +165,6 @@ impl EventProcessor {
 
                         match msg.clone() {
                             ConsensusMsg_oneof::NewBlock(new_block) => {
-                                //TODO:verify block and sign
                                 let block: Block<BlockPayloadExt> =
                                     Block::try_from(new_block).expect("parse block pb err.");
 

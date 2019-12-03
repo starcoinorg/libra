@@ -54,6 +54,11 @@ lazy_static! {
     /// The ModuleId for the validator config
     pub static ref VALIDATOR_CONFIG_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("ValidatorConfig").unwrap()) };
+
+    /// The ModuleId for the consensus config module
+    pub static ref CONSENSUS_CONF_MODULE: ModuleId =
+        { ModuleId::new(account_config::core_code_address(), Identifier::new("ConsensusConfig").unwrap()) };
+
     /// The ModuleId for the libra system module
     pub static ref LIBRA_SYSTEM_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("LibraSystem").unwrap()) };
