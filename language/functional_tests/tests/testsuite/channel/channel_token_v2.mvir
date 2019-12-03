@@ -100,16 +100,14 @@ main(){
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}},50000,50000
 
 0x0.LibraAccount.open_channel
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 import 0x0.ChannelTransaction;
 main() {
    assert(ChannelTransaction.is_channel_txn(), 111);
@@ -118,8 +116,7 @@ main() {
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}}
 import 0x0.ChannelTransaction;
 import {{default}}.Token;
@@ -139,8 +136,7 @@ main(receiver:address) {
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}}
 import 0x0.ChannelTransaction;
 import {{default}}.Token;
@@ -157,8 +153,7 @@ main(receiver:address) {
 }
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}}
 import 0x0.ChannelTransaction;
 import {{default}}.Token;
@@ -182,8 +177,7 @@ main(receiver:address) {
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}}
 import 0x0.ChannelTransaction;
 import {{default}}.Token;

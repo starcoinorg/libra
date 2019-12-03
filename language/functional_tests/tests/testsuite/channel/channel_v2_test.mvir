@@ -28,16 +28,14 @@ main() {
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1, alice
 //! args: {{bob}},50000,40000
 
 0x0.ChannelScript.open
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1, alice
 import 0x0.ChannelTransaction;
 import 0x0.LibraAccount;
 main() {
@@ -49,8 +47,7 @@ main() {
 
 //! new-transaction
 //! sender: bob
-//! channel: ch1
-//! proposer: bob
+//! txn-channel: ch1, bob
 import 0x0.ChannelTransaction;
 import 0x0.ChannelScript;
 import 0x0.LibraAccount;
@@ -63,8 +60,7 @@ main() {
 // Test transfer
 //! new-transaction
 //! sender: bob
-//! channel: ch1
-//! proposer: bob
+//! txn-channel: ch1,bob
 import 0x0.ChannelTransaction;
 import 0x0.ChannelScript;
 import 0x0.LibraAccount;
@@ -78,8 +74,7 @@ main() {
 // Test payment send.
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 import 0x0.ChannelTransaction;
 import 0x0.ChannelScript;
 import 0x0.LibraAccount;
@@ -96,8 +91,7 @@ main() {
 // Test payment receive.
 //! new-transaction
 //! sender: bob
-//! channel: ch1
-//! proposer: bob
+//! txn-channel: ch1,bob
 import 0x0.ChannelTransaction;
 import 0x0.ChannelScript;
 import 0x0.LibraAccount;
@@ -112,8 +106,7 @@ main() {
 // Test withdraw.
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 import 0x0.ChannelTransaction;
 import 0x0.ChannelScript;
 import 0x0.LibraAccount;

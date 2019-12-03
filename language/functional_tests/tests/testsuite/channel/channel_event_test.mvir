@@ -20,8 +20,7 @@ main(){
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1, alice
 //! args: {{bob}},50000,40000
 
 0x0.ChannelScript.open

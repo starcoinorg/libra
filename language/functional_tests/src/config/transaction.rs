@@ -41,8 +41,8 @@ pub enum Entry {
     MaxGas(u64),
     SequenceNumber(u64),
     Receiver(String),
-    Channel(String),
-    Proposer(String),
+    /// Channel name, Channel txn proposer, Channel txn signed by participants.
+    Channel(String, String, bool),
 }
 
 impl FromStr for Entry {
@@ -91,19 +91,46 @@ impl FromStr for Entry {
         if let Some(s) = strip(s, "sequence-number:") {
             return Ok(Entry::SequenceNumber(s.parse::<u64>()?));
         }
-        if s.starts_with("channel:") {
-            let s = s[8..].trim_start().trim_end();
-            if s.is_empty() {
-                return Err(ErrorKind::Other("channel cannot be empty".to_string()).into());
+        if let Some(s) = strip(s, "txn-channel:") {
+            let s = s.to_ascii_lowercase();
+            if s.len() < 2 {
+                return Err(ErrorKind::Other(
+                    "channel config must contains channel name and proposer.".to_string(),
+                )
+                .into());
             }
-            return Ok(Entry::Channel(s.to_ascii_lowercase()));
-        }
-        if s.starts_with("proposer:") {
-            let s = s[9..].trim_start().trim_end();
-            if s.is_empty() {
-                return Err(ErrorKind::Other("proposer cannot be empty".to_string()).into());
-            }
-            return Ok(Entry::Proposer(s.to_ascii_lowercase()));
+            let parts: Vec<&str> = s.split(",").map(|s| s.trim()).collect();
+            let name: Result<String> = parts
+                .get(0)
+                .and_then(|s| {
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s.to_string())
+                    }
+                })
+                .ok_or(ErrorKind::Other("channel name can not be empty.".to_string()).into());
+            let proposer: Result<String> = parts
+                .get(1)
+                .and_then(|s| {
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s.to_string())
+                    }
+                })
+                .ok_or(ErrorKind::Other("channel proposer can not be empty.".to_string()).into());
+            let signed_by_participants = parts
+                .get(2)
+                .and_then(|s| {
+                    if s.to_string() == "false".to_string() {
+                        Some(false)
+                    } else {
+                        Some(true)
+                    }
+                })
+                .unwrap_or(true);
+            return Ok(Entry::Channel(name?, proposer?, signed_by_participants));
         }
         Err(ErrorKind::Other(format!(
             "failed to parse '{}' as transaction config entry",
@@ -132,6 +159,13 @@ impl Entry {
     }
 }
 
+#[derive(Debug)]
+pub struct ChannelTransactionConfig<'a> {
+    pub channel: ChannelData<'a>,
+    pub proposer: &'a Account,
+    pub signed_by_participants: bool,
+}
+
 /// A table of options specific to one transaction, fine tweaking how the transaction
 /// is handled by the testing infra.
 #[derive(Debug)]
@@ -142,9 +176,7 @@ pub struct Config<'a> {
     pub max_gas: Option<u64>,
     pub sequence_number: Option<u64>,
     pub receiver: Option<&'a Account>,
-    pub channel: Option<ChannelData<'a>>,
-    // Channel txn proposer
-    pub proposer: Option<&'a Account>,
+    pub channel: Option<ChannelTransactionConfig<'a>>,
 }
 
 impl<'a> Config<'a> {
@@ -156,8 +188,7 @@ impl<'a> Config<'a> {
         let mut max_gas = None;
         let mut sequence_number = None;
         let mut receiver = None;
-        let mut channel = None;
-        let mut proposer = None;
+        let mut channel_transaction_config = None;
 
         for entry in entries {
             match entry {
@@ -217,36 +248,32 @@ impl<'a> Config<'a> {
                         )
                     }
                 },
-                Entry::Channel(name) => match channel {
-                    None => {
-                        let channel_config = config.get_channel_for_name(name)?;
-                        let channel_data = ChannelData {
-                            channel_address: channel_config.channel_address,
-                            participants: channel_config
-                                .participants
-                                .iter()
-                                .map(|addr| ChannelParticipant {
-                                    address: *addr,
-                                    account: config.get_account_for_address(addr).unwrap(),
-                                })
-                                .collect(),
-                        };
-                        channel = Some(channel_data)
+                Entry::Channel(name, proposer, signed_by_participants) => {
+                    match channel_transaction_config {
+                        None => {
+                            let channel_config = config.get_channel_for_name(name)?;
+                            let channel = ChannelData {
+                                channel_address: channel_config.channel_address,
+                                participants: channel_config
+                                    .participants
+                                    .iter()
+                                    .map(|addr| ChannelParticipant {
+                                        address: *addr,
+                                        account: config.get_account_for_address(addr).unwrap(),
+                                    })
+                                    .collect(),
+                            };
+                            let proposer = config.get_account_for_name(proposer)?;
+                            channel_transaction_config = Some(ChannelTransactionConfig {
+                                channel,
+                                proposer,
+                                signed_by_participants: *signed_by_participants,
+                            });
+                        }
+                        _ => return Err(ErrorKind::Other("channel already set".to_string()).into()),
                     }
-                    _ => return Err(ErrorKind::Other("channel already set".to_string()).into()),
-                },
-                Entry::Proposer(name) => match proposer {
-                    None => proposer = Some(config.get_account_for_name(name)?),
-                    _ => return Err(ErrorKind::Other("proposer already set".to_string()).into()),
-                },
+                }
             }
-        }
-
-        if channel.is_some() && proposer.is_none() {
-            return Err(ErrorKind::Other(
-                "proposer must be set in channel transaction.".to_string(),
-            )
-            .into());
         }
 
         Ok(Self {
@@ -256,8 +283,7 @@ impl<'a> Config<'a> {
             max_gas,
             sequence_number,
             receiver,
-            channel,
-            proposer,
+            channel: channel_transaction_config,
         })
     }
 
