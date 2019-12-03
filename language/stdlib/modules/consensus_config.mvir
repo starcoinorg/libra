@@ -13,9 +13,9 @@ module ConsensusConfig {
     public initialize() {
         let transaction_sender: address;
 
-    //    assert(get_txn_sender() == 0x6d696e74, 0);
+        assert(get_txn_sender() == 0x6d696e74, 6101);
         transaction_sender = get_txn_sender();
-        assert(!exists<T>(copy(transaction_sender)), 1);
+        assert(!exists<T>(copy(transaction_sender)), 6102);
 
         move_to_sender<T>(T {
             consensus_type_pow: false,
@@ -32,18 +32,18 @@ module ConsensusConfig {
         let transaction_sender:address;
         let consensus_account: &mut Self.T;
 
-    //    assert(get_txn_sender() == 0x6d696e74, 0);
+        assert(get_txn_sender() == 0x6d696e74, 6103);
         transaction_sender = get_txn_sender();
-        assert(exists<T>(copy(transaction_sender)), 1);
+        assert(exists<T>(copy(transaction_sender)), 6104);
 
         consensus_account = borrow_global_mut<T>(copy(transaction_sender));
 
-        assert(!(*&copy(consensus_account).already_set), 1);
+        assert(!(*&copy(consensus_account).already_set), 6105);
 
         if (copy(is_pow)) {
-            assert(copy(halving) > 0, 1);
-            assert(copy(subsidy) > 0, 1);
-            assert(copy(delay) > 0, 1);
+            assert(copy(halving) > 0, 6106);
+            assert(copy(subsidy) > 0, 6107);
+            assert(copy(delay) > 0, 6108);
 
             *(&mut copy(consensus_account).consensus_type_pow) = true;
             *(&mut copy(consensus_account).subsidy_halving_interval) = move(halving);
@@ -64,15 +64,15 @@ module ConsensusConfig {
         halving = Self.subsidy_halving();
         subsidy = Self.subsidy_base();
 
-        assert(copy(height) > 0, 1);
-        assert(copy(halving) > 0, 1);
-        assert(copy(subsidy) > 0, 1);
+        assert(copy(height) > 0, 6109);
+        assert(copy(halving) > 0, 6110);
+        assert(copy(subsidy) > 0, 6111);
 
         times = copy(height) / copy(halving);
         index = 0;
 
         while (copy(index) < copy(times)) {
-            assert(copy(subsidy) > 0, 1);
+            assert(copy(subsidy) > 0, 6112);
             subsidy = copy(subsidy) / 2;
             index = copy(index) + 1;
         }

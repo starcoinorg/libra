@@ -38,17 +38,17 @@ module LibraSystem {
       proposer: address,
     }
 
-    resource SubsidyDetail {
+    resource SubsidyInfo {
         withdrawal_capability: LibraAccount.WithdrawalCapability,
         subsidy_height: u64,
         heights: Vector.T<u64>,
         miners: Vector.T<address>,
     }
 
-    public initialize_subsidy_detail() {
+    public initialize_subsidy_info() {
         assert(get_txn_sender() == 0x6d696e74, 1);
 
-        move_to_sender<SubsidyDetail>(SubsidyDetail {
+        move_to_sender<SubsidyInfo>(SubsidyInfo {
             withdrawal_capability: LibraAccount.extract_sender_withdrawal_capability(),
             subsidy_height: 0,
             heights: Vector.empty<u64>(),
@@ -87,8 +87,8 @@ module LibraSystem {
       return;
     }
 
-    public subsidy() acquires BlockMetadata, SubsidyDetail {
-        let subsidy_detail: &mut Self.SubsidyDetail;
+    subsidy() acquires BlockMetadata, SubsidyInfo {
+        let subsidy_info: &mut Self.SubsidyInfo;
         let tmp_height: u64;
         let heights_ref: &mut Vector.T<u64>;
         let miners_ref: &mut Vector.T<address>;
@@ -103,44 +103,45 @@ module LibraSystem {
         current_height = Self.get_current_block_height();
 
         if (copy(current_height) > 0 && ConsensusConfig.is_pow()) {
-            subsidy_detail = borrow_global_mut<SubsidyDetail>(0x6d696e74);
-            assert(!Vector.contains<u64>(&copy(subsidy_detail).heights, &current_height), 1);
-            assert((Vector.length<u64>(&copy(subsidy_detail).heights) <= ConsensusConfig.subsidy_delay()), 1);
+            subsidy_info = borrow_global_mut<SubsidyInfo>(0x6d696e74);
+            assert(!Vector.contains<u64>(&copy(subsidy_info).heights, &current_height), 6001);
+            assert((Vector.length<u64>(&copy(subsidy_info).heights) <= ConsensusConfig.subsidy_delay()), 6002);
 
             subsidy_flag = false;
 
-            start_height = *&copy(subsidy_detail).subsidy_height + 1;
+            start_height = *&copy(subsidy_info).subsidy_height + 1;
             subsidy_coin = ConsensusConfig.subsidy_coin(copy(start_height));
 
-            if (Vector.length<u64>(&copy(subsidy_detail).heights) == ConsensusConfig.subsidy_delay()) {//pay
+            if (Vector.length<u64>(&copy(subsidy_info).heights) == ConsensusConfig.subsidy_delay()) {//pay
                 tmp_height = copy(start_height) + ConsensusConfig.subsidy_delay();
-                assert(copy(current_height) == copy(tmp_height), 1);
+                assert(copy(current_height) == copy(tmp_height), 6003);
 
-                tmp_height = Vector.get<u64>(&copy(subsidy_detail).heights, 0);
-                assert(copy(start_height) == copy(tmp_height), 1);
+                tmp_height = Vector.get<u64>(&copy(subsidy_info).heights, 0);
+                assert(copy(start_height) == copy(tmp_height), 6004);
 
                 subsidy_flag = true;
             }
 
-            heights_ref = &mut move(subsidy_detail).heights;
+            heights_ref = &mut move(subsidy_info).heights;
             if (copy(subsidy_flag)) {
                 //remove:height
                 Vector.remove_head<u64>(copy(heights_ref));
             }
             Vector.push_back<u64>(move(heights_ref), move(current_height));
 
-            subsidy_detail = borrow_global_mut<SubsidyDetail>(0x6d696e74);
+            subsidy_info = borrow_global_mut<SubsidyInfo>(0x6d696e74);
             if (copy(subsidy_flag)) {
-                assert(copy(subsidy_coin) > 0, 1);
-                subsidy_miner = Vector.get<address>(&copy(subsidy_detail).miners, 0);
-                libra_coin = LibraAccount.withdraw_with_capability(&copy(subsidy_detail).withdrawal_capability, move(subsidy_coin));
+                assert(copy(subsidy_coin) > 0, 6005);
+                subsidy_miner = Vector.get<address>(&copy(subsidy_info).miners, 0);
+                libra_coin = LibraAccount.withdraw_with_capability(&copy(subsidy_info).withdrawal_capability, move(subsidy_coin));
                 LibraAccount.deposit(move(subsidy_miner), move(libra_coin));
+                *(&mut copy(subsidy_info).subsidy_height) = move(start_height);
 
                 //remove:miner
-                miners_ref = &mut move(subsidy_detail).miners;
+                miners_ref = &mut move(subsidy_info).miners;
                 Vector.remove_head<address>(copy(miners_ref));
             } else {
-                miners_ref = &mut move(subsidy_detail).miners;
+                miners_ref = &mut move(subsidy_info).miners;
             }
 
             current_miner = Self.get_current_proposer();
@@ -177,7 +178,7 @@ module LibraSystem {
         new_block_hash: bytearray,
         previous_block_votes: bytearray,
         proposer: address
-    ) acquires BlockMetadata, ValidatorSet, SubsidyDetail {
+    ) acquires BlockMetadata, ValidatorSet, SubsidyInfo {
       Self.process_block_prologue(move(timestamp), move(new_block_hash), move(previous_block_votes), move(proposer));
       // triggers a reconfiguration if the validator keys or validator set has changed
       Self.reconfigure();
@@ -197,8 +198,10 @@ module LibraSystem {
         block_metadata_ref = borrow_global_mut<BlockMetadata>(0xA550C18);
 
         // TODO: Figure out a story for errors in the system transactions.
-        //assert(copy(timestamp) > *(&copy(block_metadata_ref).timestamp), 5001);
-        assert(Self.is_validator(copy(proposer)), 5002);
+        if (!ConsensusConfig.is_pow()) {
+            assert(copy(timestamp) > *(&copy(block_metadata_ref).timestamp), 5001);
+            assert(Self.is_validator(copy(proposer)), 5002);
+        }
 
         *(&mut copy(block_metadata_ref).id) = move(new_block_hash);
         *(&mut copy(block_metadata_ref).timestamp) = move(timestamp);
@@ -245,8 +248,7 @@ module LibraSystem {
         vector_ref = &borrow_global<ValidatorSet>(0x1D8).validators;
         size = Vector.length<Self.ValidatorInfo>(copy(vector_ref));
         if (copy(size) == 0) {
-            //return false;
-            return true;//pow
+            return false;
         }
 
         i = 0;
@@ -263,8 +265,7 @@ module LibraSystem {
             info_ref = Vector.borrow<Self.ValidatorInfo>(copy(vector_ref), copy(i));
         }
 
-        //return false;
-        return true;//pow
+        return false;
     }
 
     // TODO: Decide on access control policy. For now, we ensure that this is only callable from the
