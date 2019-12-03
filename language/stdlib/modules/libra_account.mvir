@@ -814,7 +814,8 @@ module LibraAccount {
         return;
     }
 
-    emit_channel_event(channel_address: address) acquires Channel, ChannelGlobalEvents {
+    // If channel on chain total balance change, should call this function to trigger event.
+    public emit_channel_event(channel_address: address) acquires Channel, ChannelGlobalEvents {
         let channel: &mut Self.Channel;
         channel = borrow_global_mut<Channel>(copy(channel_address));
         Self.do_emit_channel_event(move(channel_address), move(channel));
