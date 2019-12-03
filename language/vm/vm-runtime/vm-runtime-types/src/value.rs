@@ -86,9 +86,7 @@ pub struct Value(ValueImpl);
 /// Internal representation for a reference or a mutable value.
 /// This is quite a core type for the mechanics of references.
 #[derive(PartialEq, Eq, Debug, Clone, Serialize)]
-// Work around to make NativeVector visible from interpret. Need fix later.
-// pub(crate) struct MutVal(Rc<RefCell<ValueImpl>>);
-pub struct MutVal(Rc<RefCell<ValueImpl>>);
+pub(crate) struct MutVal(Rc<RefCell<ValueImpl>>);
 
 /// A struct in Move.
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -494,10 +492,7 @@ impl From<Value> for VMResult<GlobalRef> {
 }
 
 impl MutVal {
-    // Work around to make NativeVector visible from interpret. Need fix later.
-    // pub(crate) fn new(v: Value) -> Self {
-    pub fn new(v: Value) -> Self {
-
+    pub(crate) fn new(v: Value) -> Self {
         MutVal(Rc::new(RefCell::new(v.0)))
     }
 

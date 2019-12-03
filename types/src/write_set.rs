@@ -5,7 +5,6 @@
 //! path it updates. For each access path, the VM can either give its new value or delete it.
 
 use crate::access_path::AccessPath;
-use crate::account_address::AccountAddress;
 use failure::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::mem;
@@ -64,21 +63,6 @@ impl WriteSet {
     #[inline]
     pub fn into_mut(self) -> WriteSetMut {
         self.0
-    }
-
-    /// Check whether the write set modifies the `participant_address`'s private channel resources.
-    pub fn contains_channel_resource(&self, participant_address: &AccountAddress) -> bool {
-        for (ap, _op) in self {
-            if ap
-                .data_path()
-                .and_then(|data_path| data_path.participant())
-                .and_then(|addr| Some(&addr == participant_address))
-                .unwrap_or(false)
-            {
-                return true;
-            }
-        }
-        return false;
     }
 
     pub fn contains_onchain_resource(&self) -> bool {

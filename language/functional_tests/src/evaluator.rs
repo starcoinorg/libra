@@ -1,7 +1,6 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::config::global::ChannelData;
 use crate::{
     config::{global::Config as GlobalConfig, transaction::Config as TransactionConfig},
     errors::*,
@@ -11,24 +10,20 @@ use bytecode_verifier::verifier::{
 };
 use ir_to_bytecode::{
     compiler::{compile_module, compile_script},
-    parser::{parse_script, parse_script_or_module},
+    parser::parse_script_or_module,
 };
 use ir_to_bytecode_syntax::ast::ScriptOrModule;
 use language_e2e_tests::account::Account;
 use language_e2e_tests::executor::FakeExecutor;
 use libra_config::config::VMPublishingOption;
-use libra_crypto::{
-    ed25519::{Ed25519PrivateKey, Ed25519PublicKey},
-    hash::CryptoHash,
-};
+use libra_crypto::ed25519::{Ed25519PrivateKey, Ed25519PublicKey};
+use libra_types::transaction::{ChannelActionBody, ScriptAction};
 use libra_types::{
-    access_path::{AccessPath, DataPath},
+    access_path::AccessPath,
     account_address::AccountAddress,
-    channel::{ChannelResource, Witness, WitnessData},
     channel_account::{channel_account_struct_tag, ChannelAccountResource},
     transaction::{
-        Action, ChannelActionBody, ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2,
-        Module as TransactionModule, RawTransaction, Script as TransactionScript, ScriptAction,
+        Module as TransactionModule, RawTransaction, Script as TransactionScript,
         SignedTransaction, TransactionOutput, TransactionStatus,
     },
     vm_error::StatusCode,
@@ -309,46 +304,6 @@ fn make_channel_transaction(
     .into_inner())
 }
 
-fn make_channel_transaction_v2(
-    exec: &FakeExecutor,
-    config: &TransactionConfig,
-    action: ScriptAction,
-    channel: &ChannelData,
-    channel_sequence_number: u64,
-) -> Result<SignedTransaction> {
-    let params = get_transaction_parameters(exec, config);
-    let witness_data = WitnessData::new(channel_sequence_number, WriteSet::default());
-    let hash = witness_data.hash();
-    let witness = Witness::new(witness_data, channel.sign(&hash));
-    let body = ChannelTransactionPayloadBodyV2::new(
-        channel.channel_address,
-        *config.proposer.unwrap().address(),
-        action,
-        witness,
-    );
-    let body_hash = body.hash();
-    let payload = ChannelTransactionPayloadV2::new(
-        body,
-        channel.get_participant_public_keys(),
-        channel
-            .sign(&body_hash)
-            .iter()
-            .cloned()
-            .map(|s| Some(s))
-            .collect(),
-    );
-    Ok(RawTransaction::new_channel_v2(
-        params.sender_addr,
-        params.sequence_number,
-        payload,
-        params.max_gas_amount,
-        params.gas_unit_price,
-        params.expiration_time,
-    )
-    .sign(params.privkey, params.pubkey.clone())?
-    .into_inner())
-}
-
 /// Runs a single transaction using the fake executor.
 fn run_transaction(
     exec: &mut FakeExecutor,
@@ -405,10 +360,6 @@ fn serialize_and_deserialize_module(module: &CompiledModule) -> Result<()> {
     Ok(())
 }
 
-fn is_call(input: &str) -> bool {
-    input.trim().starts_with("0x")
-}
-
 fn eval_transaction(
     exec: &mut FakeExecutor,
     deps: &mut Vec<VerifiedModule>,
@@ -461,8 +412,7 @@ fn eval_transaction(
             })
             .unwrap_or(0);
 
-        let script_action =
-            unwrap_or_abort!(ScriptAction::parse_call_with_args(&transaction.input));
+        let script_action = unwrap_or_abort!(ScriptAction::parse(&transaction.input));
         log.append(EvaluationOutput::Output(Box::new(OutputType::Action(
             script_action.clone(),
         ))));
@@ -476,88 +426,6 @@ fn eval_transaction(
             &transaction.config,
             script_action,
             receiver,
-            channel_sequence_number,
-        )?;
-        let txn_output = unwrap_or_abort!(run_transaction(exec, channel_transaction));
-        log.append(EvaluationOutput::Output(Box::new(
-            OutputType::TransactionOutput(txn_output),
-        )));
-    } else if transaction.config.is_channel_transaction_v2() {
-        let channel_data = transaction
-            .config
-            .channel
-            .as_ref()
-            .expect("channel must exist in channel transaction.");
-        let channel_address = channel_data.channel_address;
-        let channel_access_path =
-            AccessPath::new_for_data_path(channel_address, DataPath::channel_data_path());
-
-        let channel_sequence_number = exec
-            .read_from_access_path(&channel_access_path)
-            .map(|bytes| {
-                ChannelResource::make_from(bytes)
-                    .unwrap()
-                    .channel_sequence_number()
-            })
-            .unwrap_or(0);
-
-        let input = transaction.input.as_str();
-
-        let script_action = if is_call(input) {
-            ScriptAction::new(Action::parse_call(input)?, transaction.config.args.clone())
-        } else {
-            let parsed_script = unwrap_or_abort!(parse_script(input));
-            log.append(EvaluationOutput::Output(Box::new(OutputType::Ast(
-                ScriptOrModule::Script(parsed_script.clone()),
-            ))));
-
-            // stage 2: compile the script
-            if transaction.config.is_stage_disabled(Stage::Compiler) {
-                return Ok(Status::Success);
-            }
-            log.append(EvaluationOutput::Stage(Stage::Compiler));
-
-            let compiled_script =
-                unwrap_or_abort!(compile_script(sender_addr, parsed_script, &*deps)).0;
-            log.append(EvaluationOutput::Output(Box::new(
-                OutputType::CompiledScript(compiled_script.clone()),
-            )));
-
-            // stage 3: verify the script
-            if transaction.config.is_stage_disabled(Stage::Verifier) {
-                return Ok(Status::Success);
-            }
-            log.append(EvaluationOutput::Stage(Stage::Verifier));
-            let compiled_script =
-                unwrap_or_abort!(do_verify_script(compiled_script, &*deps)).into_inner();
-
-            // stage 4: serializer round trip
-            if !transaction.config.is_stage_disabled(Stage::Serializer) {
-                log.append(EvaluationOutput::Stage(Stage::Serializer));
-                unwrap_or_abort!(serialize_and_deserialize_script(&compiled_script));
-            }
-
-            // stage 5: execute the script
-            if transaction.config.is_stage_disabled(Stage::Runtime) {
-                return Ok(Status::Success);
-            }
-            let mut blob = vec![];
-            compiled_script.serialize(&mut blob)?;
-            ScriptAction::new_code(blob, transaction.config.args.clone())
-        };
-        log.append(EvaluationOutput::Output(Box::new(OutputType::Action(
-            script_action.clone(),
-        ))));
-        // stage 5: execute the script
-        if transaction.config.is_stage_disabled(Stage::Runtime) {
-            return Ok(Status::Success);
-        }
-        log.append(EvaluationOutput::Stage(Stage::Runtime));
-        let channel_transaction = make_channel_transaction_v2(
-            &exec,
-            &transaction.config,
-            script_action,
-            channel_data,
             channel_sequence_number,
         )?;
         let txn_output = unwrap_or_abort!(run_transaction(exec, channel_transaction));

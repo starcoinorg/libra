@@ -160,20 +160,3 @@ fn build_transaction_config_4() {
         //! args: {{bob}}, {{alice}}
     ").unwrap();
 }
-
-#[rustfmt::skip]
-#[test]
-fn build_transaction_config_channel() {
-    let global = parse_and_build_global_config(r"
-        //! account: bob
-        //! account: alice
-        //! channel: ch1,alice|bob
-    ").unwrap();
-
-    parse_and_build_config(&global, r"
-        //! sender: alice
-        //! channel: ch1
-        //! proposer: alice
-        //! args: {{bob}}, {{alice}}
-    ").unwrap();
-}

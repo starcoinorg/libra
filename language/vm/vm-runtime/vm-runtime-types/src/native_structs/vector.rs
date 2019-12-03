@@ -16,9 +16,7 @@ use vm::gas_schedule::{
 };
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-// Work around to make NativeVector visible from interpret. Need fix later.
-// pub struct NativeVector(pub(crate) Vec<MutVal>);
-pub struct NativeVector(pub Vec<MutVal>);
+pub struct NativeVector(pub(crate) Vec<MutVal>);
 
 pub const INDEX_OUT_OF_BOUNDS: u64 = NFE_VECTOR_ERROR_BASE + 1;
 pub const POP_EMPTY_VEC: u64 = NFE_VECTOR_ERROR_BASE + 2;

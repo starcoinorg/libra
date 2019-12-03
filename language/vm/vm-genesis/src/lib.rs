@@ -68,7 +68,6 @@ lazy_static! {
     static ref ROTATE_AUTHENTICATION_KEY: Identifier =
         { Identifier::new("rotate_authentication_key").unwrap() };
     static ref EPILOGUE: Identifier = Identifier::new("epilogue").unwrap();
-    static ref INITIALIZE_CHANNEL: Identifier = Identifier::new("initialize_channel").unwrap();
 }
 
 #[derive(Debug)]
@@ -229,9 +228,6 @@ pub fn encode_genesis_transaction_with_validator(
                 .create_account(account_config::core_code_address())
                 .unwrap();
             txn_executor
-                .create_account(account_config::channel_global_events_address())
-                .unwrap();
-            txn_executor
                 .execute_function(&COIN_MODULE, &INITIALIZE, vec![])
                 .unwrap();
             txn_executor
@@ -338,16 +334,6 @@ pub fn encode_genesis_transaction_with_validator(
                     account_config::validator_set_address(),
                     &LIBRA_SYSTEM_MODULE,
                     &RECONFIGURE,
-                    vec![],
-                )
-                .unwrap();
-
-            // Initialize the channel global events.
-            txn_executor
-                .execute_function_with_sender_FOR_GENESIS_ONLY(
-                    account_config::channel_global_events_address(),
-                    &ACCOUNT_MODULE,
-                    &INITIALIZE_CHANNEL,
                     vec![],
                 )
                 .unwrap();
