@@ -68,7 +68,6 @@ members = [
     "storage/accumulator",
     "storage/libradb",
     "storage/jellyfish-merkle",
-    "storage/merkle-patricia",
     "storage/schemadb",
     "storage/scratchpad",
     "storage/storage-client",
