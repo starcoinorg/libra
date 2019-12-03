@@ -1,6 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use crate::txn_executor::convert_txn_args;
 use crate::{
     code_cache::module_cache::ModuleCache,
     process_txn::verify::{VerTxn, VerifiedTransaction, VerifiedTransactionState},
@@ -169,12 +170,16 @@ where
                         verified_txn,
                     } = txn_state
                         .expect("script-based transactions should always have associated state");
-                    let func = match verified_txn {
-                        VerTxn::ScriptAction(func) => func,
+                    match verified_txn {
+                        VerTxn::ScriptAction() => {}
                         _ => unreachable!("expects TransactionPayload::ScriptAction"),
                     };
-                    let (_, args) = action_body.action.into_inner();
-                    let action_output = match txn_executor.interpeter_entrypoint(func, args) {
+                    //TODO use txn_executor.interpeter_entrypoint
+                    let action_output = match txn_executor.execute_function(
+                        action_body.action().module(),
+                        action_body.action().function(),
+                        convert_txn_args(action_body.action().args().to_vec()),
+                    ) {
                         Ok(_) => txn_executor.transaction_cleanup(vec![]),
                         Err(err) => match err.status_type() {
                             StatusType::InvariantViolation => {
@@ -198,41 +203,6 @@ where
                     )
                 }
             }
-        }
-        TransactionPayload::ChannelV2(channel_payload) => {
-            let VerifiedTransactionState {
-                mut txn_executor,
-                verified_txn,
-            } = txn_state.expect("script-based transactions should always have associated state");
-            let func = match verified_txn {
-                VerTxn::ScriptAction(func) => func,
-                _ => unreachable!("expects TransactionPayload::ScriptAction"),
-            };
-            let args = channel_payload.action().args().to_vec();
-            let action_output = match txn_executor.interpeter_entrypoint(func, args) {
-                Ok(_) => txn_executor.transaction_cleanup(vec![]),
-                Err(err) => match err.status_type() {
-                    StatusType::InvariantViolation => {
-                        error!("[VM] VM error running script: {:?}", err);
-                        ExecutedTransaction::discard_error_output(err)
-                    }
-                    _ => {
-                        warn!("[VM] User error running script: {:?}", err);
-                        txn_executor.failed_transaction_cleanup(Err(err))
-                    }
-                },
-            };
-            let merged_write_set = WriteSet::merge(
-                channel_payload.witness().write_set(),
-                action_output.write_set(),
-            );
-            //TODO(jole) eliminate clone
-            TransactionOutput::new(
-                merged_write_set,
-                action_output.events().to_vec(),
-                action_output.gas_used(),
-                action_output.status().clone(),
-            )
         }
     }
 }

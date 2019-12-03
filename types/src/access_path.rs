@@ -35,15 +35,12 @@
 //! On the other hand, if you want to query only <Alice>/a/*, `address` will be set to Alice and
 //! `path` will be set to "/a" and use the `get_prefix()` method from statedb
 
-use crate::account_config::channel_global_events_address;
-use crate::channel::channel_struct_tag;
 use crate::{
     account_address::{AccountAddress, ADDRESS_LENGTH},
     account_config::{
         account_struct_tag, association_address, ACCOUNT_RECEIVED_EVENT_PATH,
         ACCOUNT_SENT_EVENT_PATH,
     },
-    channel::{CHANNEL_EVENT_PATH, CHANNEL_GLOBAL_EVENT_PATH},
     channel_account::channel_account_struct_tag,
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, ResourceKey, StructTag},
@@ -306,10 +303,6 @@ impl DataPath {
         Self::onchain_resource_path(account_struct_tag())
     }
 
-    pub fn channel_data_path() -> Self {
-        Self::onchain_resource_path(channel_struct_tag())
-    }
-
     pub fn code_data_path(module_id: ModuleId) -> Self {
         DataPath::Code { module_id }
     }
@@ -455,19 +448,6 @@ impl AccessPath {
         Self::new(address, ACCOUNT_RECEIVED_EVENT_PATH.to_vec())
     }
 
-    ///  Create an AccessPath to the event for channel event.
-    pub fn new_for_channel_event(address: AccountAddress) -> Self {
-        Self::new(address, CHANNEL_EVENT_PATH.to_vec())
-    }
-
-    ///  Create an AccessPath to the event for channel global event.
-    pub fn new_for_channel_global_event() -> Self {
-        Self::new(
-            channel_global_events_address(),
-            CHANNEL_GLOBAL_EVENT_PATH.to_vec(),
-        )
-    }
-
     pub fn resource_access_vec(tag: &StructTag, accesses: &Accesses) -> Vec<u8> {
         let mut key: Vec<u8> = DataPath::onchain_resource_path(tag.clone()).into();
 
@@ -510,24 +490,11 @@ impl AccessPath {
     }
 
     pub fn channel_resource_access_path(
-        channel_address: AccountAddress,
+        account: AccountAddress,
         participant: AccountAddress,
         tag: StructTag,
     ) -> AccessPath {
-        Self::new_for_data_path(
-            channel_address,
-            DataPath::channel_resource_path(participant, tag),
-        )
-    }
-
-    pub fn channel_shared_resource_access_path(
-        channel_address: AccountAddress,
-        tag: StructTag,
-    ) -> AccessPath {
-        Self::new_for_data_path(
-            channel_address,
-            DataPath::channel_resource_path(channel_address, tag),
-        )
+        Self::new_for_data_path(account, DataPath::channel_resource_path(participant, tag))
     }
 
     pub fn is_code(&self) -> bool {

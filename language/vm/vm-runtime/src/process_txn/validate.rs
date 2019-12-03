@@ -10,7 +10,6 @@ use crate::{
 use libra_config::config::{VMMode, VMPublishingOption};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
-use libra_types::transaction::ChannelTransactionPayloadV2;
 use libra_types::{
     account_address::AccountAddress,
     transaction::{
@@ -208,18 +207,6 @@ where
                     }
                 }
             }
-            TransactionPayload::ChannelV2(channel_payload) => Some(ValidatedTransaction::validate(
-                &txn,
-                gas_schedule,
-                module_cache,
-                data_cache,
-                mode,
-                vm_mode,
-                || {
-                    Self::check_channel_payload(channel_payload)?;
-                    Ok(())
-                },
-            )?),
         };
 
         Ok(Self { txn, txn_state })
@@ -234,30 +221,6 @@ where
         for (ap, _op) in write_set {
             if &ap.address != &sender && &ap.address != &receiver {
                 warn!("[VM] Attempt to access other address's resource.");
-                return Err(VMStatus::new(StatusCode::INVALID_WRITE_SET));
-            }
-        }
-        Ok(())
-    }
-
-    fn check_channel_payload(
-        channel_payload: &ChannelTransactionPayloadV2,
-    ) -> Result<(), VMStatus> {
-        let channel_address = channel_payload.channel_address();
-        let witness = channel_payload.witness();
-        match channel_payload.verify() {
-            Err(e) => {
-                warn!("[VM] Verify channel payload signature fail: {:?}", e);
-                return Err(
-                    VMStatus::new(StatusCode::INVALID_SIGNATURE).with_message(format!("{:?}", e))
-                );
-            }
-            Ok(_) => {}
-        }
-        let write_set = witness.write_set();
-        for (ap, _op) in write_set {
-            if &ap.address != &channel_address {
-                warn!("[VM] Attempt to access a resource out of channel.");
                 return Err(VMStatus::new(StatusCode::INVALID_WRITE_SET));
             }
         }
@@ -411,9 +374,6 @@ where
                 //let balance_checker = BalanceChecker::new(data_cache, &module_cache);
                 //balance_checker.check_balance(channel_payload.write_set())?;
                 Some(channel_payload.write_set().clone())
-            }
-            TransactionPayload::ChannelV2(channel_payload) => {
-                Some(channel_payload.witness().write_set().clone())
             }
             _ => None,
         };

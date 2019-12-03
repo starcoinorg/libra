@@ -9,7 +9,7 @@ use crate::{
 };
 use bytecode_verifier::VerifiedModule;
 use libra_logger::prelude::*;
-use libra_types::transaction::{Action, ScriptAction};
+use libra_types::transaction::ScriptAction;
 use libra_types::{
     account_address::AccountAddress,
     transaction::{
@@ -103,33 +103,17 @@ where
                             "script-based transactions should always have associated state",
                         );
 
-                        let func = Self::verify_script_action(
+                        Self::verify_script_action(
                             action_body.action(),
                             txn_state.txn_executor.module_cache(),
-                            script_cache,
                         )?;
 
                         Some(VerifiedTransactionState {
                             txn_executor: txn_state.txn_executor,
-                            verified_txn: VerTxn::ScriptAction(func),
+                            verified_txn: VerTxn::ScriptAction(),
                         })
                     }
                 }
-            }
-            TransactionPayload::ChannelV2(channel_payload) => {
-                let txn_state = txn_state
-                    .expect("script-based transactions should always have associated state");
-
-                let func = Self::verify_script_action(
-                    channel_payload.action(),
-                    txn_state.txn_executor.module_cache(),
-                    script_cache,
-                )?;
-
-                Some(VerifiedTransactionState {
-                    txn_executor: txn_state.txn_executor,
-                    verified_txn: VerTxn::ScriptAction(func),
-                })
             }
         };
 
@@ -191,28 +175,18 @@ where
         Ok(main)
     }
 
-    fn verify_script_action(
-        action: &ScriptAction,
-        module_cache: &P,
-        script_cache: &'txn ScriptCache<'alloc>,
-    ) -> Result<FunctionRef<'txn>, VMStatus> {
-        let func = match action.action() {
-            Action::Call(module, function) => {
-                let loaded_module = module_cache.get_loaded_module(module)?;
-                let func_idx =
-                    loaded_module
-                        .function_defs_table
-                        .get(function)
-                        .ok_or_else(|| {
-                            VMStatus::new(StatusCode::LINKER_ERROR).with_message(format!(
-                                "Can not find function when verify script action: {:?}",
-                                action
-                            ))
-                        })?;
-                FunctionRef::new(loaded_module, *func_idx)
-            }
-            Action::Code(code) => script_cache.cache_script(code)?,
-        };
+    fn verify_script_action(action: &ScriptAction, module_cache: &P) -> Result<(), VMStatus> {
+        let loaded_module = module_cache.get_loaded_module(action.module())?;
+        let func_idx = loaded_module
+            .function_defs_table
+            .get(action.function())
+            .ok_or_else(|| {
+                VMStatus::new(StatusCode::LINKER_ERROR).with_message(format!(
+                    "Can not find function when verify script action: {:?}",
+                    action
+                ))
+            })?;
+        let func = FunctionRef::new(loaded_module, *func_idx);
 
         if !verify_actuals(func.signature(), action.args()) {
             return Err(
@@ -222,7 +196,8 @@ where
                 )),
             );
         }
-        Ok(func)
+        //TODO return function ref and keep in State.
+        Ok(())
     }
 
     /// Executes this transaction.
@@ -255,18 +230,18 @@ where
     P: ModuleCache<'alloc>,
 {
     pub(super) txn_executor: TransactionExecutor<'alloc, 'txn, P>,
-    pub(super) verified_txn: VerTxn<'txn>,
+    pub(super) verified_txn: VerTxn<'alloc>,
 }
 
 /// A verified transaction is a transaction executing code that has gone through the verifier.
 ///
 /// It can be a program, a script or a module. A transaction script gets executed by the VM.
 /// A module script publishes the module provided.
-pub enum VerTxn<'txn> {
-    Script(FunctionRef<'txn>),
+pub enum VerTxn<'alloc> {
+    Script(FunctionRef<'alloc>),
     Module(Box<VerifiedModule>),
     //TODO ScriptAction will be a FunctionRef with lifetime 'txn
-    ScriptAction(FunctionRef<'txn>),
+    ScriptAction(),
 }
 
 /// Verify if the transaction arguments match the type signature of the main function.
