@@ -6,16 +6,21 @@ use crate::state_replication::{StateComputer, TxnManager};
 use atomic_refcell::AtomicRefCell;
 use consensus_types::{block::Block, quorum_cert::QuorumCert, vote_data::VoteData};
 use cuckoo::consensus::PowService;
-use libra_crypto::{hash::CryptoHash, x25519::compat};
+use libra_crypto::ed25519::Ed25519PrivateKey;
+use libra_crypto::x25519::{X25519StaticPrivateKey, X25519StaticPublicKey};
 use libra_crypto::HashValue;
+use libra_crypto::{hash::CryptoHash, x25519::compat, PrivateKey};
 use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
-use libra_types::account_config::association_address;
 use libra_types::block_info::BlockInfo;
 use libra_types::block_metadata::BlockMetadata;
 use libra_types::crypto_proxies::ValidatorSigner;
-use libra_types::{ledger_info::{LedgerInfo, LedgerInfoWithSignatures}, validator_public_keys::ValidatorPublicKeys, validator_set::ValidatorSet};
 use libra_types::transaction::SignedTransaction;
+use libra_types::{
+    ledger_info::{LedgerInfo, LedgerInfoWithSignatures},
+    validator_public_keys::ValidatorPublicKeys,
+    validator_set::ValidatorSet,
+};
 use miner::types::{MineCtx, MineState, MineStateManager};
 use network::{
     proto::{
@@ -25,14 +30,13 @@ use network::{
     validator_network::{ConsensusNetworkSender, Event},
 };
 use rand::Rng;
+use rand::{rngs::StdRng, SeedableRng};
 use std::collections::BTreeMap;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::thread::sleep;
 use std::time::Duration;
 use tokio::runtime::TaskExecutor;
-use rand::{rngs::StdRng, SeedableRng};
-use libra_crypto::x25519::{X25519StaticPrivateKey, X25519StaticPublicKey};
 
 pub struct MintManager {
     txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
@@ -44,6 +48,7 @@ pub struct MintManager {
     _pow_srv: Arc<dyn PowService>,
     chain_manager: Arc<AtomicRefCell<ChainManager>>,
     mine_state: MineStateManager,
+    self_key: Option<Ed25519PrivateKey>,
 }
 
 impl MintManager {
@@ -57,6 +62,7 @@ impl MintManager {
         pow_srv: Arc<dyn PowService>,
         chain_manager: Arc<AtomicRefCell<ChainManager>>,
         mine_state: MineStateManager,
+        pri_key: Ed25519PrivateKey,
     ) -> Self {
         MintManager {
             txn_manager,
@@ -68,10 +74,11 @@ impl MintManager {
             _pow_srv: pow_srv,
             chain_manager,
             mine_state,
+            self_key: Some(pri_key),
         }
     }
 
-    pub fn mint(&self, executor: TaskExecutor) {
+    pub fn mint(&mut self, executor: TaskExecutor) {
         let mint_txn_manager = self.txn_manager.clone();
         let mint_state_computer = self.state_computer.clone();
         let mut mint_network_sender = self.network_sender.clone();
@@ -80,13 +87,24 @@ impl MintManager {
         let block_db = self.block_store.clone();
         let chain_manager = self.chain_manager.clone();
         let mut mine_state = self.mine_state.clone();
+        let self_pri_key = self.self_key.take().expect("self_key is none.");
+        let self_pub_key = self_pri_key.public_key();
+        let self_signer_address = AccountAddress::from_public_key(&self_pub_key);
+        let (_tmp_pri_key, tmp_pub_key) = network_keypair();
+        let keys = vec![ValidatorPublicKeys::new(
+            self_signer_address,
+            self_pub_key.clone(),
+            100,
+            self_pub_key,
+            tmp_pub_key,
+        )];
+        let signer = ValidatorSigner::new(self_signer_address, self_pri_key);
         let mint_fut = async move {
-            let chain_manager_clone = chain_manager.clone();
             loop {
                 match mint_txn_manager.pull_txns(100, vec![]).await {
                     Ok(txns) => {
                         let (height, parent_block) =
-                            chain_manager_clone.borrow().chain_height_and_root().await;
+                            chain_manager.borrow().chain_height_and_root().await;
                         //create block
                         let parent_block_id = parent_block.id();
                         let grandpa_block_id = parent_block.parent_id();
@@ -111,7 +129,7 @@ impl MintManager {
                             parent_block_id.clone(),
                             timestamp_usecs,
                             BTreeMap::new(),
-                            association_address(),
+                            self_signer_address,
                         );
                         match mint_state_computer
                             .compute_by_hash(
@@ -131,9 +149,7 @@ impl MintManager {
 
                                 let parent_vd = quorum_cert.vote_data();
                                 let epoch = parent_vd.parent().epoch();
-                                let signer = ValidatorSigner::genesis(); //TODO:change signer
 
-                                let (_tmp_pri_key, tmp_pub_key) = network_keypair();
                                 // vote data
                                 let parent_block_info = parent_vd.proposed().clone();
                                 let current_block_info = BlockInfo::new(
@@ -143,8 +159,7 @@ impl MintManager {
                                     txn_accumulator_hash,
                                     txn_len,
                                     timestamp_usecs,
-                                    Some(ValidatorSet::new(vec![ValidatorPublicKeys::new(signer.author(),
-                                                                                         signer.public_key(), 100,signer.public_key(), tmp_pub_key)])),
+                                    Some(ValidatorSet::new(keys.clone())),
                                 );
                                 let vote_data =
                                     VoteData::new(current_block_info.clone(), parent_block_info);
@@ -154,7 +169,7 @@ impl MintManager {
                                     .sign_message(li.hash())
                                     .expect("Fail to sign genesis ledger info");
                                 let mut signatures = BTreeMap::new();
-                                signatures.insert(signer.author(), signature);
+                                signatures.insert(self_signer_address, signature);
                                 let new_qc = QuorumCert::new(
                                     vote_data,
                                     LedgerInfoWithSignatures::new(li.clone(), signatures),

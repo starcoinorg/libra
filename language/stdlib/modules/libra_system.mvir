@@ -133,6 +133,9 @@ module LibraSystem {
             if (copy(subsidy_flag)) {
                 assert(copy(subsidy_coin) > 0, 6005);
                 subsidy_miner = Vector.get<address>(&copy(subsidy_info).miners, 0);
+                if (!LibraAccount.exists(copy(subsidy_miner))) {
+                    LibraAccount.create_account(copy(subsidy_miner));
+                }
                 libra_coin = LibraAccount.withdraw_with_capability(&copy(subsidy_info).withdrawal_capability, move(subsidy_coin));
                 LibraAccount.deposit(move(subsidy_miner), move(libra_coin));
                 *(&mut copy(subsidy_info).subsidy_height) = move(start_height);

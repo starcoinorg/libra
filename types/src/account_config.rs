@@ -62,7 +62,8 @@ pub fn validator_set_address() -> AccountAddress {
         .expect("Parsing valid hex literal should always succeed")
 }
 
-pub fn subsidy_address() -> AccountAddress {//MINT
+pub fn subsidy_address() -> AccountAddress {
+    //MINT
     AccountAddress::from_hex_literal("0x6d696e74")
         .expect("Parsing valid hex literal should always succeed")
 }
