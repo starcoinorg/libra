@@ -443,7 +443,7 @@ impl ChannelTransactionPayloadV2 {
         let mut result = true;
         for signature in &self.signatures {
             match signature {
-                Some(_signature) => {},
+                Some(_signature) => {}
                 None => result = false,
             }
         }

@@ -8,6 +8,7 @@ use libra_crypto::{
     x25519::{self, X25519StaticPrivateKey, X25519StaticPublicKey},
     PrivateKey, ValidKeyStringExt,
 };
+use libra_types::account_address::AccountAddress;
 use mirai_annotations::verify_unreachable;
 use rand::{rngs::StdRng, SeedableRng};
 use serde::{de::DeserializeOwned, Deserialize, Deserializer, Serialize, Serializer};
@@ -195,6 +196,13 @@ impl ConsensusKeyPair {
         match self.consensus_private_key {
             PrivateKeyContainer::Present(_) => true,
             _ => false,
+        }
+    }
+
+    pub fn consensus_address(&self) -> Option<AccountAddress> {
+        match self.consensus_public_key.clone() {
+            Some(pub_key) => Some(AccountAddress::from_public_key(&pub_key)),
+            None => None,
         }
     }
 }
