@@ -295,3 +295,29 @@ impl Into<Vec<AccountAddress>> for UserChannelsResource {
         self.channels
     }
 }
+
+/// Generic struct that represents an Channel event.
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct ChannelEvent {
+    channel_address: AccountAddress,
+    stage: u64,
+    balances: Vec<u64>,
+}
+
+impl ChannelEvent {
+    pub fn make_from(bytes: &[u8]) -> Result<ChannelEvent> {
+        lcs::from_bytes(bytes).map_err(Into::into)
+    }
+
+    pub fn channel_address(&self) -> AccountAddress {
+        self.channel_address
+    }
+
+    pub fn stage(&self) -> u64 {
+        self.stage
+    }
+
+    pub fn balances(&self) -> &[u64] {
+        self.balances.as_slice()
+    }
+}

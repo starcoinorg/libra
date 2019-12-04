@@ -2,15 +2,6 @@
 module ChannelTransaction {
    import 0x0.Vector;
 
-   public native_is_offchain(): bool{
-    return Self.is_offchain();
-   }
-
-   native public native_get_txn_receiver(): address;
-   native public native_is_channel_txn(): bool;
-   native public native_get_txn_receiver_public_key(): bytearray;
-   native public native_get_txn_channel_sequence_number(): u64;
-
     native public is_offchain(): bool;
     native public is_channel_txn():bool;
     native public get_txn_channel_sequence_number(): u64;

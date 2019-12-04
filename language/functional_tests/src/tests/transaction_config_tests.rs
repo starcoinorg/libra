@@ -148,21 +148,6 @@ fn build_transaction_config_3() {
 
 #[rustfmt::skip]
 #[test]
-fn build_transaction_config_4() {
-    let global = parse_and_build_global_config(r"
-        //! account: bob
-        //! account: alice
-    ").unwrap();
-
-    parse_and_build_config(&global, r"
-        //! sender: alice
-        //! receiver: bob
-        //! args: {{bob}}, {{alice}}
-    ").unwrap();
-}
-
-#[rustfmt::skip]
-#[test]
 fn build_transaction_config_channel() {
     let global = parse_and_build_global_config(r"
         //! account: bob

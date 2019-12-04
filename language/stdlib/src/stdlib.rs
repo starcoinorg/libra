@@ -35,8 +35,6 @@ lazy_static! {
     static ref TRANSACTION_FEE_DISTRIBUTION_MODULE: ModuleDefinition =
         make_module_definition!("../modules/transaction_fee_distribution.mvir");
     static ref GAS_SCHEDULE: ModuleDefinition = make_module_definition!("../modules/gas_schedule.mvir");
-    static ref CHANNEL_ACCOUNT_MODULE: ModuleDefinition =
-        make_module_definition!("../modules/channel_account.mvir");
     static ref CHANNEL_TXN_MODULE: ModuleDefinition =
         make_module_definition!("../modules/channel_transaction.mvir");
     static ref CHANNEL_UTIL_MODULE: ModuleDefinition =
@@ -65,7 +63,6 @@ lazy_static! {
             &*CONSENSUS_CONF_MODULE, // depends on LibraAccount, Vector
             &*LIBRA_SYSTEM_MODULE, // depends on LibraAccount, ValidatorConfig
             &*TRANSACTION_FEE_DISTRIBUTION_MODULE, // depends on Block, ValidatorSet, LibraCoin, LibraAccount,
-            &*CHANNEL_ACCOUNT_MODULE,
             &*HASH_TIME_LOCK_MODULE,
             &*CHANNEL_SCRIPT_MODULE,
         ]
@@ -110,10 +107,6 @@ pub fn bytearray_util_module() -> ModuleDefinition {
 
 pub fn module_defs() -> &'static [&'static ModuleDefinition] {
     &*MODULE_DEFS
-}
-
-pub fn channel_account_module() -> ModuleDefinition {
-    CHANNEL_ACCOUNT_MODULE.clone()
 }
 
 pub fn channel_script_module() -> ModuleDefinition {

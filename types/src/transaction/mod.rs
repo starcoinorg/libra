@@ -41,8 +41,7 @@ pub use script::{Script, SCRIPT_HASH_LENGTH};
 pub use script_action::{Action, ScriptAction};
 
 pub use channel_transaction_payload::{
-    ChannelActionBody, ChannelScriptBody, ChannelTransactionPayload, ChannelTransactionPayloadBody,
-    ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2, ChannelWriteSetBody,
+    ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2,
 };
 use std::ops::Deref;
 pub use transaction_argument::{parse_as_transaction_argument, TransactionArgument};
@@ -190,24 +189,6 @@ impl RawTransaction {
         }
     }
 
-    pub fn new_channel(
-        sender: AccountAddress,
-        sequence_number: u64,
-        channel_payload: ChannelTransactionPayload,
-        max_gas_amount: u64,
-        gas_unit_price: u64,
-        expiration_time: Duration,
-    ) -> Self {
-        RawTransaction {
-            sender,
-            sequence_number,
-            payload: TransactionPayload::Channel(channel_payload),
-            max_gas_amount,
-            gas_unit_price,
-            expiration_time,
-        }
-    }
-
     pub fn new_channel_v2(
         sender: AccountAddress,
         sequence_number: u64,
@@ -278,7 +259,6 @@ impl RawTransaction {
                 (get_transaction_name(script.code()), script.args())
             }
             TransactionPayload::Module(_) => ("module publishing".to_string(), &empty_vec[..]),
-            TransactionPayload::Channel(_) => ("channel".to_string(), &empty_vec[..]),
             TransactionPayload::ChannelV2(_) => ("channel".to_string(), &empty_vec[..]),
         };
         let mut f_args: String = "".to_string();
@@ -353,36 +333,13 @@ pub enum TransactionPayload {
     Script(Script),
     /// A transaction that publishes code.
     Module(Module),
-    /// Channel transaction
-    Channel(ChannelTransactionPayload),
     /// New Channel transaction.
     ChannelV2(ChannelTransactionPayloadV2),
 }
 
 impl TransactionPayload {
-    pub fn is_channel_write_set(&self) -> bool {
-        match self {
-            TransactionPayload::Channel(payload) => match payload.body {
-                ChannelTransactionPayloadBody::WriteSet(_) => true,
-                _ => false,
-            },
-            _ => false,
-        }
-    }
-
-    pub fn is_channel_script(&self) -> bool {
-        match self {
-            TransactionPayload::Channel(payload) => match payload.body {
-                ChannelTransactionPayloadBody::Script(_) => true,
-                _ => false,
-            },
-            _ => false,
-        }
-    }
-
     pub fn is_channel(&self) -> bool {
         match self {
-            TransactionPayload::Channel(_) => true,
             TransactionPayload::ChannelV2(_) => true,
             _ => false,
         }
@@ -507,31 +464,6 @@ impl SignedTransaction {
 
     pub fn raw_txn(&self) -> &RawTransaction {
         &self.raw_txn
-    }
-
-    pub fn receiver(&self) -> Option<AccountAddress> {
-        match &self.raw_txn.payload {
-            TransactionPayload::Channel(channel_payload) => Some(channel_payload.receiver()),
-            _ => None,
-        }
-    }
-
-    pub fn receiver_public_key(&self) -> Option<Ed25519PublicKey> {
-        match &self.raw_txn.payload {
-            TransactionPayload::Channel(channel_payload) => {
-                Some(channel_payload.receiver_public_key.clone())
-            }
-            _ => None,
-        }
-    }
-
-    pub fn receiver_signature(&self) -> Option<Ed25519Signature> {
-        match &self.raw_txn.payload {
-            TransactionPayload::Channel(channel_payload) => {
-                Some(channel_payload.receiver_signature.clone())
-            }
-            _ => None,
-        }
     }
 
     /// Checks that the signature of given transaction. Returns `Ok(SignatureCheckedTransaction)` if

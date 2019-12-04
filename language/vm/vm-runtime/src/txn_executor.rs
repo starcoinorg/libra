@@ -175,20 +175,7 @@ where
                 &ACCOUNT_MODULE,
                 &PROLOGUE_NAME,
                 vec![],
-                ).and_then(|_| {
-                    if self.txn_data.is_channel_txn() {
-                        Interpreter::execute_function(
-                            &mut self.interpreter_context,
-                            &self.module_cache,
-                            &self.txn_data,
-                            &CostTable::zero(),
-                            &CHANNEL_ACCOUNT_MODULE,
-                            &PROLOGUE_NAME,
-                            vec![],)
-                    } else {
-                        Ok(())
-                    }
-                })?;
+                )?;
             }
         };
         Ok(())
@@ -206,21 +193,7 @@ where
                 &ACCOUNT_MODULE,
                 &EPILOGUE_NAME,
                 vec![],
-                ).and_then(|_| {
-                    if self.txn_data.is_channel_txn() {
-                        Interpreter::execute_function(
-                            &mut self.interpreter_context,
-                            &self.module_cache,
-                            &self.txn_data,
-                            &CostTable::zero(),
-                            &CHANNEL_ACCOUNT_MODULE,
-                            &EPILOGUE_NAME,
-                            vec![],
-                        )
-                    } else {
-                        Ok(())
-                    }
-                })?;
+                )?;
             }
         }
         Ok(())

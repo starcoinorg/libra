@@ -10,11 +10,9 @@ use crate::{
 use libra_config::config::{VMMode, VMPublishingOption};
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
-use libra_types::transaction::ChannelTransactionPayloadV2;
 use libra_types::{
-    account_address::AccountAddress,
     transaction::{
-        ChannelTransactionPayloadBody, SignatureCheckedTransaction, TransactionPayload,
+        ChannelTransactionPayloadV2, SignatureCheckedTransaction, TransactionPayload,
         MAX_TRANSACTION_SIZE_IN_BYTES,
     },
     vm_error::{StatusCode, VMStatus},
@@ -142,72 +140,6 @@ where
 
                 None
             }
-            TransactionPayload::Channel(channel_payload) => {
-                match &channel_payload.body {
-                    ChannelTransactionPayloadBody::WriteSet(write_set_body) => {
-                        //channel write_set transaction only accept in onchain vm.
-                        //TODO channel write_set transaction should execute prologue and epilogue
-                        if vm_mode != VMMode::Onchain {
-                            warn!("[VM] Attempt to process channel write set in Offchain VM");
-                            return Err(VMStatus::new(StatusCode::REJECTED_WRITE_SET));
-                        }
-                        Self::check_channel_write_set(
-                            write_set_body.write_set(),
-                            txn.sender(),
-                            write_set_body.receiver,
-                        )?;
-                        //TODO(jole) do more validate
-                        None
-                    }
-                    ChannelTransactionPayloadBody::Script(script_body) => {
-                        Some(ValidatedTransaction::validate(
-                            &txn,
-                            gas_schedule,
-                            module_cache,
-                            data_cache,
-                            mode,
-                            vm_mode,
-                            || {
-                                // Verify against whitelist if we are locked. Otherwise allow.
-                                if !is_allowed_script(
-                                    &publishing_option,
-                                    script_body.script().code(),
-                                ) {
-                                    warn!(
-                                        "[VM] Custom scripts not allowed: {:?}",
-                                        script_body.script().code()
-                                    );
-                                    return Err(VMStatus::new(StatusCode::UNKNOWN_SCRIPT));
-                                }
-                                Self::check_channel_write_set(
-                                    script_body.write_set(),
-                                    txn.sender(),
-                                    script_body.receiver,
-                                )?;
-                                Ok(())
-                            },
-                        )?)
-                    }
-                    ChannelTransactionPayloadBody::Action(action_body) => {
-                        Some(ValidatedTransaction::validate(
-                            &txn,
-                            gas_schedule,
-                            module_cache,
-                            data_cache,
-                            mode,
-                            vm_mode,
-                            || {
-                                Self::check_channel_write_set(
-                                    action_body.write_set(),
-                                    txn.sender(),
-                                    action_body.receiver,
-                                )?;
-                                Ok(())
-                            },
-                        )?)
-                    }
-                }
-            }
             TransactionPayload::ChannelV2(channel_payload) => Some(ValidatedTransaction::validate(
                 &txn,
                 gas_schedule,
@@ -223,21 +155,6 @@ where
         };
 
         Ok(Self { txn, txn_state })
-    }
-
-    fn check_channel_write_set(
-        write_set: &WriteSet,
-        sender: AccountAddress,
-        receiver: AccountAddress,
-    ) -> Result<(), VMStatus> {
-        // check write_set resource ownership
-        for (ap, _op) in write_set {
-            if &ap.address != &sender && &ap.address != &receiver {
-                warn!("[VM] Attempt to access other address's resource.");
-                return Err(VMStatus::new(StatusCode::INVALID_WRITE_SET));
-            }
-        }
-        Ok(())
     }
 
     fn check_channel_payload(
@@ -406,12 +323,6 @@ where
         // Check channel write_set asset balance, offchain channel transaction should keep asset
         // balance, then cache the write_set to transaction cache for Move script to use.
         let pre_cache_write_set = match txn.payload() {
-            TransactionPayload::Channel(channel_payload) => {
-                //TODO implements write set validate mechanism.
-                //let balance_checker = BalanceChecker::new(data_cache, &module_cache);
-                //balance_checker.check_balance(channel_payload.write_set())?;
-                Some(channel_payload.write_set().clone())
-            }
             TransactionPayload::ChannelV2(channel_payload) => {
                 Some(channel_payload.witness().write_set().clone())
             }
