@@ -993,6 +993,7 @@ module LibraAccount {
         let channel_address: address;
         let channel: & Self.Channel;
         let channel_mirror: &Self.ChannelMirror;
+        let proposer: address;
         let participants: &Vector.T<address>;
         let participant: address;
         let participant_account: &Self.T;
@@ -1003,6 +1004,7 @@ module LibraAccount {
         let len: u64;
         let index: u64;
 
+        proposer = ChannelTransaction.get_proposer();
         txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
         channel_address = ChannelTransaction.get_channel_address();
 
@@ -1023,6 +1025,8 @@ module LibraAccount {
 
             // Check that the transaction's public keys matches the participants' current auth key
             participants = &copy(channel).participants;
+            // Check proposer is a participant.
+            assert(Vector.contains<address>(copy(participants), &proposer), 1014);
             participant_public_keys = ChannelTransaction.get_public_keys();
             participant_public_keys_ref = &participant_public_keys;
             len = Vector.length<address>(copy(participants));
@@ -1032,7 +1036,7 @@ module LibraAccount {
                 public_key_hash = Hash.sha3_256(copy(public_key));
                 participant = Vector.get<address>(copy(participants), copy(index));
                 participant_account = borrow_global<T>(copy(participant));
-                assert(move(public_key_hash) == *(&move(participant_account).authentication_key), 1014);
+                assert(move(public_key_hash) == *(&move(participant_account).authentication_key), 1015);
                 index = copy(index) + 1;
             }
 
