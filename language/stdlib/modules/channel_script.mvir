@@ -40,23 +40,19 @@ module ChannelScript {
     }
 
     // Send payment to channel participant at payee
-    public send_payment(payee: address, amount: u64, hash_lock: bytearray){
-        let proposer: address;
+    public send_payment(payee: address, amount: u64, hash_lock: bytearray, time_lock: u64){
         let coin: LibraCoin.T;
-
-        proposer = ChannelTransaction.get_proposer();
+        assert(copy(time_lock) > 0, 1120);
         coin = LibraAccount.withdraw_from_channel(copy(amount));
         //TODO payment timeout
-        HashTimeLock.lock_in_channel(copy(payee), move(coin), move(hash_lock), LibraSystem.get_current_block_height()+10);
+        HashTimeLock.lock_in_channel(copy(payee), move(coin), move(hash_lock), LibraSystem.get_current_block_height() + move(time_lock));
         return;
     }
 
     // Receive payment from channel.
     public receive_payment(preimage: bytearray){
-        let proposer: address;
         let coin: LibraCoin.T;
 
-        proposer = ChannelTransaction.get_proposer();
         coin = HashTimeLock.unlock_in_channel(move(preimage));
         LibraAccount.deposit_to_channel(move(coin));
         return;
@@ -64,10 +60,8 @@ module ChannelScript {
 
     // Cancel send payment.
     public cancel_payment_after_timeout(){
-        let proposer: address;
         let coin: LibraCoin.T;
 
-        proposer = ChannelTransaction.get_proposer();
         coin = HashTimeLock.unlock_in_channel_after_timeout();
         LibraAccount.deposit_to_channel(move(coin));
         return;
