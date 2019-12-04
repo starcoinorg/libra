@@ -67,9 +67,6 @@ lazy_static! {
     pub static ref TRANSACTION_FEE_DISTRIBUTION_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("TransactionFeeDistribution").unwrap()) };
 
-    /// The ModuleId for the ChannelAccount module
-    pub static ref CHANNEL_ACCOUNT_MODULE: ModuleId =
-        { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelAccount").unwrap()) };
 }
 
 // Names for special functions.

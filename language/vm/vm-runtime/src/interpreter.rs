@@ -60,15 +60,9 @@ lazy_static! {
     /// The ModuleId for the Account module
     pub static ref ACCOUNT_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("LibraAccount").unwrap()) };
-    /// The ModuleId for the ChannelAccount module
-    pub static ref CHANNEL_ACCOUNT_MODULE: ModuleId =
-        { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelAccount").unwrap()) };
     /// The ModuleId for the ChannelTransaction module
     pub static ref CHANNEL_TXN_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelTransaction").unwrap()) };
-    /// The ModuleId for the Channel module
-    pub static ref CHANNEL_MODULE: ModuleId =
-        { ModuleId::new(account_config::core_code_address(), Identifier::new("Channel").unwrap()) };
     /// The ModuleId for the ChannelUtil module
     pub static ref CHANNEL_UTIL_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelUtil").unwrap()) };
@@ -80,8 +74,6 @@ lazy_static! {
     static ref ACCOUNT_STRUCT_NAME: Identifier = Identifier::new("T").unwrap();
     static ref EMIT_EVENT_NAME: Identifier = Identifier::new("write_to_event_store").unwrap();
     static ref SAVE_ACCOUNT_NAME: Identifier = Identifier::new("save_account").unwrap();
-    static ref CHANNEL_STRUCT_NAME: Identifier = Identifier::new("Channel").unwrap();
-    static ref CHANNEL_ACCOUNT_STRUCT_NAME: Identifier = Identifier::new("ChannelAccount").unwrap();
 }
 
 fn derive_type_tag(
