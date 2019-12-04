@@ -24,7 +24,7 @@ use libra_types::{
     account_address::AccountAddress,
     channel::{ChannelResource, Witness, WitnessData},
     transaction::{
-        Action, ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2,
+        Action, ChannelTransactionPayload, ChannelTransactionPayloadBody,
         Module as TransactionModule, RawTransaction, Script as TransactionScript, ScriptAction,
         SignedTransaction, TransactionOutput, TransactionStatus,
     },
@@ -277,7 +277,7 @@ fn make_module_transaction(
     .into_inner())
 }
 
-fn make_channel_transaction_v2(
+fn make_channel_transaction(
     exec: &FakeExecutor,
     config: &TransactionConfig,
     action: ScriptAction,
@@ -293,14 +293,14 @@ fn make_channel_transaction_v2(
         witness_data,
         channel_txn_config.channel.sign_by_participants(&hash),
     );
-    let body = ChannelTransactionPayloadBodyV2::new(
+    let body = ChannelTransactionPayloadBody::new(
         channel_txn_config.channel.channel_address,
         *channel_txn_config.proposer.address(),
         action,
         witness,
     );
     let body_hash = body.hash();
-    let payload = ChannelTransactionPayloadV2::new(
+    let payload = ChannelTransactionPayload::new(
         body,
         channel_txn_config.channel.get_participant_public_keys(),
         channel_txn_config.channel.sign(&body_hash, |participant| {
@@ -311,7 +311,7 @@ fn make_channel_transaction_v2(
             }
         }),
     );
-    Ok(RawTransaction::new_channel_v2(
+    Ok(RawTransaction::new_channel(
         params.sender_addr,
         params.sequence_number,
         payload,
@@ -415,7 +415,7 @@ fn eval_transaction(
     }
     log.append(EvaluationOutput::Stage(Stage::Parser));
 
-    if transaction.config.is_channel_transaction_v2() {
+    if transaction.config.is_channel_transaction() {
         let channel_txn_config = transaction
             .config
             .channel
@@ -486,7 +486,7 @@ fn eval_transaction(
             return Ok(Status::Success);
         }
         log.append(EvaluationOutput::Stage(Stage::Runtime));
-        let channel_transaction = make_channel_transaction_v2(
+        let channel_transaction = make_channel_transaction(
             &exec,
             &transaction.config,
             script_action,

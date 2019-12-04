@@ -314,7 +314,7 @@ fn new_raw_transaction(
             // not used, but it isn't a huge deal.
             RawTransaction::new_write_set(sender, sequence_number, write_set)
         }
-        TransactionPayload::ChannelV2(channel) => RawTransaction::new_channel_v2(
+        TransactionPayload::Channel(channel) => RawTransaction::new_channel(
             sender,
             sequence_number,
             channel,

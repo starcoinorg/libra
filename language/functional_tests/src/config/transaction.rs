@@ -277,7 +277,7 @@ impl<'a> Config<'a> {
         self.disabled_stages.contains(&stage)
     }
 
-    pub fn is_channel_transaction_v2(&self) -> bool {
+    pub fn is_channel_transaction(&self) -> bool {
         return self.channel.is_some();
     }
 }

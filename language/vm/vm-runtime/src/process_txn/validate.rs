@@ -12,7 +12,7 @@ use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use libra_types::{
     transaction::{
-        ChannelTransactionPayloadV2, SignatureCheckedTransaction, TransactionPayload,
+        ChannelTransactionPayload, SignatureCheckedTransaction, TransactionPayload,
         MAX_TRANSACTION_SIZE_IN_BYTES,
     },
     vm_error::{StatusCode, VMStatus},
@@ -140,7 +140,7 @@ where
 
                 None
             }
-            TransactionPayload::ChannelV2(channel_payload) => Some(ValidatedTransaction::validate(
+            TransactionPayload::Channel(channel_payload) => Some(ValidatedTransaction::validate(
                 &txn,
                 gas_schedule,
                 module_cache,
@@ -157,9 +157,7 @@ where
         Ok(Self { txn, txn_state })
     }
 
-    fn check_channel_payload(
-        channel_payload: &ChannelTransactionPayloadV2,
-    ) -> Result<(), VMStatus> {
+    fn check_channel_payload(channel_payload: &ChannelTransactionPayload) -> Result<(), VMStatus> {
         let channel_address = channel_payload.channel_address();
         let witness = channel_payload.witness();
         match channel_payload.verify() {
@@ -323,7 +321,7 @@ where
         // Check channel write_set asset balance, offchain channel transaction should keep asset
         // balance, then cache the write_set to transaction cache for Move script to use.
         let pre_cache_write_set = match txn.payload() {
-            TransactionPayload::ChannelV2(channel_payload) => {
+            TransactionPayload::Channel(channel_payload) => {
                 Some(channel_payload.witness().write_set().clone())
             }
             _ => None,

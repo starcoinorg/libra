@@ -168,7 +168,7 @@ impl Account {
                 gas_unit_price,
                 Duration::from_secs(u64::max_value()),
             ),
-            TransactionPayload::ChannelV2(channel_payload) => RawTransaction::new_channel_v2(
+            TransactionPayload::Channel(channel_payload) => RawTransaction::new_channel(
                 *self.address(),
                 sequence_number,
                 channel_payload,

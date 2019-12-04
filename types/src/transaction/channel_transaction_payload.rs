@@ -13,14 +13,14 @@ use crate::transaction::script_action::ScriptAction;
 use libra_crypto::ed25519::{Ed25519PublicKey, Ed25519Signature};
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ChannelTransactionPayloadBodyV2 {
+pub struct ChannelTransactionPayloadBody {
     channel_address: AccountAddress,
     proposer: AccountAddress,
     witness: Witness,
     action: ScriptAction,
 }
 
-impl ChannelTransactionPayloadBodyV2 {
+impl ChannelTransactionPayloadBody {
     pub fn new(
         channel_address: AccountAddress,
         proposer: AccountAddress,
@@ -40,7 +40,7 @@ impl ChannelTransactionPayloadBodyV2 {
     }
 }
 
-impl CryptoHash for ChannelTransactionPayloadBodyV2 {
+impl CryptoHash for ChannelTransactionPayloadBody {
     //TODO use special hasher
     type Hasher = TestOnlyHasher;
 
@@ -48,7 +48,7 @@ impl CryptoHash for ChannelTransactionPayloadBodyV2 {
         let mut state = Self::Hasher::default();
         state.write(
             lcs::to_bytes(self)
-                .expect("Failed to serialize ChannelTransactionPayloadBodyV2")
+                .expect("Failed to serialize ChannelTransactionPayloadBody")
                 .as_slice(),
         );
         state.finish()
@@ -56,15 +56,15 @@ impl CryptoHash for ChannelTransactionPayloadBodyV2 {
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Serialize, Deserialize)]
-pub struct ChannelTransactionPayloadV2 {
-    body: ChannelTransactionPayloadBodyV2,
+pub struct ChannelTransactionPayload {
+    body: ChannelTransactionPayloadBody,
     signatures: Vec<Option<Ed25519Signature>>,
     public_keys: Vec<Ed25519PublicKey>,
 }
 
-impl ChannelTransactionPayloadV2 {
+impl ChannelTransactionPayload {
     pub fn new(
-        body: ChannelTransactionPayloadBodyV2,
+        body: ChannelTransactionPayloadBody,
         public_keys: Vec<Ed25519PublicKey>,
         signatures: Vec<Option<Ed25519Signature>>,
     ) -> Self {

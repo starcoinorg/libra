@@ -77,7 +77,7 @@ where
                     verified_txn: VerTxn::Script(main),
                 })
             }
-            TransactionPayload::ChannelV2(channel_payload) => {
+            TransactionPayload::Channel(channel_payload) => {
                 let txn_state = txn_state
                     .expect("script-based transactions should always have associated state");
 

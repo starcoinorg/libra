@@ -1,7 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::transaction::ChannelTransactionPayloadBodyV2;
+use crate::transaction::ChannelTransactionPayloadBody;
 use crate::{
     account_address::AccountAddress,
     proto::types::SignedTransaction as ProtoSignedTransaction,
@@ -71,7 +71,7 @@ pub trait TransactionSigner {
 
 pub trait ChannelTransactionSigner {
     /// sign method should return (participant index, participant signature)
-    fn sign(&self, body: &ChannelTransactionPayloadBodyV2) -> (usize, Ed25519Signature);
+    fn sign(&self, body: &ChannelTransactionPayloadBody) -> (usize, Ed25519Signature);
 }
 
 /// Craft a transaction request.

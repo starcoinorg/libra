@@ -118,7 +118,7 @@ where
                 },
             }
         }
-        TransactionPayload::ChannelV2(channel_payload) => {
+        TransactionPayload::Channel(channel_payload) => {
             let VerifiedTransactionState {
                 mut txn_executor,
                 verified_txn,

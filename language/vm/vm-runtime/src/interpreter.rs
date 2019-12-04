@@ -34,7 +34,7 @@ use std::collections::HashMap;
 use std::{collections::VecDeque, convert::TryFrom, marker::PhantomData};
 #[cfg(any(test, feature = "instruction_synthesis"))]
 use vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS;
-use vm::transaction_metadata::ChannelMetadataV2;
+use vm::transaction_metadata::ChannelMetadata;
 use vm::{
     access::ModuleAccess,
     errors::*,
@@ -863,13 +863,8 @@ where
         context: &mut dyn InterpreterContext,
         participant: AccountAddress,
     ) -> bool {
-        let proposer = self.txn_data.channel_metadata_v2.as_ref().unwrap().proposer;
-        let authorized = &self
-            .txn_data
-            .channel_metadata_v2
-            .as_ref()
-            .unwrap()
-            .authorized;
+        let proposer = self.txn_data.channel_metadata.as_ref().unwrap().proposer;
+        let authorized = &self.txn_data.channel_metadata.as_ref().unwrap().authorized;
         if context.vm_mode().is_offchain() || participant == proposer || *authorized {
             return true;
         }
@@ -1018,8 +1013,8 @@ where
         self.operand_stack.push(Value::bool(is_offchain))
     }
 
-    fn get_channel_metadata(&self) -> VMResult<&ChannelMetadataV2> {
-        self.txn_data.channel_metadata_v2.as_ref().ok_or(
+    fn get_channel_metadata(&self) -> VMResult<&ChannelMetadata> {
+        self.txn_data.channel_metadata.as_ref().ok_or(
             VMStatus::new(StatusCode::LINKER_ERROR)
                 .with_message("get channel metadata fail.".to_string()),
         )
@@ -1027,7 +1022,7 @@ where
 
     /// call `is_channel_txn`.
     fn call_is_channel_txn(&mut self) -> VMResult<()> {
-        let is_channel_txn = self.txn_data.is_channel_txn_v2();
+        let is_channel_txn = self.txn_data.is_channel_txn();
         self.operand_stack.push(Value::bool(is_channel_txn))
     }
 
