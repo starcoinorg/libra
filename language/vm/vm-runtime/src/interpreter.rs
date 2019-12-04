@@ -1029,16 +1029,11 @@ where
         type_actual_tags: Vec<TypeTag>,
     ) -> VMResult<()> {
         let participant = self.operand_stack.pop_as::<AccountAddress>()?;
-        if !self.is_authorized(context, participant) {
-            Err(VMStatus::new(StatusCode::MISSING_SIGNATURE_ERROR)
-                .with_message(format!("Access to private resource not authorized.")))
-        } else {
-            let channel_address = self.get_channel_metadata()?.channel_address;
-            let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
-            let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
-            let resource = context.borrow_global(&ap, struct_def)?;
-            self.operand_stack.push(Value::global_ref(resource))
-        }
+        let channel_address = self.get_channel_metadata()?.channel_address;
+        let (module, idx, struct_def) = self.resolve_struct_def(context, type_actual_tags)?;
+        let ap = Self::make_channel_access_path(module, idx, channel_address, participant);
+        let resource = context.borrow_global(&ap, struct_def)?;
+        self.operand_stack.push(Value::global_ref(resource))
     }
     /// call `borrow_from_shared`.
     fn call_borrow_from_shared(

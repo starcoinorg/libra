@@ -9,7 +9,7 @@ use crate::transaction::transaction_argument::TransactionArgument;
 use failure::prelude::*;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Action {
     // module, function
     Call(ModuleId, Identifier),
@@ -34,6 +34,26 @@ impl Action {
     }
 }
 
+impl std::fmt::Debug for Action {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Action::Call(module, function) => {
+                write!(
+                    f,
+                    "call {}.{}.{}",
+                    module.address(),
+                    module.name(),
+                    function
+                )?;
+            }
+            Action::Code(code) => {
+                write!(f, "code {}", &hex::encode(code))?;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl std::fmt::Display for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -54,7 +74,7 @@ impl std::fmt::Display for Action {
     }
 }
 
-#[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize, Debug)]
+#[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ScriptAction {
     action: Action,
     args: Vec<TransactionArgument>,
@@ -107,6 +127,17 @@ impl ScriptAction {
 
     pub fn into_inner(self) -> (Action, Vec<TransactionArgument>) {
         (self.action, self.args)
+    }
+}
+
+impl std::fmt::Debug for ScriptAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.action)?;
+        for arg in &self.args {
+            write!(f, " ")?;
+            write!(f, "{}", arg)?;
+        }
+        Ok(())
     }
 }
 

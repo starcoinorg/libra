@@ -58,40 +58,35 @@ main(){
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1, alice
 //! args: {{bob}},50000,40000
 
 0x0.ChannelScript.open
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{alice}}
 
 {{default}}.VecTest.test_move_vec_to_participant
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{alice}}
 
 {{default}}.VecTest.test_move_vec_from_participant
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}}
 
 {{default}}.VecTest.test_move_vec_to_participant
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}}
 
 {{default}}.VecTest.test_move_vec_from_participant

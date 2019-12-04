@@ -418,8 +418,7 @@ main(){
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}},10,10
 
 0x0.LibraAccount.open_channel
@@ -427,8 +426,7 @@ main(){
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}}
 import 0x0.ChannelAccount;
 import {{default}}.TheFive;
@@ -442,8 +440,7 @@ main(receiver: address){
 
 //! new-transaction
 //! sender: bob
-//! channel: ch1
-//! proposer: bob
+//! txn-channel: ch1,bob
 
 import 0x0.ChannelAccount;
 import {{default}}.TheFive;
@@ -457,8 +454,7 @@ main(){
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}},2,2
 
 import 0x0.ChannelAccount;
@@ -475,8 +471,7 @@ main(receiver: address, x: u64, y: u64) {
 
 //! new-transaction
 //! sender: bob
-//! channel: ch1
-//! proposer: bob
+//! txn-channel: ch1,bob
 //! args: {{alice}},3,2
 
 import 0x0.ChannelAccount;
@@ -492,8 +487,7 @@ main(receiver: address, x: u64, y: u64) {
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}},2,3
 
 import 0x0.ChannelAccount;
@@ -509,8 +503,7 @@ main(receiver: address, x: u64, y: u64) {
 
 //! new-transaction
 //! sender: bob
-//! channel: ch1
-//! proposer: bob
+//! txn-channel: ch1,bob
 //! args: {{alice}},3,3
 
 import 0x0.ChannelAccount;
@@ -526,8 +519,7 @@ main(receiver: address, x: u64, y: u64) {
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}},2,4
 
 import 0x0.ChannelAccount;
@@ -543,8 +535,7 @@ main(receiver: address, x: u64, y: u64) {
 
 //! new-transaction
 //! sender: bob
-//! channel: ch1
-//! proposer: bob
+//! txn-channel: ch1,alice
 //! args: {{alice}},3,4
 
 import 0x0.ChannelAccount;
@@ -560,8 +551,7 @@ main(receiver: address, x: u64, y: u64) {
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}},2,5
 
 import 0x0.ChannelAccount;
@@ -577,8 +567,7 @@ main(receiver: address, x: u64, y: u64) {
 
 //! new-transaction
 //! sender: bob
-//! channel: ch1
-//! proposer: bob
+//! txn-channel: ch1,alice
 //! args: {{alice}},3,5
 
 import 0x0.ChannelAccount;
@@ -594,8 +583,7 @@ main(receiver: address, x: u64, y: u64) {
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 //! args: {{bob}},2,6
 
 import 0x0.ChannelAccount;
@@ -613,8 +601,7 @@ main(receiver: address, x: u64, y: u64) {
 
 //! new-transaction
 //! sender: alice
-//! channel: ch1
-//! proposer: alice
+//! txn-channel: ch1,alice
 
 import 0x0.ChannelAccount;
 import {{default}}.TheFive;
@@ -630,8 +617,7 @@ main() {
 
 //! new-transaction
 //! sender: bob
-//! channel: ch1
-//! proposer: bob
+//! txn-channel: ch1,bob
 
 import 0x0.ChannelAccount;
 import {{default}}.TheFive;

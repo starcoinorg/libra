@@ -170,10 +170,10 @@ fn build_transaction_config_channel() {
         //! channel: ch1,alice|bob
     ").unwrap();
 
-    parse_and_build_config(&global, r"
+    let txn_config = parse_and_build_config(&global, r"
         //! sender: alice
-        //! channel: ch1
-        //! proposer: alice
+        //! txn-channel: ch1, alice, false
         //! args: {{bob}}, {{alice}}
     ").unwrap();
+    assert!(!txn_config.channel.unwrap().signed_by_participants);
 }

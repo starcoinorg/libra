@@ -886,6 +886,13 @@ module LibraAccount {
         return LibraCoin.value(&move(channel_account).balance);
     }
 
+    // Check current channel is locked
+    public channel_is_locked():bool acquires Channel {
+        let channel: &Self.Channel;
+        channel = borrow_global<Channel>(ChannelTransaction.get_channel_address());
+        return *&copy(channel).stage == 1;
+    }
+
     public challenge() acquires Channel,ChannelLockedBy,ChannelGlobalEvents {
         let channel: &mut Self.Channel;
         let channel_address: address;
@@ -986,6 +993,7 @@ module LibraAccount {
         let channel_address: address;
         let channel: & Self.Channel;
         let channel_mirror: &Self.ChannelMirror;
+        let proposer: address;
         let participants: &Vector.T<address>;
         let participant: address;
         let participant_account: &Self.T;
@@ -996,6 +1004,7 @@ module LibraAccount {
         let len: u64;
         let index: u64;
 
+        proposer = ChannelTransaction.get_proposer();
         txn_channel_sequence_number = ChannelTransaction.get_txn_channel_sequence_number();
         channel_address = ChannelTransaction.get_channel_address();
 
@@ -1016,6 +1025,8 @@ module LibraAccount {
 
             // Check that the transaction's public keys matches the participants' current auth key
             participants = &copy(channel).participants;
+            // Check proposer is a participant.
+            assert(Vector.contains<address>(copy(participants), &proposer), 1014);
             participant_public_keys = ChannelTransaction.get_public_keys();
             participant_public_keys_ref = &participant_public_keys;
             len = Vector.length<address>(copy(participants));
@@ -1025,7 +1036,7 @@ module LibraAccount {
                 public_key_hash = Hash.sha3_256(copy(public_key));
                 participant = Vector.get<address>(copy(participants), copy(index));
                 participant_account = borrow_global<T>(copy(participant));
-                assert(move(public_key_hash) == *(&move(participant_account).authentication_key), 1014);
+                assert(move(public_key_hash) == *(&move(participant_account).authentication_key), 1015);
                 index = copy(index) + 1;
             }
 
@@ -1036,12 +1047,13 @@ module LibraAccount {
     channel_epilogue() acquires Channel,ChannelGlobalEvents {
         let channel: &mut Self.Channel;
         let channel_mirror: &mut Self.ChannelMirror;
-        let sender: address;
+        let proposer: address;
         let txn_channel_sequence_number: u64;
         let new_channel_sequence_number: u64;
         let channel_address: address;
+        let locked_by: Self.ChannelLockedBy;
 
-        sender = get_txn_sender();
+        proposer = ChannelTransaction.get_proposer();
         channel_address = ChannelTransaction.get_channel_address();
         channel = borrow_global_mut<Channel>(copy(channel_address));
         channel_mirror = ChannelUtil.borrow_from_shared_mut<Self.ChannelMirror>();
@@ -1057,7 +1069,10 @@ module LibraAccount {
                 // set channel stage to locked
                 *(&mut copy(channel).stage) = 1;
                 Self.do_emit_channel_event(copy(channel_address), copy(channel));
-                //TODO write locked_by
+                locked_by = ChannelLockedBy{
+                    participant: copy(proposer),
+                };
+                Self.move_to_channel<Self.ChannelLockedBy>(move(locked_by));
             }
         }
         return;

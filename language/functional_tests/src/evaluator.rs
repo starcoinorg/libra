@@ -1,7 +1,6 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::config::global::ChannelData;
 use crate::{
     config::{global::Config as GlobalConfig, transaction::Config as TransactionConfig},
     errors::*,
@@ -313,29 +312,35 @@ fn make_channel_transaction_v2(
     exec: &FakeExecutor,
     config: &TransactionConfig,
     action: ScriptAction,
-    channel: &ChannelData,
     channel_sequence_number: u64,
 ) -> Result<SignedTransaction> {
     let params = get_transaction_parameters(exec, config);
+    let channel_txn_config = config.channel.as_ref().ok_or(ErrorKind::Other(
+        "channel txn config must exist.".to_string(),
+    ))?;
     let witness_data = WitnessData::new(channel_sequence_number, WriteSet::default());
     let hash = witness_data.hash();
-    let witness = Witness::new(witness_data, channel.sign(&hash));
+    let witness = Witness::new(
+        witness_data,
+        channel_txn_config.channel.sign_by_participants(&hash),
+    );
     let body = ChannelTransactionPayloadBodyV2::new(
-        channel.channel_address,
-        *config.proposer.unwrap().address(),
+        channel_txn_config.channel.channel_address,
+        *channel_txn_config.proposer.address(),
         action,
         witness,
     );
     let body_hash = body.hash();
     let payload = ChannelTransactionPayloadV2::new(
         body,
-        channel.get_participant_public_keys(),
-        channel
-            .sign(&body_hash)
-            .iter()
-            .cloned()
-            .map(|s| Some(s))
-            .collect(),
+        channel_txn_config.channel.get_participant_public_keys(),
+        channel_txn_config.channel.sign(&body_hash, |participant| {
+            if channel_txn_config.signed_by_participants {
+                true
+            } else {
+                participant.account.address() == channel_txn_config.proposer.address()
+            }
+        }),
     );
     Ok(RawTransaction::new_channel_v2(
         params.sender_addr,
@@ -483,12 +488,12 @@ fn eval_transaction(
             OutputType::TransactionOutput(txn_output),
         )));
     } else if transaction.config.is_channel_transaction_v2() {
-        let channel_data = transaction
+        let channel_txn_config = transaction
             .config
             .channel
             .as_ref()
             .expect("channel must exist in channel transaction.");
-        let channel_address = channel_data.channel_address;
+        let channel_address = channel_txn_config.channel.channel_address;
         let channel_access_path =
             AccessPath::new_for_data_path(channel_address, DataPath::channel_data_path());
 
@@ -557,7 +562,6 @@ fn eval_transaction(
             &exec,
             &transaction.config,
             script_action,
-            channel_data,
             channel_sequence_number,
         )?;
         let txn_output = unwrap_or_abort!(run_transaction(exec, channel_transaction));

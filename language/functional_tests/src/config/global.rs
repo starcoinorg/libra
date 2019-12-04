@@ -163,10 +163,26 @@ impl<'a> ChannelData<'a> {
             .collect()
     }
 
-    pub fn sign(&self, msg: &HashValue) -> Vec<Ed25519Signature> {
+    pub fn sign_by_participants(&self, msg: &HashValue) -> Vec<Ed25519Signature> {
+        self.sign(msg, |_| true)
+            .iter()
+            .map(|s| s.as_ref().cloned().unwrap())
+            .collect()
+    }
+
+    pub fn sign<F>(&self, msg: &HashValue, mut filter: F) -> Vec<Option<Ed25519Signature>>
+    where
+        F: FnMut(&ChannelParticipant) -> bool,
+    {
         self.participants
             .iter()
-            .map(|participant| participant.account.privkey.sign_message(msg))
+            .map(|participant| {
+                if filter(participant) {
+                    Some(participant.account.privkey.sign_message(msg))
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 }
