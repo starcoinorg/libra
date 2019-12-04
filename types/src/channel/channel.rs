@@ -23,6 +23,7 @@ lazy_static! {
     static ref USER_CHANNELS_STRUCT_NAME: Identifier = Identifier::new("UserChannels").unwrap();
 
     static ref CHANNEL_GLOBAL_EVENTS_STRUCT_NAME: Identifier = Identifier::new("ChannelGlobalEvents").unwrap();
+    static ref CHANNEL_EVENT_STRUCT_NAME: Identifier = Identifier::new("ChannelEvent").unwrap();
 
     pub static ref CHANNEL_EVENT_PATH: Vec<u8> = {
         let mut path = channel_resource_path();
@@ -49,11 +50,24 @@ pub fn channel_global_events_struct_name() -> &'static IdentStr {
     &*CHANNEL_GLOBAL_EVENTS_STRUCT_NAME
 }
 
+pub fn channel_event_struct_name() -> &'static IdentStr {
+    &*CHANNEL_EVENT_STRUCT_NAME
+}
+
 pub fn channel_struct_tag() -> StructTag {
     StructTag {
         address: core_code_address(),
         module: channel_module_name().to_owned(),
         name: channel_struct_name().to_owned(),
+        type_params: vec![],
+    }
+}
+
+pub fn channel_event_struct_tag() -> StructTag {
+    StructTag {
+        address: core_code_address(),
+        module: channel_module_name().to_owned(),
+        name: channel_event_struct_name().to_owned(),
         type_params: vec![],
     }
 }
