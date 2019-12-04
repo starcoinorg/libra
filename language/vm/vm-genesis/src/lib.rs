@@ -258,17 +258,17 @@ pub fn encode_genesis_transaction_with_validator_and_consensus(
                 .execute_function(&COIN_MODULE, &INITIALIZE, vec![])
                 .unwrap();
 
-            if is_pow {
-                //Initialize consensus config module.
-                txn_executor
-                    .execute_function_with_sender_FOR_GENESIS_ONLY(
-                        account_config::subsidy_address(),
-                        &CONSENSUS_CONF_MODULE,
-                        &INITIALIZE,
-                        vec![],
-                    )
-                    .unwrap();
+            //Initialize consensus config module.
+            txn_executor
+                .execute_function_with_sender_FOR_GENESIS_ONLY(
+                    account_config::subsidy_address(),
+                    &CONSENSUS_CONF_MODULE,
+                    &INITIALIZE,
+                    vec![],
+                )
+                .unwrap();
 
+            if is_pow {
                 txn_executor
                     .execute_function_with_sender_FOR_GENESIS_ONLY(
                         account_config::subsidy_address(),
