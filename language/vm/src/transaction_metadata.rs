@@ -9,12 +9,6 @@ use libra_types::{
 };
 
 pub struct ChannelMetadata {
-    pub receiver: AccountAddress,
-    pub channel_sequence_number: u64,
-    pub receiver_public_key: Ed25519PublicKey,
-}
-
-pub struct ChannelMetadataV2 {
     pub channel_address: AccountAddress,
     pub channel_sequence_number: u64,
     pub proposer: AccountAddress,
@@ -31,22 +25,12 @@ pub struct TransactionMetadata {
     pub gas_unit_price: GasPrice<GasCarrier>,
     pub transaction_size: AbstractMemorySize<GasCarrier>,
     pub channel_metadata: Option<ChannelMetadata>,
-    pub channel_metadata_v2: Option<ChannelMetadataV2>,
 }
 
 impl TransactionMetadata {
     pub fn new(txn: &SignedTransaction) -> Self {
         let channel_metadata = match txn.payload() {
             TransactionPayload::Channel(channel_payload) => Some(ChannelMetadata {
-                receiver: channel_payload.receiver(),
-                channel_sequence_number: channel_payload.channel_sequence_number(),
-                receiver_public_key: channel_payload.receiver_public_key.clone(),
-            }),
-            _ => None,
-        };
-
-        let channel_metadata_v2 = match txn.payload() {
-            TransactionPayload::ChannelV2(channel_payload) => Some(ChannelMetadataV2 {
                 channel_address: channel_payload.channel_address(),
                 channel_sequence_number: channel_payload.channel_sequence_number(),
                 proposer: channel_payload.proposer(),
@@ -65,7 +49,6 @@ impl TransactionMetadata {
             gas_unit_price: GasPrice::new(txn.gas_unit_price()),
             transaction_size: AbstractMemorySize::new(txn.raw_txn_bytes_len() as u64),
             channel_metadata,
-            channel_metadata_v2,
         }
     }
 
@@ -93,26 +76,12 @@ impl TransactionMetadata {
         self.transaction_size
     }
 
-    pub fn receiver(&self) -> Option<AccountAddress> {
-        self.channel_metadata
-            .as_ref()
-            .map(|metadata| metadata.receiver)
-    }
-
     pub fn channel_metadata(&self) -> Option<&ChannelMetadata> {
         self.channel_metadata.as_ref()
     }
 
-    pub fn channel_metadata_v2(&self) -> Option<&ChannelMetadataV2> {
-        self.channel_metadata_v2.as_ref()
-    }
-
     pub fn is_channel_txn(&self) -> bool {
         self.channel_metadata.is_some()
-    }
-
-    pub fn is_channel_txn_v2(&self) -> bool {
-        self.channel_metadata_v2.is_some()
     }
 }
 
@@ -127,7 +96,6 @@ impl Default for TransactionMetadata {
             gas_unit_price: GasPrice::new(0),
             transaction_size: AbstractMemorySize::new(0),
             channel_metadata: None,
-            channel_metadata_v2: None,
         }
     }
 }

@@ -7,9 +7,7 @@ use crate::{
 };
 use libra_logger::prelude::*;
 use libra_types::{
-    transaction::{
-        ChannelTransactionPayloadBody, TransactionOutput, TransactionPayload, TransactionStatus,
-    },
+    transaction::{TransactionOutput, TransactionPayload, TransactionStatus},
     vm_error::{StatusCode, StatusType, VMStatus},
     write_set::WriteSet,
 };
@@ -121,85 +119,6 @@ where
             }
         }
         TransactionPayload::Channel(channel_payload) => {
-            match channel_payload.body {
-                ChannelTransactionPayloadBody::WriteSet(write_set_body) => TransactionOutput::new(
-                    write_set_body.write_set,
-                    vec![],
-                    0,
-                    VMStatus::new(StatusCode::EXECUTED).into(),
-                ),
-                ChannelTransactionPayloadBody::Script(script_body) => {
-                    let VerifiedTransactionState {
-                        mut txn_executor,
-                        verified_txn,
-                    } = txn_state
-                        .expect("script-based transactions should always have associated state");
-                    let main = match verified_txn {
-                        VerTxn::Script(func) => func,
-                        _ => unreachable!("TransactionPayload::Script expects VerTxn::Program"),
-                    };
-
-                    let (_, args) = script_body.script.into_inner();
-                    let script_output = match txn_executor.interpeter_entrypoint(main, args) {
-                        Ok(_) => txn_executor.transaction_cleanup(vec![]),
-                        Err(err) => match err.status_type() {
-                            StatusType::InvariantViolation => {
-                                error!("[VM] VM error running script: {:?}", err);
-                                ExecutedTransaction::discard_error_output(err)
-                            }
-                            _ => {
-                                warn!("[VM] User error running script: {:?}", err);
-                                txn_executor.failed_transaction_cleanup(Err(err))
-                            }
-                        },
-                    };
-                    let merged_write_set =
-                        WriteSet::merge(&script_body.write_set, script_output.write_set());
-                    //TODO(jole) eliminate clone
-                    TransactionOutput::new(
-                        merged_write_set,
-                        script_output.events().to_vec(),
-                        script_output.gas_used(),
-                        script_output.status().clone(),
-                    )
-                }
-                ChannelTransactionPayloadBody::Action(action_body) => {
-                    let VerifiedTransactionState {
-                        mut txn_executor,
-                        verified_txn,
-                    } = txn_state
-                        .expect("script-based transactions should always have associated state");
-                    let func = match verified_txn {
-                        VerTxn::ScriptAction(func) => func,
-                        _ => unreachable!("expects TransactionPayload::ScriptAction"),
-                    };
-                    let (_, args) = action_body.action.into_inner();
-                    let action_output = match txn_executor.interpeter_entrypoint(func, args) {
-                        Ok(_) => txn_executor.transaction_cleanup(vec![]),
-                        Err(err) => match err.status_type() {
-                            StatusType::InvariantViolation => {
-                                error!("[VM] VM error running script: {:?}", err);
-                                ExecutedTransaction::discard_error_output(err)
-                            }
-                            _ => {
-                                warn!("[VM] User error running script: {:?}", err);
-                                txn_executor.failed_transaction_cleanup(Err(err))
-                            }
-                        },
-                    };
-                    let merged_write_set =
-                        WriteSet::merge(&action_body.write_set, action_output.write_set());
-                    //TODO(jole) eliminate clone
-                    TransactionOutput::new(
-                        merged_write_set,
-                        action_output.events().to_vec(),
-                        action_output.gas_used(),
-                        action_output.status().clone(),
-                    )
-                }
-            }
-        }
-        TransactionPayload::ChannelV2(channel_payload) => {
             let VerifiedTransactionState {
                 mut txn_executor,
                 verified_txn,

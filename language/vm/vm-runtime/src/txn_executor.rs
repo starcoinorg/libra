@@ -67,9 +67,6 @@ lazy_static! {
     pub static ref TRANSACTION_FEE_DISTRIBUTION_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("TransactionFeeDistribution").unwrap()) };
 
-    /// The ModuleId for the ChannelAccount module
-    pub static ref CHANNEL_ACCOUNT_MODULE: ModuleId =
-        { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelAccount").unwrap()) };
 }
 
 // Names for special functions.
@@ -175,20 +172,7 @@ where
                 &ACCOUNT_MODULE,
                 &PROLOGUE_NAME,
                 vec![],
-                ).and_then(|_| {
-                    if self.txn_data.is_channel_txn() {
-                        Interpreter::execute_function(
-                            &mut self.interpreter_context,
-                            &self.module_cache,
-                            &self.txn_data,
-                            &CostTable::zero(),
-                            &CHANNEL_ACCOUNT_MODULE,
-                            &PROLOGUE_NAME,
-                            vec![],)
-                    } else {
-                        Ok(())
-                    }
-                })?;
+                )?;
             }
         };
         Ok(())
@@ -206,21 +190,7 @@ where
                 &ACCOUNT_MODULE,
                 &EPILOGUE_NAME,
                 vec![],
-                ).and_then(|_| {
-                    if self.txn_data.is_channel_txn() {
-                        Interpreter::execute_function(
-                            &mut self.interpreter_context,
-                            &self.module_cache,
-                            &self.txn_data,
-                            &CostTable::zero(),
-                            &CHANNEL_ACCOUNT_MODULE,
-                            &EPILOGUE_NAME,
-                            vec![],
-                        )
-                    } else {
-                        Ok(())
-                    }
-                })?;
+                )?;
             }
         }
         Ok(())

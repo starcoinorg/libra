@@ -13,8 +13,7 @@ use libra_types::transaction::{Action, ScriptAction};
 use libra_types::{
     account_address::AccountAddress,
     transaction::{
-        ChannelTransactionPayloadBody, Module, Script, SignatureCheckedTransaction,
-        TransactionArgument, TransactionPayload,
+        Module, Script, SignatureCheckedTransaction, TransactionArgument, TransactionPayload,
     },
     vm_error::{StatusCode, VMStatus},
 };
@@ -79,44 +78,6 @@ where
                 })
             }
             TransactionPayload::Channel(channel_payload) => {
-                match &channel_payload.body {
-                    ChannelTransactionPayloadBody::WriteSet(_) => {
-                        //TODO(jole) do more verify.
-                        None
-                    }
-                    ChannelTransactionPayloadBody::Script(script_body) => {
-                        //TODO(jole) do more verify.
-                        let txn_state = txn_state.expect(
-                            "script-based transactions should always have associated state",
-                        );
-
-                        let main = Self::verify_script(&script_body.script, script_cache)?;
-
-                        Some(VerifiedTransactionState {
-                            txn_executor: txn_state.txn_executor,
-                            verified_txn: VerTxn::Script(main),
-                        })
-                    }
-                    ChannelTransactionPayloadBody::Action(action_body) => {
-                        //TODO(jole) do more verify.
-                        let txn_state = txn_state.expect(
-                            "script-based transactions should always have associated state",
-                        );
-
-                        let func = Self::verify_script_action(
-                            action_body.action(),
-                            txn_state.txn_executor.module_cache(),
-                            script_cache,
-                        )?;
-
-                        Some(VerifiedTransactionState {
-                            txn_executor: txn_state.txn_executor,
-                            verified_txn: VerTxn::ScriptAction(func),
-                        })
-                    }
-                }
-            }
-            TransactionPayload::ChannelV2(channel_payload) => {
                 let txn_state = txn_state
                     .expect("script-based transactions should always have associated state");
 

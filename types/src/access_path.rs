@@ -44,7 +44,6 @@ use crate::{
         ACCOUNT_SENT_EVENT_PATH,
     },
     channel::{CHANNEL_EVENT_PATH, CHANNEL_GLOBAL_EVENT_PATH},
-    channel_account::channel_account_struct_tag,
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, ResourceKey, StructTag},
     validator_set::validator_set_path,
@@ -320,10 +319,6 @@ impl DataPath {
 
     pub fn channel_resource_path(participant: AccountAddress, tag: StructTag) -> Self {
         DataPath::ChannelResource { participant, tag }
-    }
-
-    pub fn channel_account_path(participant: AccountAddress) -> Self {
-        Self::channel_resource_path(participant, channel_account_struct_tag())
     }
 
     pub fn to_vec(&self) -> Vec<u8> {

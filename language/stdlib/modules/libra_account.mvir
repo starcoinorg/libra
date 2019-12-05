@@ -493,7 +493,7 @@ module LibraAccount {
         // Check that the account has enough balance for all of the gas
         // Not check gas when tx execute on offchain vm.
         // Not check auth key for allow offchain vm to mock another use TODO(jole) security
-        if(!ChannelTransaction.native_is_offchain()){
+        if(!ChannelTransaction.is_offchain()){
             // Check that the transaction's public key matches the account's current auth key
             sender_public_key = get_txn_public_key();
             public_key_hash = Hash.sha3_256(move(sender_public_key));
@@ -629,20 +629,6 @@ module LibraAccount {
         let count: u64;
         EventHandle<T> { count, guid } = move(handle);
         return;
-    }
-    // Withdraw `amount` LibraCoin.T from the transaction receiver's account, only offchain transaction.
-    public withdraw_from_receiver(amount: u64): LibraCoin.T acquires T {
-        let receiver_account: &mut Self.T;
-
-        assert(ChannelTransaction.native_is_channel_txn(), 6);
-        receiver_account = borrow_global_mut<T>(ChannelTransaction.native_get_txn_receiver());
-        if (*&copy(receiver_account).delegated_withdrawal_capability) {
-            // The sender has delegated the privilege to withdraw from her account elsewhere--abort.
-            abort(11);
-        } else {
-            // The sender has retained her withdrawal privileges--proceed.
-            return Self.withdraw_from_account(move(receiver_account), move(amount));
-        }
     }
 
     //Channel functions
@@ -884,6 +870,13 @@ module LibraAccount {
         let channel_account: & Self.ChannelParticipantAccount;
         channel_account = ChannelUtil.borrow_from_participant<Self.ChannelParticipantAccount>(copy(participant));
         return LibraCoin.value(&move(channel_account).balance);
+    }
+
+    // Get current channel's sequence number.
+    public channel_sequence_number(): u64 acquires Channel {
+        let channel: &Self.Channel;
+        channel = borrow_global<Channel>(ChannelTransaction.get_channel_address());
+        return *&move(channel).channel_sequence_number;
     }
 
     // Check current channel is locked

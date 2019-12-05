@@ -34,7 +34,7 @@ use std::collections::HashMap;
 use std::{collections::VecDeque, convert::TryFrom, marker::PhantomData};
 #[cfg(any(test, feature = "instruction_synthesis"))]
 use vm::gas_schedule::MAXIMUM_NUMBER_OF_GAS_UNITS;
-use vm::transaction_metadata::ChannelMetadataV2;
+use vm::transaction_metadata::ChannelMetadata;
 use vm::{
     access::ModuleAccess,
     errors::*,
@@ -60,15 +60,9 @@ lazy_static! {
     /// The ModuleId for the Account module
     pub static ref ACCOUNT_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("LibraAccount").unwrap()) };
-    /// The ModuleId for the ChannelAccount module
-    pub static ref CHANNEL_ACCOUNT_MODULE: ModuleId =
-        { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelAccount").unwrap()) };
     /// The ModuleId for the ChannelTransaction module
     pub static ref CHANNEL_TXN_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelTransaction").unwrap()) };
-    /// The ModuleId for the Channel module
-    pub static ref CHANNEL_MODULE: ModuleId =
-        { ModuleId::new(account_config::core_code_address(), Identifier::new("Channel").unwrap()) };
     /// The ModuleId for the ChannelUtil module
     pub static ref CHANNEL_UTIL_MODULE: ModuleId =
         { ModuleId::new(account_config::core_code_address(), Identifier::new("ChannelUtil").unwrap()) };
@@ -80,8 +74,6 @@ lazy_static! {
     static ref ACCOUNT_STRUCT_NAME: Identifier = Identifier::new("T").unwrap();
     static ref EMIT_EVENT_NAME: Identifier = Identifier::new("write_to_event_store").unwrap();
     static ref SAVE_ACCOUNT_NAME: Identifier = Identifier::new("save_account").unwrap();
-    static ref CHANNEL_STRUCT_NAME: Identifier = Identifier::new("Channel").unwrap();
-    static ref CHANNEL_ACCOUNT_STRUCT_NAME: Identifier = Identifier::new("ChannelAccount").unwrap();
 }
 
 fn derive_type_tag(
@@ -766,20 +758,6 @@ where
                 "move_from_channel" => self.call_move_from_channel(context, type_actual_tags),
                 _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
             }
-        } else if module_id == *CHANNEL_ACCOUNT_MODULE {
-            match function_name.as_str() {
-                "native_move_to_channel" => {
-                    self.call_native_move_to_channel(context, type_actual_tags)
-                }
-                "native_exist_channel" => self.call_native_exist_channel(context, type_actual_tags),
-                "native_move_from_channel" => {
-                    self.call_native_move_from_channel(context, type_actual_tags)
-                }
-                "native_borrow_channel" => {
-                    self.call_native_borrow_channel(context, type_actual_tags)
-                }
-                _ => Err(VMStatus::new(StatusCode::LINKER_ERROR)),
-            }
         } else if module_id == *CHANNEL_UTIL_MODULE {
             match function_name.as_str() {
                 "move_to_participant" => self.call_move_to_participant(context, type_actual_tags),
@@ -806,14 +784,6 @@ where
         } else if module_id == *CHANNEL_TXN_MODULE {
             match function_name.as_str() {
                 "is_offchain" => self.call_is_offchain(context),
-                "native_get_txn_receiver" => self.call_native_get_txn_receiver(),
-                "native_is_channel_txn" => self.call_native_is_channel_txn(),
-                "native_get_txn_receiver_public_key" => {
-                    self.call_native_get_txn_receiver_public_key()
-                }
-                "native_get_txn_channel_sequence_number" => {
-                    self.call_native_get_txn_channel_sequence_number()
-                }
                 "is_channel_txn" => self.call_is_channel_txn(),
                 "get_txn_channel_sequence_number" => self.call_get_txn_channel_sequence_number(),
                 "get_channel_address" => self.call_get_channel_address(),
@@ -844,59 +814,6 @@ where
                 }
                 Ok(())
             })
-        }
-    }
-
-    fn get_channel_resource_ap_and_struct_def(
-        &mut self,
-        context: &mut dyn InterpreterContext,
-        mut type_actual_tags: Vec<TypeTag>,
-        is_sender: bool,
-    ) -> VMResult<(AccessPath, StructDef)> {
-        if type_actual_tags.len() != 1 {
-            return Err(
-                VMStatus::new(StatusCode::VERIFIER_INVARIANT_VIOLATION).with_message(format!(
-                    "get_channel_resource_ap_and_struct_def expects 1 argument got {}.",
-                    type_actual_tags.len()
-                )),
-            );
-        }
-        let type_tag = type_actual_tags.pop().unwrap();
-        match type_tag {
-            TypeTag::Struct(struct_tag) => {
-                let tag = &struct_tag;
-                let module_address = tag.address;
-                let module_name = tag.module.clone();
-                let struct_name = tag.name.clone();
-
-                let module = self
-                    .module_cache
-                    .get_loaded_module(&ModuleId::new(module_address, module_name))?;
-
-                let (address, participant) =
-                    Self::get_channel_address_pair(&self.txn_data, is_sender)?;
-                let channel_resource_struct_id = module
-                    .struct_defs_table
-                    .get(&*struct_name)
-                    .ok_or_else(|| VMStatus::new(StatusCode::LINKER_ERROR))?;
-
-                let ap = Self::make_channel_access_path(
-                    module,
-                    *channel_resource_struct_id,
-                    address,
-                    participant,
-                );
-                let channel_resource_struct_def = self.module_cache.resolve_struct_def(
-                    module,
-                    *channel_resource_struct_id,
-                    context,
-                )?;
-
-                Ok((ap, channel_resource_struct_def))
-            }
-            _ => Err(VMStatus::new(StatusCode::TYPE_ERROR).with_message(format!(
-                "get_channel_resource_ap_and_struct_def parse struct tag error."
-            ))),
         }
     }
 
@@ -946,13 +863,8 @@ where
         context: &mut dyn InterpreterContext,
         participant: AccountAddress,
     ) -> bool {
-        let proposer = self.txn_data.channel_metadata_v2.as_ref().unwrap().proposer;
-        let authorized = &self
-            .txn_data
-            .channel_metadata_v2
-            .as_ref()
-            .unwrap()
-            .authorized;
+        let proposer = self.txn_data.channel_metadata.as_ref().unwrap().proposer;
+        let authorized = &self.txn_data.channel_metadata.as_ref().unwrap().authorized;
         if context.vm_mode().is_offchain() || participant == proposer || *authorized {
             return true;
         }
@@ -1095,107 +1007,14 @@ where
         self.operand_stack.push(Value::bool(exists))
     }
 
-    /// call `native_move_to_channel`.
-    fn call_native_move_to_channel(
-        &mut self,
-        context: &mut dyn InterpreterContext,
-        type_actual_tags: Vec<TypeTag>,
-    ) -> VMResult<()> {
-        let to_sender = self.operand_stack.pop_as::<bool>()?;
-
-        let res = self.operand_stack.pop_as::<Struct>()?;
-
-        let (ap, struct_def) =
-            self.get_channel_resource_ap_and_struct_def(context, type_actual_tags, to_sender)?;
-        context.move_resource_to(&ap, struct_def, res)
-    }
-
-    /// call `native_exist_channel`.
-    fn call_native_exist_channel(
-        &mut self,
-        context: &mut dyn InterpreterContext,
-        type_actual_tags: Vec<TypeTag>,
-    ) -> VMResult<()> {
-        let under_sender = self.operand_stack.pop_as::<bool>()?;
-
-        let (ap, struct_def) =
-            self.get_channel_resource_ap_and_struct_def(context, type_actual_tags, under_sender)?;
-        let (exists, _memsize) = context.resource_exists(&ap, struct_def)?;
-        self.operand_stack.push(Value::bool(exists))
-    }
-
-    /// call `native_move_from_channel`.
-    fn call_native_move_from_channel(
-        &mut self,
-        context: &mut dyn InterpreterContext,
-        type_actual_tags: Vec<TypeTag>,
-    ) -> VMResult<()> {
-        let from_sender = self.operand_stack.pop_as::<bool>()?;
-
-        let (ap, struct_def) =
-            self.get_channel_resource_ap_and_struct_def(context, type_actual_tags, from_sender)?;
-        let resource = context.move_resource_from(&ap, struct_def)?;
-        self.operand_stack.push(resource)
-    }
-
-    /// call `native_borrow_channel`.
-    fn call_native_borrow_channel(
-        &mut self,
-        context: &mut dyn InterpreterContext,
-        type_actual_tags: Vec<TypeTag>,
-    ) -> VMResult<()> {
-        let from_sender = self.operand_stack.pop_as::<bool>()?;
-
-        let (ap, struct_def) =
-            self.get_channel_resource_ap_and_struct_def(context, type_actual_tags, from_sender)?;
-        let resource = context.borrow_global(&ap, struct_def)?;
-        self.operand_stack.push(Value::global_ref(resource))
-    }
-
     /// call `is_offchain`.
     fn call_is_offchain(&mut self, context: &mut dyn InterpreterContext) -> VMResult<()> {
         let is_offchain = context.vm_mode().is_offchain();
         self.operand_stack.push(Value::bool(is_offchain))
     }
 
-    /// call `native_get_txn_receiver`.
-    fn call_native_get_txn_receiver(&mut self) -> VMResult<()> {
-        if let Some(receiver) = self.txn_data.receiver() {
-            self.operand_stack.push(Value::address(receiver))
-        } else {
-            return Err(VMStatus::new(StatusCode::LINKER_ERROR));
-        }
-    }
-
-    /// call `native_is_channel_txn`.
-    fn call_native_is_channel_txn(&mut self) -> VMResult<()> {
-        let is_channel_txn = self.txn_data.is_channel_txn();
-        self.operand_stack.push(Value::bool(is_channel_txn))
-    }
-
-    /// call `native_get_txn_receiver_public_key`.
-    fn call_native_get_txn_receiver_public_key(&mut self) -> VMResult<()> {
-        if let Some(channel_metadata) = self.txn_data.channel_metadata() {
-            self.operand_stack.push(Value::byte_array(ByteArray::new(
-                channel_metadata.receiver_public_key.to_bytes().to_vec(),
-            )))
-        } else {
-            return Err(VMStatus::new(StatusCode::LINKER_ERROR));
-        }
-    }
-
-    /// call `native_get_txn_channel_sequence_number`.
-    fn call_native_get_txn_channel_sequence_number(&mut self) -> VMResult<()> {
-        if let Some(channel_metadata) = self.txn_data.channel_metadata() {
-            self.operand_stack
-                .push(Value::u64(channel_metadata.channel_sequence_number))
-        } else {
-            Err(VMStatus::new(StatusCode::LINKER_ERROR))
-        }
-    }
-
-    fn get_channel_metadata(&self) -> VMResult<&ChannelMetadataV2> {
-        self.txn_data.channel_metadata_v2.as_ref().ok_or(
+    fn get_channel_metadata(&self) -> VMResult<&ChannelMetadata> {
+        self.txn_data.channel_metadata.as_ref().ok_or(
             VMStatus::new(StatusCode::LINKER_ERROR)
                 .with_message("get channel metadata fail.".to_string()),
         )
@@ -1203,7 +1022,7 @@ where
 
     /// call `is_channel_txn`.
     fn call_is_channel_txn(&mut self) -> VMResult<()> {
-        let is_channel_txn = self.txn_data.is_channel_txn_v2();
+        let is_channel_txn = self.txn_data.is_channel_txn();
         self.operand_stack.push(Value::bool(is_channel_txn))
     }
 
@@ -1549,28 +1368,6 @@ where
     ) -> AccessPath {
         let struct_tag = resource_storage_key(module, idx);
         AccessPath::channel_resource_access_path(address, participant, struct_tag)
-    }
-
-    fn get_channel_address_pair(
-        txn_data: &TransactionMetadata,
-        is_sender: bool,
-    ) -> VMResult<(AccountAddress, AccountAddress)> {
-        let address: AccountAddress;
-        let participant: AccountAddress;
-        if is_sender {
-            address = txn_data.sender;
-            participant = match txn_data.channel_metadata() {
-                Some(p) => p.receiver,
-                None => return Err(VMStatus::new(StatusCode::LINKER_ERROR)),
-            };
-        } else {
-            participant = txn_data.sender;
-            address = match txn_data.channel_metadata() {
-                Some(p) => p.receiver,
-                None => return Err(VMStatus::new(StatusCode::LINKER_ERROR)),
-            };
-        }
-        Ok((address, participant))
     }
 }
 

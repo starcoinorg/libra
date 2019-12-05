@@ -40,7 +40,6 @@ pub enum Entry {
     Arguments(Vec<Argument>),
     MaxGas(u64),
     SequenceNumber(u64),
-    Receiver(String),
     /// Channel name, Channel txn proposer, Channel txn signed by participants.
     Channel(String, String, bool),
 }
@@ -59,13 +58,6 @@ impl FromStr for Entry {
                 return Err(ErrorKind::Other("sender cannot be empty".to_string()).into());
             }
             return Ok(Entry::Sender(s.to_ascii_lowercase()));
-        }
-        if s.starts_with("receiver:") {
-            let s = s[9..].trim_start().trim_end();
-            if s.is_empty() {
-                return Err(ErrorKind::Other("receiver cannot be empty".to_string()).into());
-            }
-            return Ok(Entry::Receiver(s.to_ascii_lowercase()));
         }
         if let Some(s) = strip(s, "args:") {
             let res: Result<Vec<_>> = s
@@ -175,7 +167,6 @@ pub struct Config<'a> {
     pub args: Vec<TransactionArgument>,
     pub max_gas: Option<u64>,
     pub sequence_number: Option<u64>,
-    pub receiver: Option<&'a Account>,
     pub channel: Option<ChannelTransactionConfig<'a>>,
 }
 
@@ -187,7 +178,6 @@ impl<'a> Config<'a> {
         let mut args = None;
         let mut max_gas = None;
         let mut sequence_number = None;
-        let mut receiver = None;
         let mut channel_transaction_config = None;
 
         for entry in entries {
@@ -195,10 +185,6 @@ impl<'a> Config<'a> {
                 Entry::Sender(name) => match sender {
                     None => sender = Some(config.get_account_for_name(name)?),
                     _ => return Err(ErrorKind::Other("sender already set".to_string()).into()),
-                },
-                Entry::Receiver(name) => match receiver {
-                    None => receiver = Some(config.get_account_for_name(name)?),
-                    _ => return Err(ErrorKind::Other("receiver already set".to_string()).into()),
                 },
                 Entry::Arguments(raw_args) => match args {
                     None => {
@@ -282,7 +268,6 @@ impl<'a> Config<'a> {
             args: args.unwrap_or_else(|| vec![]),
             max_gas,
             sequence_number,
-            receiver,
             channel: channel_transaction_config,
         })
     }
@@ -293,10 +278,6 @@ impl<'a> Config<'a> {
     }
 
     pub fn is_channel_transaction(&self) -> bool {
-        return self.receiver.is_some();
-    }
-
-    pub fn is_channel_transaction_v2(&self) -> bool {
         return self.channel.is_some();
     }
 }

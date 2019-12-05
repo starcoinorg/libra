@@ -13,7 +13,6 @@ use ir_to_bytecode::{
     parser::{parse_script, parse_script_or_module},
 };
 use ir_to_bytecode_syntax::ast::ScriptOrModule;
-use language_e2e_tests::account::Account;
 use language_e2e_tests::executor::FakeExecutor;
 use libra_config::config::VMPublishingOption;
 use libra_crypto::{
@@ -24,9 +23,8 @@ use libra_types::{
     access_path::{AccessPath, DataPath},
     account_address::AccountAddress,
     channel::{ChannelResource, Witness, WitnessData},
-    channel_account::{channel_account_struct_tag, ChannelAccountResource},
     transaction::{
-        Action, ChannelActionBody, ChannelTransactionPayloadBodyV2, ChannelTransactionPayloadV2,
+        Action, ChannelTransactionPayload, ChannelTransactionPayloadBody,
         Module as TransactionModule, RawTransaction, Script as TransactionScript, ScriptAction,
         SignedTransaction, TransactionOutput, TransactionStatus,
     },
@@ -279,36 +277,7 @@ fn make_module_transaction(
     .into_inner())
 }
 
-/// Creates and signs a channel action transaction.
 fn make_channel_transaction(
-    exec: &FakeExecutor,
-    config: &TransactionConfig,
-    action: ScriptAction,
-    receiver: &Account,
-    channel_sequence_number: u64,
-) -> Result<SignedTransaction> {
-    let params = get_transaction_parameters(exec, config);
-    //TODO support config channel sequence number by params.
-    let body = ChannelActionBody::new(
-        channel_sequence_number,
-        WriteSet::default(),
-        *receiver.address(),
-        action,
-    );
-    let payload = body.sign(&receiver.privkey, receiver.pubkey.clone());
-    Ok(RawTransaction::new_channel(
-        params.sender_addr,
-        params.sequence_number,
-        payload,
-        params.max_gas_amount,
-        params.gas_unit_price,
-        params.expiration_time,
-    )
-    .sign(params.privkey, params.pubkey.clone())?
-    .into_inner())
-}
-
-fn make_channel_transaction_v2(
     exec: &FakeExecutor,
     config: &TransactionConfig,
     action: ScriptAction,
@@ -324,14 +293,14 @@ fn make_channel_transaction_v2(
         witness_data,
         channel_txn_config.channel.sign_by_participants(&hash),
     );
-    let body = ChannelTransactionPayloadBodyV2::new(
+    let body = ChannelTransactionPayloadBody::new(
         channel_txn_config.channel.channel_address,
         *channel_txn_config.proposer.address(),
         action,
         witness,
     );
     let body_hash = body.hash();
-    let payload = ChannelTransactionPayloadV2::new(
+    let payload = ChannelTransactionPayload::new(
         body,
         channel_txn_config.channel.get_participant_public_keys(),
         channel_txn_config.channel.sign(&body_hash, |participant| {
@@ -342,7 +311,7 @@ fn make_channel_transaction_v2(
             }
         }),
     );
-    Ok(RawTransaction::new_channel_v2(
+    Ok(RawTransaction::new_channel(
         params.sender_addr,
         params.sequence_number,
         payload,
@@ -447,47 +416,6 @@ fn eval_transaction(
     log.append(EvaluationOutput::Stage(Stage::Parser));
 
     if transaction.config.is_channel_transaction() {
-        let receiver = transaction
-            .config
-            .receiver
-            .expect("receiver must exist in channel transaction.");
-
-        let access_path = AccessPath::channel_resource_access_path(
-            sender_addr,
-            *receiver.address(),
-            channel_account_struct_tag(),
-        );
-        let channel_sequence_number = exec
-            .read_from_access_path(&access_path)
-            .map(|bytes| {
-                ChannelAccountResource::make_from(bytes)
-                    .unwrap()
-                    .channel_sequence_number()
-            })
-            .unwrap_or(0);
-
-        let script_action =
-            unwrap_or_abort!(ScriptAction::parse_call_with_args(&transaction.input));
-        log.append(EvaluationOutput::Output(Box::new(OutputType::Action(
-            script_action.clone(),
-        ))));
-        // stage 5: execute the script
-        if transaction.config.is_stage_disabled(Stage::Runtime) {
-            return Ok(Status::Success);
-        }
-        log.append(EvaluationOutput::Stage(Stage::Runtime));
-        let channel_transaction = make_channel_transaction(
-            &exec,
-            &transaction.config,
-            script_action,
-            receiver,
-            channel_sequence_number,
-        )?;
-        let txn_output = unwrap_or_abort!(run_transaction(exec, channel_transaction));
-        log.append(EvaluationOutput::Output(Box::new(
-            OutputType::TransactionOutput(txn_output),
-        )));
-    } else if transaction.config.is_channel_transaction_v2() {
         let channel_txn_config = transaction
             .config
             .channel
@@ -558,7 +486,7 @@ fn eval_transaction(
             return Ok(Status::Success);
         }
         log.append(EvaluationOutput::Stage(Stage::Runtime));
-        let channel_transaction = make_channel_transaction_v2(
+        let channel_transaction = make_channel_transaction(
             &exec,
             &transaction.config,
             script_action,

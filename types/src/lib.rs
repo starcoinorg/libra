@@ -10,7 +10,6 @@ pub mod block_info;
 pub mod block_metadata;
 pub mod byte_array;
 pub mod channel;
-pub mod channel_account;
 pub mod contract_event;
 pub mod crypto_proxies;
 pub mod event;
