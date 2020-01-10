@@ -41,6 +41,7 @@ use rand::{rngs::StdRng, SeedableRng};
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::runtime::Handle;
 
 pub struct MintManager {
@@ -169,8 +170,7 @@ impl MintManager {
                                     };
 
                                     //compute current block state id
-                                    let timestamp_usecs =
-                                        quorum_cert.ledger_info().ledger_info().timestamp_usecs() + 10;
+                                    let timestamp_usecs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
                                     let tmp_id = HashValue::random();
                                     let block_meta_data = BlockMetadata::new(
                                         parent_block_id.clone(),
