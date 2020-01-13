@@ -14,7 +14,7 @@ use async_std::task;
 use consensus_types::block_retrieval::BlockRetrievalResponse;
 use consensus_types::payload_ext::BlockPayloadExt;
 use executor::Executor;
-use futures::channel::mpsc;
+use futures::{channel::mpsc, SinkExt};
 use grpc_helpers::ServerHandle;
 use grpcio::Server;
 use libra_config::config::NodeConfig;
@@ -51,6 +51,67 @@ pub struct PowConsensusProvider {
     sync_block_receiver: Option<mpsc::Receiver<(PeerId, BlockRetrievalResponse<BlockPayloadExt>)>>,
     sync_signal_receiver: Option<mpsc::Receiver<(PeerId, (u64, HashValue))>>,
     new_block_receiver: Option<mpsc::Receiver<u64>>,
+    stop_inner: StopInner,
+}
+
+struct StopInner {
+    sync_stop_sender: mpsc::Sender<()>,
+    sync_stop_receiver: Option<mpsc::Receiver<()>>,
+    chain_stop_sender: mpsc::Sender<()>,
+    chain_stop_receiver: Option<mpsc::Receiver<()>>,
+    mint_stop_sender: mpsc::Sender<()>,
+    mint_stop_receiver: Option<mpsc::Receiver<()>>,
+    state_stop_sender: mpsc::Sender<()>,
+    state_stop_receiver: Option<mpsc::Receiver<()>>,
+}
+
+impl StopInner {
+    fn new() -> Self {
+        let (sync_stop_sender, sync_stop_receiver) = mpsc::channel(1);
+        let (chain_stop_sender, chain_stop_receiver) = mpsc::channel(1);
+        let (mint_stop_sender, mint_stop_receiver) = mpsc::channel(1);
+        let (state_stop_sender, state_stop_receiver) = mpsc::channel(1);
+
+        StopInner {
+            sync_stop_sender,
+            sync_stop_receiver: Some(sync_stop_receiver),
+            chain_stop_sender,
+            chain_stop_receiver: Some(chain_stop_receiver),
+            mint_stop_sender,
+            mint_stop_receiver: Some(mint_stop_receiver),
+            state_stop_sender,
+            state_stop_receiver: Some(state_stop_receiver),
+        }
+    }
+
+    fn take_receiver(
+        &mut self,
+    ) -> (
+        mpsc::Receiver<()>,
+        mpsc::Receiver<()>,
+        mpsc::Receiver<()>,
+        mpsc::Receiver<()>,
+    ) {
+        let sync_stop_receiver = self.sync_stop_receiver.take().unwrap();
+        let chain_stop_receiver = self.chain_stop_receiver.take().unwrap();
+        let mint_stop_receiver = self.mint_stop_receiver.take().unwrap();
+        let state_stop_receiver = self.state_stop_receiver.take().unwrap();
+        (
+            sync_stop_receiver,
+            chain_stop_receiver,
+            mint_stop_receiver,
+            state_stop_receiver,
+        )
+    }
+
+    fn stop(&self) {
+        task::block_on(async move {
+            let _ = self.state_stop_sender.clone().send(()).await;
+            let _ = self.sync_stop_sender.clone().send(()).await;
+            let _ = self.mint_stop_sender.clone().send(()).await;
+            let _ = self.chain_stop_sender.clone().send(()).await;
+        });
+    }
 }
 
 impl PowConsensusProvider {
@@ -92,7 +153,10 @@ impl PowConsensusProvider {
             make_block_storage_service(node_config, &Arc::clone(&block_store));
 
         //Start miner proxy server
-        let mine_state = MineStateManager::new(BlockIndex::new(block_store.clone()));
+        let mine_state = MineStateManager::new(
+            BlockIndex::new(block_store.clone()),
+            node_config.consensus.dev_mode,
+        );
         let miner_rpc_addr = String::from(&node_config.consensus.miner_rpc_address);
         let mut miner_proxy = setup_minerproxy_service(mine_state.clone(), miner_rpc_addr.clone());
         miner_proxy.start();
@@ -130,7 +194,11 @@ impl PowConsensusProvider {
             sync_signal_sender,
             node_config.storage.dir(),
             new_block_sender,
+            node_config.consensus.dev_mode,
         );
+
+        //stop channel
+        let stop_inner = StopInner::new();
         Self {
             runtime: Some(runtime),
             event_handle: Some(event_handle),
@@ -144,6 +212,7 @@ impl PowConsensusProvider {
             sync_block_receiver: Some(sync_block_receiver),
             sync_signal_receiver: Some(sync_signal_receiver),
             new_block_receiver: Some(new_block_receiver),
+            stop_inner,
         }
     }
 
@@ -158,6 +227,10 @@ impl PowConsensusProvider {
         sync_block_receiver: mpsc::Receiver<(PeerId, BlockRetrievalResponse<BlockPayloadExt>)>,
         sync_signal_receiver: mpsc::Receiver<(PeerId, (u64, HashValue))>,
         new_block_receiver: mpsc::Receiver<u64>,
+        sync_stop_receiver: mpsc::Receiver<()>,
+        chain_stop_receiver: mpsc::Receiver<()>,
+        mint_stop_receiver: mpsc::Receiver<()>,
+        state_stop_receiver: mpsc::Receiver<()>,
     ) {
         match self.event_handle.take() {
             Some(mut handle) => {
@@ -167,16 +240,19 @@ impl PowConsensusProvider {
                     .expect("block_cache_receiver is none.");
 
                 //mint
-                handle
-                    .mint_manager
-                    .borrow()
-                    .mint(executor.clone(), self_key, new_block_receiver);
+                handle.mint_manager.borrow().mint(
+                    executor.clone(),
+                    self_key,
+                    new_block_receiver,
+                    mint_stop_receiver,
+                );
 
                 //msg
                 handle.chain_state_handle(
                     executor.clone(),
                     chain_state_network_sender,
                     chain_state_network_events,
+                    state_stop_receiver,
                 );
                 handle.event_process(
                     executor.clone(),
@@ -185,16 +261,18 @@ impl PowConsensusProvider {
                 );
 
                 //save
-                handle
-                    .chain_manager
-                    .borrow()
-                    .save_block(block_cache_receiver, executor.clone());
+                handle.chain_manager.borrow().save_block(
+                    block_cache_receiver,
+                    executor.clone(),
+                    chain_stop_receiver,
+                );
 
                 //sync
                 handle.sync_manager.borrow().sync_block_msg(
                     executor.clone(),
                     sync_block_receiver,
                     sync_signal_receiver,
+                    sync_stop_receiver,
                 );
 
                 //TODO:orphan
@@ -242,6 +320,9 @@ impl ConsensusProvider for PowConsensusProvider {
             .take()
             .expect("new_block_receiver is none.");
 
+        let (sync_stop_receiver, chain_stop_receiver, mint_stop_receiver, state_stop_receiver) =
+            self.stop_inner.take_receiver();
+
         self.event_handle(
             executor,
             chain_state_network_sender,
@@ -252,6 +333,10 @@ impl ConsensusProvider for PowConsensusProvider {
             sync_block_receiver,
             sync_signal_receiver,
             new_block_receiver,
+            sync_stop_receiver,
+            chain_stop_receiver,
+            mint_stop_receiver,
+            state_stop_receiver,
         );
         info!("PowConsensusProvider start succ.");
         Ok(())
@@ -261,6 +346,8 @@ impl ConsensusProvider for PowConsensusProvider {
         if let Some(miner_proxy) = self.miner_proxy.take() {
             drop(miner_proxy);
         }
+
+        self.stop_inner.stop();
 
         if let Some(runtime) = self.runtime.take() {
             drop(runtime);

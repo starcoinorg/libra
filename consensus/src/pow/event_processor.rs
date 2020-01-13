@@ -54,6 +54,7 @@ pub struct EventProcessor {
     pub chain_manager: Arc<AtomicRefCell<ChainManager>>,
     pub mint_manager: Arc<AtomicRefCell<MintManager>>,
     pub block_cache_receiver: Option<mpsc::Receiver<Block<BlockPayloadExt>>>,
+    pub dev_mode: bool,
 }
 
 impl EventProcessor {
@@ -72,6 +73,7 @@ impl EventProcessor {
         sync_signal_sender: mpsc::Sender<(PeerId, (u64, HashValue))>,
         dump_path: PathBuf,
         new_block_sender: mpsc::Sender<u64>,
+        dev_mode: bool,
     ) -> Self {
         let (block_cache_sender, block_cache_receiver) = mpsc::channel(1024);
         let chain_manager = Arc::new(AtomicRefCell::new(ChainManager::new(
@@ -102,6 +104,7 @@ impl EventProcessor {
             block_store.clone(),
             chain_manager.clone(),
             mine_state,
+            dev_mode,
         )));
         EventProcessor {
             block_cache_sender,
@@ -115,6 +118,7 @@ impl EventProcessor {
             chain_manager,
             mint_manager,
             block_cache_receiver: Some(block_cache_receiver),
+            dev_mode,
         }
     }
 
@@ -123,13 +127,14 @@ impl EventProcessor {
         executor: Handle,
         chain_state_network_sender: ChainStateNetworkSender,
         chain_state_network_events: ChainStateNetworkEvents,
+        state_stop_receiver: mpsc::Receiver<()>,
     ) {
         let cs_req_handle = ChainStateRequestHandle::new(
             chain_state_network_sender,
             chain_state_network_events,
             self.block_store.clone(),
         );
-        executor.spawn(cs_req_handle.start());
+        executor.spawn(cs_req_handle.start(state_stop_receiver));
     }
 
     pub fn event_process(
@@ -149,6 +154,7 @@ impl EventProcessor {
         let sync_signal_sender = self.sync_signal_sender.clone();
         let mut sync_block_sender = self.sync_block_sender.clone();
         let mut block_cache_sender = self.block_cache_sender.clone();
+        let dev_mode = self.dev_mode;
         let fut = async move {
             while let Some(Ok(message)) = all_events.next().await {
                 match message {
@@ -202,6 +208,7 @@ impl EventProcessor {
                                                 solution,
                                                 algo,
                                                 &target,
+                                                dev_mode,
                                             );
 
                                             if verify {

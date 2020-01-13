@@ -101,6 +101,16 @@ pub struct Proof {
     pub target: U256,
 }
 
+impl Default for Proof {
+    fn default() -> Self {
+        Proof {
+            solution: Default::default(),
+            nonce: 0,
+            algo: Algo::CUCKOO,
+            target: U256::max_value(),
+        }
+    }
+}
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct MineCtx {
     pub header: Vec<u8>,

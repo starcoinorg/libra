@@ -21,6 +21,11 @@ use storage_client::{StorageRead, StorageWrite};
 use tokio::runtime::Handle;
 
 pub struct ChainManager {
+    inner: ChainInner,
+}
+
+#[derive(Clone)]
+struct ChainInner {
     block_store: Arc<ConsensusDB>,
     state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
     block_tree: Arc<RwLock<BlockTree>>,
@@ -54,7 +59,7 @@ impl ChainManager {
             dump_path,
         )));
 
-        ChainManager {
+        let inner = ChainInner {
             block_store,
             state_computer,
             block_tree,
@@ -62,7 +67,9 @@ impl ChainManager {
             author,
             read_storage,
             new_block_sender,
-        }
+        };
+
+        ChainManager { inner }
     }
 
     pub fn _process_orphan_blocks(&self) {
@@ -73,14 +80,10 @@ impl ChainManager {
         &self,
         mut block_cache_receiver: mpsc::Receiver<Block<BlockPayloadExt>>,
         executor: Handle,
+        mut chain_stop_receiver: mpsc::Receiver<()>,
     ) {
-        let block_db = self.block_store.clone();
-        let orphan_blocks = self.orphan_blocks.clone();
-        let state_computer = self.state_computer.clone();
-        let author = self.author.clone();
-        let block_tree = self.block_tree.clone();
-        let _read_storage = self.read_storage.clone();
-        let mut new_block_sender = self.new_block_sender.clone();
+        let chain_inner = self.inner.clone();
+        let mut new_block_sender = self.inner.new_block_sender.clone();
         let chain_fut = async move {
             new_block_sender
                 .send(0)
@@ -98,12 +101,12 @@ impl ChainManager {
                     // 1. orphan block
                     let parent_block_id = block.parent_id();
                     let block_index = BlockIndex::new(&block.id(), &parent_block_id);
-                    let mut chain_lock = block_tree.write().compat().await.unwrap();
+                    let mut chain_lock = chain_inner.block_tree.write().compat().await.unwrap();
                     if chain_lock.block_exist(&parent_block_id) && !chain_lock.block_exist(&block.id()) {
                         // 2. find ancestors
                         let (ancestors, pre_block_index) = chain_lock.find_ancestor_until_main_chain(&parent_block_id).expect("find ancestors err.");
                         // 3. find blocks
-                        let blocks = block_db.get_blocks_by_hashs::<BlockPayloadExt>(ancestors).expect("find blocks err.");
+                        let blocks = chain_inner.block_store.get_blocks_by_hashs::<BlockPayloadExt>(ancestors).expect("find blocks err.");
 
                         let mut commit_txn_vec = Vec::<(BlockMetadata, Vec<SignedTransaction>)>::new();
                         for b in blocks {
@@ -124,7 +127,7 @@ impl ChainManager {
                         commit_txn_vec.push((block_meta_data.clone(), payload.clone()));
 
                         // 4. call pre_compute
-                        match state_computer.compute_by_hash(&pre_compute_grandpa_block_id, &parent_block_id, &block.id(), commit_txn_vec).await {
+                        match chain_inner.state_computer.compute_by_hash(&pre_compute_grandpa_block_id, &parent_block_id, &block.id(), commit_txn_vec).await {
                             Ok(processed_vm_output) => {
                                 let executed_trees = processed_vm_output.executed_trees();
                                 let state_id = executed_trees.state_root();
@@ -168,23 +171,26 @@ impl ChainManager {
                                     let (new_root, latest_height) = chain_lock.add_block_info(block, &parent_block_id, processed_vm_output, commit_data).await.expect("add_block_info failed.");
                                     if new_root {
                                         new_block_sender.send(latest_height).await.expect("new_block_sender send msg err.");
-                                        chain_lock.print_block_chain_root(author);
+                                        chain_lock.print_block_chain_root(chain_inner.author);
                                     }
                                 } else {
-                                    warn!("Peer id {:?}, Drop block {:?}, block version is {}, vm output version is {}", author, block.id(),
+                                    warn!("Peer id {:?}, Drop block {:?}, block version is {}, vm output version is {}", chain_inner.author, block.id(),
                                     block.quorum_cert().ledger_info().ledger_info().commit_info().version(), txn_len);
                                 }
                             } else {
-                                warn!("Peer id {:?}, Drop block {:?}, parent_block_id {:?}, grandpa_block_id {:?}", author, block.id(), parent_block_id, pre_compute_grandpa_block_id);
+                                warn!("Peer id {:?}, Drop block {:?}, parent_block_id {:?}, grandpa_block_id {:?}", chain_inner.author, block.id(), parent_block_id, pre_compute_grandpa_block_id);
                             }
                         }
                         Err(e) => {error!("error: {:?}", e)},
                     }
                 } else {
                     //save orphan block
-                    let mut write_lock = orphan_blocks.lock().compat().await.unwrap();
+                    let mut write_lock = chain_inner.orphan_blocks.lock().compat().await.unwrap();
                     write_lock.insert(block_index.parent_id(), vec![block_index.id()]);
                 }
+                    }
+                    _ = chain_stop_receiver.select_next_some() => {
+                        break;
                     }
                     complete => {
                        break;
@@ -196,7 +202,8 @@ impl ChainManager {
     }
 
     pub async fn chain_root(&self) -> Option<HashValue> {
-        self.block_tree
+        self.inner
+            .block_tree
             .clone()
             .read()
             .compat()
@@ -206,7 +213,8 @@ impl ChainManager {
     }
 
     pub async fn block_exist(&self, block_hash: &HashValue) -> bool {
-        self.block_tree
+        self.inner
+            .block_tree
             .clone()
             .read()
             .compat()
@@ -216,7 +224,8 @@ impl ChainManager {
     }
 
     pub async fn chain_height_and_root(&self) -> Option<(u64, BlockIndex)> {
-        self.block_tree
+        self.inner
+            .block_tree
             .clone()
             .read()
             .compat()

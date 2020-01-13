@@ -28,6 +28,11 @@ use std::sync::Arc;
 use tokio::runtime::Handle;
 
 pub struct SyncManager {
+    inner: SyncInner,
+}
+
+#[derive(Clone)]
+struct SyncInner {
     author: AccountAddress,
     self_sender: channel::Sender<Result<Event<ConsensusMsg>>>,
     network_sender: ConsensusNetworkSender,
@@ -45,7 +50,7 @@ impl SyncManager {
         block_cache_sender: mpsc::Sender<Block<BlockPayloadExt>>,
         chain_manager: Arc<AtomicRefCell<ChainManager>>,
     ) -> Self {
-        SyncManager {
+        let inner = SyncInner {
             author,
             self_sender,
             network_sender,
@@ -53,7 +58,9 @@ impl SyncManager {
             chain_manager,
             sync_block_cache: Arc::new(Mutex::new(HashMap::new())),
             sync_block_height: Arc::new(AtomicU64::new(0)),
-        }
+        };
+
+        SyncManager { inner }
     }
 
     pub fn sync_block_msg(
@@ -61,14 +68,9 @@ impl SyncManager {
         executor: Handle,
         mut sync_block_receiver: mpsc::Receiver<(PeerId, BlockRetrievalResponse<BlockPayloadExt>)>,
         mut sync_signal_receiver: mpsc::Receiver<(PeerId, (u64, HashValue))>,
+        mut sync_stop_receiver: mpsc::Receiver<()>,
     ) {
-        let sync_network_sender = self.network_sender.clone();
-        let mut sync_block_cache_sender = self.block_cache_sender.clone();
-        let self_peer_id = self.author.clone();
-        let sync_self_sender = self.self_sender.clone();
-        let chain_manager = self.chain_manager.clone();
-        let max_height = self.sync_block_height.clone();
-        let sync_block_cache = self.sync_block_cache.clone();
+        let mut sync_inner = self.inner.clone();
 
         let sync_fut = async move {
             loop {
@@ -76,11 +78,11 @@ impl SyncManager {
                                     (peer_id, (height, root_hash)) = sync_signal_receiver.select_next_some() => {
                                         //1. sync data from latest block
                                         //TODO:timeout
-                                        if max_height.load(Ordering::Relaxed) < height {
-                                            max_height.store(height, Ordering::Relaxed);
+                                        if sync_inner.sync_block_height.load(Ordering::Relaxed) < height {
+                                            sync_inner.sync_block_height.store(height, Ordering::Relaxed);
                                             let sync_block_req_msg = Self::sync_block_req(root_hash);
 
-                                            EventProcessor::send_consensus_msg(peer_id, &mut sync_network_sender.clone(), self_peer_id.clone(), &mut sync_self_sender.clone(), sync_block_req_msg).await;
+                                            EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(), &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
                                         }
                                     },
                                     (peer_id, sync_block_resp) = sync_block_receiver.select_next_some() => {
@@ -90,7 +92,7 @@ impl SyncManager {
 
                                         let mut end_flag = false;
                                         let mut end_block_hash = None;
-                                        let mut sync_block_cache_lock = sync_block_cache.clone().lock().compat().await.unwrap();
+                                        let mut sync_block_cache_lock = sync_inner.sync_block_cache.clone().lock().compat().await.unwrap();
                                         if blocks.len() > 0 {
                                             if !sync_block_cache_lock.contains_key(&peer_id) {
                                                 let block_vec = Vec::new();
@@ -98,7 +100,7 @@ impl SyncManager {
                                             }
                                             for block in blocks {
                                                 let tmp_hash = block.id();
-                                                if chain_manager.borrow().block_exist(&tmp_hash).await {
+                                                if sync_inner.chain_manager.borrow().block_exist(&tmp_hash).await {
                                                     end_flag = true;
                                                     break;
                                                 };
@@ -113,13 +115,13 @@ impl SyncManager {
                                             let mut block_vec = sync_block_cache_lock.remove(&peer_id).expect("peer block not exist.");
                                             block_vec.reverse();
                                             for b in block_vec {
-                                                sync_block_cache_sender.send(b).await.expect("send block err.");
+                                                sync_inner.block_cache_sender.send(b).await.expect("send block err.");
                                             }
                                         } else {
                                             match status {
                                                 BlockRetrievalStatus::Succeeded => {
                                                     let sync_block_req_msg = Self::sync_block_req(end_block_hash.unwrap());
-                                                    EventProcessor::send_consensus_msg(peer_id, &mut sync_network_sender.clone(), self_peer_id.clone(), &mut sync_self_sender.clone(), sync_block_req_msg).await;
+                                                    EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(), &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
                                                 }
                                                 _ => {
                 //                                    BlockRetrievalStatus::IdNotFound
@@ -128,6 +130,9 @@ impl SyncManager {
                                                 }
                                             };
                                         }
+                                    }
+                                    _ = sync_stop_receiver.select_next_some() => {
+                                        break;
                                     }
                                     complete => {
                                         break;

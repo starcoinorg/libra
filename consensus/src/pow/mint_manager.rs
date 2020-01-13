@@ -5,6 +5,7 @@ use crate::pow::mine_state::{BlockIndex, MineStateManager};
 use crate::state_replication::{StateComputer, TxnManager};
 use anyhow::Result;
 use async_std::sync::Sender;
+use async_std::task;
 use atomic_refcell::AtomicRefCell;
 use consensus_types::{
     block::Block,
@@ -38,13 +39,20 @@ use network::{
     validator_network::{ConsensusNetworkSender, Event},
 };
 use rand::{rngs::StdRng, SeedableRng};
+use rand::{thread_rng, Rng};
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::sync::Arc;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::runtime::Handle;
 
 pub struct MintManager {
+    inner: MintInner,
+}
+
+#[derive(Clone)]
+struct MintInner {
     txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
     state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
     network_sender: ConsensusNetworkSender,
@@ -53,6 +61,7 @@ pub struct MintManager {
     block_store: Arc<ConsensusDB>,
     chain_manager: Arc<AtomicRefCell<ChainManager>>,
     mine_state: MineStateManager<BlockIndex>,
+    dev_mode: bool,
 }
 
 impl MintManager {
@@ -65,8 +74,9 @@ impl MintManager {
         block_store: Arc<ConsensusDB>,
         chain_manager: Arc<AtomicRefCell<ChainManager>>,
         mine_state: MineStateManager<BlockIndex>,
+        dev_mode: bool,
     ) -> Self {
-        MintManager {
+        let inner = MintInner {
             txn_manager,
             state_computer,
             network_sender,
@@ -75,7 +85,10 @@ impl MintManager {
             block_store,
             chain_manager,
             mine_state,
-        }
+            dev_mode,
+        };
+
+        MintManager { inner }
     }
 
     pub fn mint(
@@ -83,15 +96,9 @@ impl MintManager {
         executor: Handle,
         self_pri_key: Ed25519PrivateKey,
         mut new_block_receiver: mpsc::Receiver<u64>,
+        mut mint_stop_receiver: mpsc::Receiver<()>,
     ) {
-        let mint_txn_manager = self.txn_manager.clone();
-        let mint_state_computer = self.state_computer.clone();
-        let mint_network_sender = self.network_sender.clone();
-        let mint_author = self.author;
-        let self_sender = self.self_sender.clone();
-        let block_db = self.block_store.clone();
-        let chain_manager = self.chain_manager.clone();
-        let mut mine_state = self.mine_state.clone();
+        let mint_inner = self.inner.clone();
         let self_pub_key = self_pri_key.public_key();
         let self_signer_address = AccountAddress::from_public_key(&self_pub_key);
         let (_tmp_pri_key, tmp_pub_key) = network_keypair();
@@ -119,7 +126,7 @@ impl MintManager {
 
                         info!(
                             "Peer : {:?}, Minter : {:?} find a new block : {:?}",
-                            mint_author,
+                            mint_inner.author,
                             self_signer_address,
                             block.id()
                         );
@@ -132,15 +139,22 @@ impl MintManager {
                         };
 
                         EventProcessor::broadcast_consensus_msg(
-                            &mut mint_network_sender.clone(),
+                            &mut mint_inner.network_sender.clone(),
                             true,
-                            mint_author,
-                            &mut self_sender.clone(),
+                            mint_inner.author,
+                            &mut mint_inner.self_sender.clone(),
                             msg,
                         )
                             .await;
                     }
                     latest_height = new_block_receiver.select_next_some() => {
+                        if mint_inner.dev_mode {
+                            task::block_on(async move {
+                                let mut rng = thread_rng();
+                                let time: u64 = rng.gen_range(1, 4);
+                                task::sleep(Duration::from_secs(time)).await;
+                            });
+                        }
                         for key in proof_sender_map.keys() {
                             if let Some(tmp_tx) = proof_sender_map.get(key) {
                                 tmp_tx.send(None).await;
@@ -148,17 +162,17 @@ impl MintManager {
                         }
                         proof_sender_map.clear();
 
-                        match mint_txn_manager.pull_txns(100, vec![]).await {
+                        match mint_inner.txn_manager.pull_txns(100, vec![]).await {
                             Ok(txns) => {
                                 if let Some((height, parent_block)) =
-                                    chain_manager.borrow().chain_height_and_root().await
+                                    mint_inner.chain_manager.borrow().chain_height_and_root().await
                                 {
                                     //create block
                                     let parent_block_id = parent_block.id();
                                     let grandpa_block_id = parent_block.parent_id();
                                     //QC with parent block id
                                     let quorum_cert = if parent_block_id != genesis_id() {
-                                        let parent_block = block_db
+                                        let parent_block = mint_inner.block_store
                                             .get_block_by_hash::<BlockPayloadExt>(&parent_block_id)
                                             .expect("block not find in database err.");
                                         parent_block.quorum_cert().clone()
@@ -178,7 +192,7 @@ impl MintManager {
                                         BTreeMap::new(),
                                         self_signer_address,
                                     );
-                                    match mint_state_computer
+                                    match mint_inner.state_computer
                                         .compute_by_hash(
                                             &grandpa_block_id,
                                             &parent_block_id,
@@ -225,11 +239,13 @@ impl MintManager {
                                             );
 
                                             //mint
-                                            mine_state.set_latest_block(parent_block_id);
+                                            let mut mine_state = mint_inner.mine_state.clone();
+                                            mine_state.clone().set_latest_block(parent_block_id);
                                             let (rx, tx) = mine_state.mine_block(li.hash().to_vec());
+
                                             proof_sender_map.insert(latest_height, tx);
-                                            let wait_mint_network_sender = mint_network_sender.clone();
-                                            let wait_self_sender = self_sender.clone();
+                                            let wait_mint_network_sender = mint_inner.network_sender.clone();
+                                            let wait_self_sender = mint_inner.self_sender.clone();
                                             let mut wait_block_data_sender = block_data_sender.clone();
                                             let wait_fut = async move {
                                                 if let Some(proof) = rx.recv().await.unwrap() {
@@ -249,7 +265,7 @@ impl MintManager {
                                                         new_qc,
                                                     );
 
-                                                    wait_block_data_sender.send(block_data).await.unwrap();
+                                                    let _ = wait_block_data_sender.send(block_data).await;
                                                 }
                                             };
 
@@ -263,6 +279,9 @@ impl MintManager {
                             }
                             _ => {}
                         }
+                    }
+                    _ = mint_stop_receiver.select_next_some() => {
+                        break;
                     }
                     complete => {
                        break;
