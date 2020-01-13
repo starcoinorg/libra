@@ -5,6 +5,7 @@ use crate::pow::mine_state::{BlockIndex, MineStateManager};
 use crate::state_replication::{StateComputer, TxnManager};
 use anyhow::Result;
 use async_std::sync::Sender;
+use async_std::task;
 use atomic_refcell::AtomicRefCell;
 use consensus_types::{
     block::Block,
@@ -42,7 +43,6 @@ use rand::{thread_rng, Rng};
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::sync::Arc;
-use std::thread::sleep;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::runtime::Handle;
@@ -149,9 +149,11 @@ impl MintManager {
                     }
                     latest_height = new_block_receiver.select_next_some() => {
                         if mint_inner.dev_mode {
-                            let mut rng = thread_rng();
-                            let time: u64 = rng.gen_range(1, 4);
-                            sleep(Duration::from_secs(time));
+                            task::block_on(async move {
+                                let mut rng = thread_rng();
+                                let time: u64 = rng.gen_range(1, 4);
+                                task::sleep(Duration::from_secs(time)).await;
+                            });
                         }
                         for key in proof_sender_map.keys() {
                             if let Some(tmp_tx) = proof_sender_map.get(key) {
@@ -263,7 +265,7 @@ impl MintManager {
                                                         new_qc,
                                                     );
 
-                                                    wait_block_data_sender.send(block_data).await.unwrap();
+                                                    let _ = wait_block_data_sender.send(block_data).await;
                                                 }
                                             };
 
