@@ -70,14 +70,22 @@ where
     };
     let time_plan = BLOCK_TIME_SEC * (blocks.len() - 1) as u32;
     // new_target = old_target * time_used/time_plan
-    // TODO: avoid the target growth too fast.
-    let new_target = if let Some(target) = (target / time_plan.into()).checked_mul(time_used.into())
-    {
-        target
-    } else {
-        info!("target large than max value, set to 1_difficult");
-        difficult_1_target()
-    };
+    // avoid the target increase or reduce too fast.
+    let new_target =
+        if let Some(new_target) = (target / time_plan.into()).checked_mul(time_used.into()) {
+            if new_target / 2.into() > target {
+                info!("target increase too fast, limit to 2 times");
+                target * 2
+            } else if new_target < target / 2.into() {
+                info!("target reduce too fase, limit to 2 times");
+                target / 2.into()
+            } else {
+                new_target
+            }
+        } else {
+            info!("target large than max value, set to 1_difficult");
+            difficult_1_target()
+        };
 
     info!(
         "time_used:{:?}s, time_plan:{:?}s, each block used::{:?}s, target: {:?}",
