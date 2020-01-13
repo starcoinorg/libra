@@ -89,7 +89,7 @@ mod test {
         let (nonce, solution) = solve(&header, &target, &cfg);
         assert_eq!(
             true,
-            verify(&header, nonce, solution, &Algo::CUCKOO, &target)
+            verify(&header, nonce, solution, &Algo::CUCKOO, &target, false)
         );
     }
 }
