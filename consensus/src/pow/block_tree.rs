@@ -206,7 +206,7 @@ impl BlockTree {
 
         let total = 100;
         if self.height >= total {
-            self.main_chain.borrow_mut().remove(&(self.height - total))
+            self.main_chain.borrow_mut().remove(&(self.height - total));
         }
     }
 
@@ -424,13 +424,13 @@ impl BlockTree {
             block_index = Some(b_i.clone());
 
             let main_chain_id = match self.main_chain.borrow().get(&h) {
-                Some(block_index_from_cache) => block_index_from_cache.clone().id(),
+                Some(block_index_from_cache) => block_index_from_cache.id(),
                 None => {
                     let block_index = self
                         .block_store
                         .query_block_index_by_height(h)
                         .expect("query_block_index_by_height failed.");
-                    block_index.expect("block_index is none.")
+                    block_index.expect("block_index is none.").id()
                 }
             };
             if main_chain_id == current_id {
