@@ -203,6 +203,11 @@ impl BlockTree {
                 self.tail_height = tmp_height + 1;
             }
         }
+
+        let total = 100;
+        if self.height >= total {
+            self.main_chain.borrow_mut().remove(&(self.height - total));
+        }
     }
 
     async fn add_block_info_inner<T: Payload>(
@@ -418,15 +423,17 @@ impl BlockTree {
             latest_id = b_i.parent_id();
             block_index = Some(b_i.clone());
 
-            if self
-                .main_chain
-                .borrow()
-                .get(&h)
-                .expect("get block index from main chain err.")
-                .clone()
-                .id()
-                == current_id
-            {
+            let main_chain_id = match self.main_chain.borrow().get(&h) {
+                Some(block_index_from_cache) => block_index_from_cache.id(),
+                None => {
+                    let block_index = self
+                        .block_store
+                        .query_block_index_by_height(h)
+                        .expect("query_block_index_by_height failed.");
+                    block_index.expect("block_index is none.").id()
+                }
+            };
+            if main_chain_id == current_id {
                 break;
             } else {
                 ancestors.push(current_id);

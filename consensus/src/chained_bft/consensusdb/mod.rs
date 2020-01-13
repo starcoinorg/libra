@@ -269,6 +269,11 @@ impl ConsensusDB {
         Ok(block_index_list)
     }
 
+    pub fn query_block_index_by_height(&self, height: u64) -> Result<Option<BlockIndex>> {
+        let block_index: Option<BlockIndex> = self.db.get::<BlockIndexSchema>(&height)?;
+        Ok(block_index)
+    }
+
     fn latest_block_index(&self) -> Option<(u64, BlockIndex)> {
         let mut iter = self
             .db
