@@ -38,9 +38,12 @@ use network::{
     validator_network::{ConsensusNetworkSender, Event},
 };
 use rand::{rngs::StdRng, SeedableRng};
+use rand::{thread_rng, Rng};
 use std::collections::{BTreeMap, HashMap};
 use std::convert::TryInto;
 use std::sync::Arc;
+use std::thread::sleep;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::runtime::Handle;
 
@@ -58,6 +61,7 @@ struct MintInner {
     block_store: Arc<ConsensusDB>,
     chain_manager: Arc<AtomicRefCell<ChainManager>>,
     mine_state: MineStateManager<BlockIndex>,
+    dev_mode: bool,
 }
 
 impl MintManager {
@@ -70,6 +74,7 @@ impl MintManager {
         block_store: Arc<ConsensusDB>,
         chain_manager: Arc<AtomicRefCell<ChainManager>>,
         mine_state: MineStateManager<BlockIndex>,
+        dev_mode: bool,
     ) -> Self {
         let inner = MintInner {
             txn_manager,
@@ -80,6 +85,7 @@ impl MintManager {
             block_store,
             chain_manager,
             mine_state,
+            dev_mode,
         };
 
         MintManager { inner }
@@ -142,6 +148,11 @@ impl MintManager {
                             .await;
                     }
                     latest_height = new_block_receiver.select_next_some() => {
+                        if mint_inner.dev_mode {
+                            let mut rng = thread_rng();
+                            let time: u64 = rng.gen_range(1, 4);
+                            sleep(Duration::from_secs(time));
+                        }
                         for key in proof_sender_map.keys() {
                             if let Some(tmp_tx) = proof_sender_map.get(key) {
                                 tmp_tx.send(None).await;

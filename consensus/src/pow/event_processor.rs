@@ -104,6 +104,7 @@ impl EventProcessor {
             block_store.clone(),
             chain_manager.clone(),
             mine_state,
+            dev_mode,
         )));
         EventProcessor {
             block_cache_sender,
