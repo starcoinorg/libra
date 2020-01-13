@@ -73,7 +73,7 @@ where
     // avoid the target increase or reduce too fast.
     let new_target =
         if let Some(new_target) = (target / time_plan.into()).checked_mul(time_used.into()) {
-            if new_target > target * 2 {
+            if new_target / 2.into() > target {
                 info!("target increase too fast, limit to 2 times");
                 target * 2
             } else if new_target < target / 2.into() {
