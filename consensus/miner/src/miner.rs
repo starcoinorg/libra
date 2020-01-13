@@ -42,7 +42,17 @@ pub fn solve(header: &[u8], target: &U256, cfg: &MinerConfig) -> (u32, Solution)
     }
 }
 
-pub fn verify(header: &[u8], nonce: u32, solution: Solution, algo: &Algo, target: &U256) -> bool {
+pub fn verify(
+    header: &[u8],
+    nonce: u32,
+    solution: Solution,
+    algo: &Algo,
+    target: &U256,
+    dev_mode: bool,
+) -> bool {
+    if dev_mode {
+        return true;
+    }
     let mut pow_hash = [0u8; 32];
     match *algo {
         Algo::CUCKOO => {

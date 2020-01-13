@@ -229,6 +229,7 @@ impl MintManager {
                                             let mut mine_state = mint_inner.mine_state.clone();
                                             mine_state.clone().set_latest_block(parent_block_id);
                                             let (rx, tx) = mine_state.mine_block(li.hash().to_vec());
+
                                             proof_sender_map.insert(latest_height, tx);
                                             let wait_mint_network_sender = mint_inner.network_sender.clone();
                                             let wait_self_sender = mint_inner.self_sender.clone();
