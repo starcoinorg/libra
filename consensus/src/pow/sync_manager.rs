@@ -68,6 +68,7 @@ impl SyncManager {
         executor: Handle,
         mut sync_block_receiver: mpsc::Receiver<(PeerId, BlockRetrievalResponse<BlockPayloadExt>)>,
         mut sync_signal_receiver: mpsc::Receiver<(PeerId, (u64, HashValue))>,
+        mut sync_stop_receiver: mpsc::Receiver<()>,
     ) {
         let mut sync_inner = self.inner.clone();
 
@@ -129,6 +130,9 @@ impl SyncManager {
                                                 }
                                             };
                                         }
+                                    }
+                                    _ = sync_stop_receiver.select_next_some() => {
+                                        break;
                                     }
                                     complete => {
                                         break;

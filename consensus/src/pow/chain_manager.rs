@@ -80,6 +80,7 @@ impl ChainManager {
         &self,
         mut block_cache_receiver: mpsc::Receiver<Block<BlockPayloadExt>>,
         executor: Handle,
+        mut chain_stop_receiver: mpsc::Receiver<()>,
     ) {
         let chain_inner = self.inner.clone();
         let mut new_block_sender = self.inner.new_block_sender.clone();
@@ -187,6 +188,9 @@ impl ChainManager {
                     let mut write_lock = chain_inner.orphan_blocks.lock().compat().await.unwrap();
                     write_lock.insert(block_index.parent_id(), vec![block_index.id()]);
                 }
+                    }
+                    _ = chain_stop_receiver.select_next_some() => {
+                        break;
                     }
                     complete => {
                        break;

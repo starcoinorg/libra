@@ -90,6 +90,7 @@ impl MintManager {
         executor: Handle,
         self_pri_key: Ed25519PrivateKey,
         mut new_block_receiver: mpsc::Receiver<u64>,
+        mut mint_stop_receiver: mpsc::Receiver<()>,
     ) {
         let mint_inner = self.inner.clone();
         let self_pub_key = self_pri_key.public_key();
@@ -264,6 +265,9 @@ impl MintManager {
                             }
                             _ => {}
                         }
+                    }
+                    _ = mint_stop_receiver.select_next_some() => {
+                        break;
                     }
                     complete => {
                        break;

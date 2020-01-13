@@ -2,6 +2,7 @@ use crate::chained_bft::consensusdb::ConsensusDB;
 use chain_state::{ChainStateMsg, ChainStateRequest, ChainStateResponse};
 use consensus_types::block::Block;
 use consensus_types::payload_ext::BlockPayloadExt;
+use futures::channel::mpsc;
 use futures::StreamExt;
 use libra_logger::prelude::*;
 use network::proto::{ChainStateMsg as ChainStateMsgProto, ChainStateMsg_oneof};
@@ -29,7 +30,7 @@ impl ChainStateRequestHandle {
         }
     }
 
-    pub async fn start(mut self) {
+    pub async fn start(mut self, mut state_stop_receiver: mpsc::Receiver<()>) {
         let mut chain_state_network_events = self
             .chain_state_network_events
             .take()
@@ -98,6 +99,9 @@ impl ChainStateRequestHandle {
                         }
                     }
                 },
+                _ = state_stop_receiver.select_next_some() => {
+                    break;
+                }
                 complete => {
                    break;
                 }

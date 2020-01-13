@@ -123,13 +123,14 @@ impl EventProcessor {
         executor: Handle,
         chain_state_network_sender: ChainStateNetworkSender,
         chain_state_network_events: ChainStateNetworkEvents,
+        state_stop_receiver: mpsc::Receiver<()>,
     ) {
         let cs_req_handle = ChainStateRequestHandle::new(
             chain_state_network_sender,
             chain_state_network_events,
             self.block_store.clone(),
         );
-        executor.spawn(cs_req_handle.start());
+        executor.spawn(cs_req_handle.start(state_stop_receiver));
     }
 
     pub fn event_process(
