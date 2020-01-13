@@ -19,6 +19,7 @@ where
 {
     inner: Arc<Mutex<StateInner>>,
     block_index: B,
+    dev_mode: bool,
 }
 
 struct StateInner {
@@ -30,13 +31,14 @@ impl<B> MineStateManager<B>
 where
     B: TBlockIndex,
 {
-    pub fn new(block_index: B) -> Self {
+    pub fn new(block_index: B, dev_mode: bool) -> Self {
         MineStateManager {
             inner: Arc::new(Mutex::new(StateInner {
                 mine_ctx: None,
                 tx: None,
             })),
             block_index,
+            dev_mode,
         }
     }
 
@@ -72,6 +74,9 @@ where
     }
 
     fn mine_accept(&self, mine_ctx_req: &MineCtx, solution: Solution, nonce: u32) -> bool {
+        if self.dev_mode {
+            return true;
+        }
         let mut x = self.inner.lock().unwrap();
         if let Some(mine_ctx) = &x.mine_ctx {
             if mine_ctx.target.clone().is_none() {
@@ -85,6 +90,7 @@ where
                     solution.clone(),
                     &mine_ctx.algo.clone().unwrap(),
                     &target,
+                    false,
                 ) != true
                 {
                     return false;
@@ -123,6 +129,13 @@ where
             mine_ctx: Some(mine_ctx),
             tx: Some(tx.clone()),
         };
+        let tx1 = tx.clone();
+        if self.dev_mode {
+            task::block_on(async move {
+                info!("Received Mined block");
+                tx1.send(Some(Proof::default())).await;
+            });
+        }
         (rx, tx)
     }
 }

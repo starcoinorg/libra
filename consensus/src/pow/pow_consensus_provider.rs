@@ -92,7 +92,10 @@ impl PowConsensusProvider {
             make_block_storage_service(node_config, &Arc::clone(&block_store));
 
         //Start miner proxy server
-        let mine_state = MineStateManager::new(BlockIndex::new(block_store.clone()));
+        let mine_state = MineStateManager::new(
+            BlockIndex::new(block_store.clone()),
+            node_config.consensus.dev_mode,
+        );
         let miner_rpc_addr = String::from(&node_config.consensus.miner_rpc_address);
         let mut miner_proxy = setup_minerproxy_service(mine_state.clone(), miner_rpc_addr.clone());
         miner_proxy.start();
@@ -130,6 +133,7 @@ impl PowConsensusProvider {
             sync_signal_sender,
             node_config.storage.dir(),
             new_block_sender,
+            node_config.consensus.dev_mode,
         );
         Self {
             runtime: Some(runtime),
