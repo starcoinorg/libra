@@ -47,6 +47,8 @@ pub struct BlockTree {
     dump_path: PathBuf,
 }
 
+const TOTAL_BLOCK: u64 = 100;
+
 impl Drop for BlockTree {
     fn drop(&mut self) {
         let dump = self.to_dump();
@@ -204,9 +206,10 @@ impl BlockTree {
             }
         }
 
-        let total = 100;
-        if self.height >= total {
-            self.main_chain.borrow_mut().remove(&(self.height - total));
+        if self.height >= TOTAL_BLOCK {
+            self.main_chain
+                .borrow_mut()
+                .remove(&(self.height - TOTAL_BLOCK));
         }
     }
 
@@ -447,8 +450,12 @@ impl BlockTree {
     }
 
     pub fn print_block_chain_root(&self, peer_id: PeerId) {
-        let height = self.main_chain.borrow().len() as u64;
-        let begin_height = if height > 1000 { height - 300 } else { 0 };
+        let height = self.height;
+        let begin_height = if height > TOTAL_BLOCK {
+            height - (TOTAL_BLOCK / 2)
+        } else {
+            0
+        };
         for index in begin_height..height {
             info!(
                 "Main Chain Block, PeerId: {:?} , Height: {} , Block Root: {:?}",
