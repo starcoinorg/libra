@@ -52,6 +52,9 @@ where
     B: TBlockIndex,
 {
     fn get_current_mine_ctx(&self, algo: Algo) -> Option<MineCtx> {
+        if self.dev_mode {
+            return None;
+        }
         let mut inner = self.inner.lock().unwrap();
         let ctx = inner.mine_ctx.as_mut()?;
         let target = Some(get_next_work_required(
