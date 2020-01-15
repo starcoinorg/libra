@@ -108,8 +108,8 @@ impl StopInner {
         task::block_on(async move {
             let _ = self.state_stop_sender.clone().send(()).await;
             let _ = self.sync_stop_sender.clone().send(()).await;
-            let _ = self.mint_stop_sender.clone().send(()).await;
             let _ = self.chain_stop_sender.clone().send(()).await;
+            let _ = self.mint_stop_sender.clone().send(()).await;
         });
     }
 }
