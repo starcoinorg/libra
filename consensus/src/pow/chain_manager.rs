@@ -170,7 +170,7 @@ impl ChainManager {
 
                                                     let (new_root, latest_height) = chain_lock.add_block_info(block, &parent_block_id, processed_vm_output, commit_data).await.expect("add_block_info failed.");
                                                     if new_root {
-                                                        new_block_sender.send(latest_height).await.expect("new_block_sender send msg err.");
+                                                        let _ = new_block_sender.send(latest_height).await;
                                                         chain_lock.print_block_chain_root(chain_inner.author);
                                                     }
                                                 } else {
