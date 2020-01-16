@@ -179,6 +179,14 @@ impl PowConsensusProvider {
         let (sync_block_sender, sync_block_receiver) = mpsc::channel(1024);
         let (sync_signal_sender, sync_signal_receiver) = mpsc::channel(1024);
         let (new_block_sender, new_block_receiver) = mpsc::channel(1024);
+        let need_sync = (node_config
+            .validator_network
+            .as_ref()
+            .unwrap()
+            .seed_peers
+            .seed_peers
+            .len()
+            > 0);
         let event_handle = EventProcessor::new(
             network_sender,
             txn_manager,
@@ -195,6 +203,7 @@ impl PowConsensusProvider {
             node_config.storage.dir(),
             new_block_sender,
             node_config.consensus.dev_mode,
+            need_sync,
         );
 
         //stop channel
