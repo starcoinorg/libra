@@ -190,7 +190,7 @@ impl BlockTree {
     }
 
     fn prune(&mut self) {
-        let ct = 10;
+        let ct = 100;
         if self.tail_height + ct < self.height {
             let times = self.height - self.tail_height - ct;
             for _i in 0..times {
@@ -461,10 +461,7 @@ impl BlockTree {
                 "Main Chain Block, PeerId: {:?} , Height: {} , Block Root: {:?}",
                 peer_id,
                 index,
-                self.main_chain
-                    .borrow()
-                    .get(&index)
-                    .expect("print block err.")
+                self.main_chain.borrow().get(&index)
             );
         }
     }

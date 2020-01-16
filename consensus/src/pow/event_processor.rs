@@ -6,7 +6,6 @@ use crate::pow::mint_manager::MintManager;
 use crate::pow::sync_manager::SyncManager;
 use crate::state_replication::{StateComputer, TxnManager};
 use anyhow::{Error, Result};
-use atomic_refcell::AtomicRefCell;
 use channel;
 use consensus_types::block_retrieval::{
     BlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus,
@@ -50,9 +49,9 @@ pub struct EventProcessor {
     //sync
     sync_block_sender: mpsc::Sender<(PeerId, BlockRetrievalResponse<BlockPayloadExt>)>,
     sync_signal_sender: mpsc::Sender<(PeerId, (u64, HashValue))>,
-    pub sync_manager: Arc<AtomicRefCell<SyncManager>>,
-    pub chain_manager: Arc<AtomicRefCell<ChainManager>>,
-    pub mint_manager: Arc<AtomicRefCell<MintManager>>,
+    pub sync_manager: Arc<SyncManager>,
+    pub chain_manager: Arc<ChainManager>,
+    pub mint_manager: Arc<MintManager>,
     pub block_cache_receiver: Option<mpsc::Receiver<Block<BlockPayloadExt>>>,
     pub dev_mode: bool,
 }
@@ -76,7 +75,7 @@ impl EventProcessor {
         dev_mode: bool,
     ) -> Self {
         let (block_cache_sender, block_cache_receiver) = mpsc::channel(1024);
-        let chain_manager = Arc::new(AtomicRefCell::new(ChainManager::new(
+        let chain_manager = Arc::new(ChainManager::new(
             Arc::clone(&block_store),
             txn_manager.clone(),
             state_computer.clone(),
@@ -86,16 +85,16 @@ impl EventProcessor {
             write_storage,
             dump_path,
             new_block_sender,
-        )));
+        ));
 
-        let sync_manager = Arc::new(AtomicRefCell::new(SyncManager::new(
+        let sync_manager = Arc::new(SyncManager::new(
             author.clone(),
             self_sender.clone(),
             network_sender.clone(),
             block_cache_sender.clone(),
             chain_manager.clone(),
-        )));
-        let mint_manager = Arc::new(AtomicRefCell::new(MintManager::new(
+        ));
+        let mint_manager = Arc::new(MintManager::new(
             txn_manager.clone(),
             state_computer.clone(),
             network_sender.clone(),
@@ -105,7 +104,7 @@ impl EventProcessor {
             chain_manager.clone(),
             mine_state,
             dev_mode,
-        )));
+        ));
         EventProcessor {
             block_cache_sender,
             block_store,
@@ -172,7 +171,7 @@ impl EventProcessor {
                                 let block: Block<BlockPayloadExt> =
                                     Block::try_from(new_block).expect("parse block pb err.");
 
-                                debug!(
+                                info!(
                                     "Self is {:?}, Peer Id is {:?}, Block Id is {:?}, height {}",
                                     self_peer_id,
                                     peer_id,
@@ -214,10 +213,7 @@ impl EventProcessor {
                                             if verify {
                                                 if self_peer_id != peer_id {
                                                     if let Some((height, block_index)) =
-                                                        chain_manager
-                                                            .borrow()
-                                                            .chain_height_and_root()
-                                                            .await
+                                                        chain_manager.chain_height_and_root().await
                                                     {
                                                         debug!(
                                                             "Self is {:?}, height is {}, Peer Id is {:?}, Block Id is {:?}, verify {}, height {}",
@@ -304,6 +300,7 @@ impl EventProcessor {
                             ConsensusMsg_oneof::RequestBlock(req_block) => {
                                 let block_req =
                                     BlockRetrievalRequest::try_from(req_block).expect("parse err.");
+                                info!("Sync block from {:?}, block_req : {:?}", peer_id, block_req);
                                 if block_req.num_blocks() > 0 {
                                     let mut blocks = vec![];
                                     let mut latest_block =
@@ -327,22 +324,22 @@ impl EventProcessor {
                                                 match child {
                                                     Some(c) => c,
                                                     None => {
+                                                        info!("not_exist_flag : {:?}", child_hash);
                                                         not_exist_flag = true;
                                                         break;
                                                     }
                                                 }
                                             }
-                                            None => {
-                                                match chain_manager.borrow().chain_root().await {
-                                                    Some(tmp) => block_db
-                                                        .get_block_by_hash::<BlockPayloadExt>(&tmp)
-                                                        .expect("root not exist"),
-                                                    None => {
-                                                        not_exist_flag = true;
-                                                        break;
-                                                    }
+                                            None => match chain_manager.chain_root().await {
+                                                Some(tmp) => block_db
+                                                    .get_block_by_hash::<BlockPayloadExt>(&tmp)
+                                                    .expect("root not exist"),
+                                                None => {
+                                                    info!("not_exist_flag : chain root is none.");
+                                                    not_exist_flag = true;
+                                                    break;
                                                 }
-                                            }
+                                            },
                                         };
 
                                         latest_block = Some(block.parent_id());
@@ -383,6 +380,10 @@ impl EventProcessor {
                             ConsensusMsg_oneof::RespondBlock(resp_block) => {
                                 let block_resp = BlockRetrievalResponse::try_from(resp_block)
                                     .expect("parse err.");
+                                info!(
+                                    "Sync block from {:?}, block_resp : {:?}",
+                                    peer_id, block_resp
+                                );
                                 if let Err(err) =
                                     sync_block_sender.send((peer_id, block_resp)).await
                                 {

@@ -6,7 +6,6 @@ use crate::state_replication::{StateComputer, TxnManager};
 use anyhow::Result;
 use async_std::sync::Sender;
 use async_std::task;
-use atomic_refcell::AtomicRefCell;
 use consensus_types::{
     block::Block,
     block_data::BlockData,
@@ -59,7 +58,7 @@ struct MintInner {
     author: AccountAddress,
     self_sender: channel::Sender<Result<Event<ConsensusMsg>>>,
     block_store: Arc<ConsensusDB>,
-    chain_manager: Arc<AtomicRefCell<ChainManager>>,
+    chain_manager: Arc<ChainManager>,
     mine_state: MineStateManager<BlockIndex>,
     dev_mode: bool,
 }
@@ -72,7 +71,7 @@ impl MintManager {
         author: AccountAddress,
         self_sender: channel::Sender<Result<Event<ConsensusMsg>>>,
         block_store: Arc<ConsensusDB>,
-        chain_manager: Arc<AtomicRefCell<ChainManager>>,
+        chain_manager: Arc<ChainManager>,
         mine_state: MineStateManager<BlockIndex>,
         dev_mode: bool,
     ) -> Self {
@@ -155,6 +154,7 @@ impl MintManager {
                                 task::sleep(Duration::from_secs(time)).await;
                             });
                         }
+
                         for key in proof_sender_map.keys() {
                             if let Some(tmp_tx) = proof_sender_map.get(key) {
                                 tmp_tx.send(None).await;
@@ -165,7 +165,7 @@ impl MintManager {
                         match mint_inner.txn_manager.pull_txns(100, vec![]).await {
                             Ok(txns) => {
                                 if let Some((height, parent_block)) =
-                                    mint_inner.chain_manager.borrow().chain_height_and_root().await
+                                    mint_inner.chain_manager.chain_height_and_root().await
                                 {
                                     //create block
                                     let parent_block_id = parent_block.id();
@@ -277,7 +277,9 @@ impl MintManager {
                                     }
                                 }
                             }
-                            _ => {}
+                            Err(e) => {
+                                 warn!("err: {:?}", e);
+                            }
                         }
                     }
                     _ = mint_stop_receiver.select_next_some() => {
