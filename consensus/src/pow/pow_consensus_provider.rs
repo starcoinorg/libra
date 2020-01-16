@@ -178,7 +178,7 @@ impl PowConsensusProvider {
             channel::new(1_024, &counters::PENDING_SELF_MESSAGES);
         let (sync_block_sender, sync_block_receiver) = mpsc::channel(1024);
         let (sync_signal_sender, sync_signal_receiver) = mpsc::channel(1024);
-        let (new_block_sender, new_block_receiver) = mpsc::channel(1);
+        let (new_block_sender, new_block_receiver) = mpsc::channel(1024);
         let event_handle = EventProcessor::new(
             network_sender,
             txn_manager,
@@ -240,7 +240,7 @@ impl PowConsensusProvider {
                     .expect("block_cache_receiver is none.");
 
                 //mint
-                handle.mint_manager.borrow().mint(
+                handle.mint_manager.mint(
                     executor.clone(),
                     self_key,
                     new_block_receiver,
@@ -261,14 +261,14 @@ impl PowConsensusProvider {
                 );
 
                 //save
-                handle.chain_manager.borrow().save_block(
+                handle.chain_manager.save_block(
                     block_cache_receiver,
                     executor.clone(),
                     chain_stop_receiver,
                 );
 
                 //sync
-                handle.sync_manager.borrow().sync_block_msg(
+                handle.sync_manager.sync_block_msg(
                     executor.clone(),
                     sync_block_receiver,
                     sync_signal_receiver,

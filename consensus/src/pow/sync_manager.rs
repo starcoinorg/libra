@@ -12,6 +12,7 @@ use futures::SinkExt;
 use futures::{channel::mpsc, StreamExt};
 use futures_locks::Mutex;
 use libra_crypto::HashValue;
+use libra_logger::prelude::*;
 use libra_types::account_address::AccountAddress;
 use libra_types::PeerId;
 use network::{
@@ -37,7 +38,7 @@ struct SyncInner {
     self_sender: channel::Sender<Result<Event<ConsensusMsg>>>,
     network_sender: ConsensusNetworkSender,
     block_cache_sender: mpsc::Sender<Block<BlockPayloadExt>>,
-    chain_manager: Arc<AtomicRefCell<ChainManager>>,
+    chain_manager: Arc<ChainManager>,
     sync_block_cache: Arc<Mutex<HashMap<PeerId, Vec<Block<BlockPayloadExt>>>>>,
     sync_block_height: Arc<AtomicU64>,
 }
@@ -48,7 +49,7 @@ impl SyncManager {
         self_sender: channel::Sender<Result<Event<ConsensusMsg>>>,
         network_sender: ConsensusNetworkSender,
         block_cache_sender: mpsc::Sender<Block<BlockPayloadExt>>,
-        chain_manager: Arc<AtomicRefCell<ChainManager>>,
+        chain_manager: Arc<ChainManager>,
     ) -> Self {
         let inner = SyncInner {
             author,
@@ -88,6 +89,11 @@ impl SyncManager {
                                     (peer_id, sync_block_resp) = sync_block_receiver.select_next_some() => {
                                         // 2. save data to cache
                                         let status = sync_block_resp.status();
+                                        debug!(
+                                            "Sync block from {:?}, status : {:?}",
+                                            peer_id,
+                                            status
+                                        );
                                         let mut blocks = sync_block_resp.blocks();
 
                                         let mut end_flag = false;
@@ -100,7 +106,7 @@ impl SyncManager {
                                             }
                                             for block in blocks {
                                                 let tmp_hash = block.id();
-                                                if sync_inner.chain_manager.borrow().block_exist(&tmp_hash).await {
+                                                if sync_inner.chain_manager.block_exist(&tmp_hash).await {
                                                     end_flag = true;
                                                     break;
                                                 };
@@ -117,6 +123,10 @@ impl SyncManager {
                                             for b in block_vec {
                                                 sync_inner.block_cache_sender.send(b).await.expect("send block err.");
                                             }
+                                            info!(
+                                                "Sync block from {:?} end",
+                                                peer_id
+                                            );
                                         } else {
                                             match status {
                                                 BlockRetrievalStatus::Succeeded => {
