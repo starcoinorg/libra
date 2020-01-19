@@ -6,7 +6,7 @@
 use crate::{
     error::NetworkError,
     interface::NetworkRequest,
-    proto::{ConsensusMsg, ConsensusMsg_oneof, RequestBlock, RespondBlock},
+    proto::{ConsensusMsg, ConsensusMsg_oneof, RequestBlock, RespondBlock, PowSyncInfoReq, PowSyncInfoResp},
     protocols::{direct_send::Message, rpc::error::RpcError},
     validator_network::{NetworkEvents, NetworkSender},
     NetworkPublicKeys, ProtocolId,
@@ -104,6 +104,30 @@ impl ConsensusNetworkSender {
             .await?;
 
         if let Some(ConsensusMsg_oneof::RespondBlock(response)) = res_msg_enum.message {
+            Ok(response)
+        } else {
+            // TODO: context
+            Err(RpcError::InvalidRpcResponse)
+        }
+    }
+
+    pub async fn sync_block_by_pow(
+        &mut self,
+        recipient: PeerId,
+        req_msg: PowSyncInfoReq,
+        timeout: Duration,
+    ) -> Result<PowSyncInfoResp, RpcError> {
+        let protocol = ProtocolId::from_static(CONSENSUS_RPC_PROTOCOL);
+        let pow_sync_info_req = ConsensusMsg {
+            message: Some(ConsensusMsg_oneof::PowSyncInfoReq(req_msg)),
+        };
+
+        let pow_sync_info_resp = self
+            .inner
+            .unary_rpc(recipient, protocol, pow_sync_info_req, timeout)
+            .await?;
+
+        if let Some(ConsensusMsg_oneof::PowSyncInfoResp(response)) = pow_sync_info_resp.message {
             Ok(response)
         } else {
             // TODO: context

@@ -17,6 +17,9 @@ message ConsensusMsg {
     types.ValidatorChangeEventWithProof epoch_change = 6;
     RequestEpoch request_epoch = 7;
     Block new_block = 8;
+    PowSyncInfoReq pow_sync_info_req = 9;
+    PowSyncInfoResp pow_sync_info_resp = 10;
+    PowRequestBlock pow_request_block = 11;
   }
 }
 
@@ -44,6 +47,10 @@ message RequestBlock {
   bytes bytes = 1;
 }
 
+message PowRequestBlock {
+    bytes bytes = 1;
+}
+
 message RespondBlock {
   bytes bytes = 1;
 }
@@ -53,5 +60,17 @@ message RequestEpoch {
 }
 
 message BlockPayloadExt {
+    bytes bytes = 1;
+}
+
+message PowSyncInfoReq {
+    bytes bytes = 1;
+}
+
+message PowSyncInfoResp {
+    bytes bytes = 1;
+}
+
+message PowSyncBlock {
     bytes bytes = 1;
 }

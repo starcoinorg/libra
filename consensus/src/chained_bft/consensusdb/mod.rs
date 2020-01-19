@@ -269,12 +269,35 @@ impl ConsensusDB {
         Ok(block_index_list)
     }
 
+    pub fn query_blocks_by_height<T: Payload>(&self, begin_height: u64, size: usize) -> Result<Vec<Block<T>>> {
+        let mut block_list = vec![];
+        let mut height = begin_height;
+
+        while block_list.len() < size {
+            let block_index: Option<BlockIndex> = self.db.get::<BlockIndexSchema>(&height)?;
+            match block_index {
+                Some(index) => {
+                    let block = self.get_block_by_hash(&index.id());
+                    match block {
+                        Some(b) => {
+                            block_list.push(b);
+                            height = height + 1;
+                        },
+                        None => break,
+                    }
+                }
+                None => break,
+            }
+        }
+        Ok(block_list)
+    }
+
     pub fn query_block_index_by_height(&self, height: u64) -> Result<Option<BlockIndex>> {
         let block_index: Option<BlockIndex> = self.db.get::<BlockIndexSchema>(&height)?;
         Ok(block_index)
     }
 
-    fn latest_block_index(&self) -> Option<(u64, BlockIndex)> {
+    pub fn latest_block_index(&self) -> Option<(u64, BlockIndex)> {
         let mut iter = self
             .db
             .iter::<BlockIndexSchema>(ReadOptions::default())

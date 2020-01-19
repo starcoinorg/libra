@@ -52,6 +52,7 @@ pub struct PowConsensusProvider {
     sync_signal_receiver: Option<mpsc::Receiver<(PeerId, (u64, HashValue))>>,
     new_block_receiver: Option<mpsc::Receiver<u64>>,
     stop_inner: StopInner,
+    begin_mint_receiver: Option<mpsc::Receiver<()>>,
 }
 
 struct StopInner {
@@ -179,14 +180,7 @@ impl PowConsensusProvider {
         let (sync_block_sender, sync_block_receiver) = mpsc::channel(1024);
         let (sync_signal_sender, sync_signal_receiver) = mpsc::channel(1024);
         let (new_block_sender, new_block_receiver) = mpsc::channel(1024);
-        let need_sync = (node_config
-            .validator_network
-            .as_ref()
-            .unwrap()
-            .seed_peers
-            .seed_peers
-            .len()
-            > 0);
+        let (begin_mint_sender, begin_mint_receiver) = mpsc::channel(1024);
         let event_handle = EventProcessor::new(
             network_sender,
             txn_manager,
@@ -203,7 +197,8 @@ impl PowConsensusProvider {
             node_config.storage.dir(),
             new_block_sender,
             node_config.consensus.dev_mode,
-            need_sync,
+            begin_mint_sender,
+            node_config.consensus.is_first
         );
 
         //stop channel
@@ -222,6 +217,7 @@ impl PowConsensusProvider {
             sync_signal_receiver: Some(sync_signal_receiver),
             new_block_receiver: Some(new_block_receiver),
             stop_inner,
+            begin_mint_receiver: Some(begin_mint_receiver),
         }
     }
 
@@ -240,6 +236,7 @@ impl PowConsensusProvider {
         chain_stop_receiver: mpsc::Receiver<()>,
         mint_stop_receiver: mpsc::Receiver<()>,
         state_stop_receiver: mpsc::Receiver<()>,
+        begin_mint_receiver: mpsc::Receiver<()>,
     ) {
         match self.event_handle.take() {
             Some(mut handle) => {
@@ -270,10 +267,11 @@ impl PowConsensusProvider {
                 );
 
                 //save
-                handle.chain_manager.save_block(
+                handle.inner.chain_manager.save_block(
                     block_cache_receiver,
                     executor.clone(),
                     chain_stop_receiver,
+                    begin_mint_receiver,
                 );
 
                 //sync
@@ -328,6 +326,10 @@ impl ConsensusProvider for PowConsensusProvider {
             .new_block_receiver
             .take()
             .expect("new_block_receiver is none.");
+        let begin_mint_receiver = self
+            .begin_mint_receiver
+            .take()
+            .expect("begin_mint_receiver is none.");
 
         let (sync_stop_receiver, chain_stop_receiver, mint_stop_receiver, state_stop_receiver) =
             self.stop_inner.take_receiver();
@@ -346,6 +348,7 @@ impl ConsensusProvider for PowConsensusProvider {
             chain_stop_receiver,
             mint_stop_receiver,
             state_stop_receiver,
+            begin_mint_receiver,
         );
         info!("PowConsensusProvider start succ.");
         Ok(())
