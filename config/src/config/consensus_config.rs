@@ -61,6 +61,8 @@ pub struct ConsensusConfig {
     pub base: Arc<BaseConfig>,
     #[serde(skip)]
     pub dev_mode: bool,
+    #[serde(skip)]
+    pub is_first: bool,
 }
 
 impl Default for ConsensusConfig {
@@ -86,6 +88,7 @@ impl Default for ConsensusConfig {
             consensus_rpc_address: "127.0.0.1".to_string(),
             consensus_rpc_port: 8008,
             dev_mode: true,
+            is_first: true,
         }
     }
 }
@@ -129,7 +132,8 @@ impl ConsensusConfig {
             miner_client_enable: self.miner_client_enable,
             consensus_rpc_address: self.consensus_rpc_address.clone(),
             consensus_rpc_port: self.consensus_rpc_port.clone(),
-            dev_mode: self.dev_mode.clone(),
+            dev_mode: self.dev_mode,
+            is_first: self.is_first,
         }
     }
 

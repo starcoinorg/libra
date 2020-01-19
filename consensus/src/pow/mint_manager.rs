@@ -1,5 +1,4 @@
 use crate::chained_bft::consensusdb::ConsensusDB;
-use crate::pow::chain_manager::ChainManager;
 use crate::pow::event_processor::EventProcessor;
 use crate::pow::mine_state::{BlockIndex, MineStateManager};
 use crate::state_replication::{StateComputer, TxnManager};
@@ -58,7 +57,6 @@ struct MintInner {
     author: AccountAddress,
     self_sender: channel::Sender<Result<Event<ConsensusMsg>>>,
     block_store: Arc<ConsensusDB>,
-    chain_manager: Arc<ChainManager>,
     mine_state: MineStateManager<BlockIndex>,
     dev_mode: bool,
 }
@@ -71,7 +69,6 @@ impl MintManager {
         author: AccountAddress,
         self_sender: channel::Sender<Result<Event<ConsensusMsg>>>,
         block_store: Arc<ConsensusDB>,
-        chain_manager: Arc<ChainManager>,
         mine_state: MineStateManager<BlockIndex>,
         dev_mode: bool,
     ) -> Self {
@@ -82,7 +79,6 @@ impl MintManager {
             author,
             self_sender,
             block_store,
-            chain_manager,
             mine_state,
             dev_mode,
         };
@@ -147,6 +143,7 @@ impl MintManager {
                             .await;
                     }
                     latest_height = new_block_receiver.select_next_some() => {
+                        println!("-------new_block_receiver------");
                         if mint_inner.dev_mode {
                             task::block_on(async move {
                                 let mut rng = thread_rng();
@@ -164,8 +161,7 @@ impl MintManager {
 
                         match mint_inner.txn_manager.pull_txns(100, vec![]).await {
                             Ok(txns) => {
-                                if let Some((height, parent_block)) =
-                                    mint_inner.chain_manager.chain_height_and_root().await
+                               if let Some((height, parent_block)) = mint_inner.block_store.latest_block_index()
                                 {
                                     //create block
                                     let parent_block_id = parent_block.id();

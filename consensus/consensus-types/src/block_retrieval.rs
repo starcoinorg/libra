@@ -159,3 +159,64 @@ impl<T: Payload> TryFrom<BlockRetrievalResponse<T>> for network::proto::RespondB
         })
     }
 }
+
+/// RPC to get a chain of block of the given length starting from the given block id.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct PowBlockRetrievalRequest {
+    height: u64,
+    block_id: HashValue,
+    num_blocks: u64,
+    asc: bool,
+}
+
+impl PowBlockRetrievalRequest {
+    pub fn new(height: u64, block_id: HashValue, num_blocks: u64, asc: bool) -> Self {
+        Self {
+            height,
+            block_id,
+            num_blocks,
+            asc,
+        }
+    }
+    pub fn block_id(&self) -> HashValue {
+        self.block_id
+    }
+    pub fn num_blocks(&self) -> u64 {
+        self.num_blocks
+    }
+    pub fn asc(&self) -> bool {
+        self.asc
+    }
+
+    pub fn height(&self) -> u64 {
+        self.height
+    }
+}
+
+impl fmt::Display for PowBlockRetrievalRequest {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "[PowBlockRetrievalRequest starting from id {} with {} height {} block order {} ]",
+            self.block_id, self.height, self.num_blocks, self.asc
+        )
+    }
+}
+
+impl TryFrom<network::proto::PowRequestBlock> for PowBlockRetrievalRequest {
+    type Error = anyhow::Error;
+
+    fn try_from(proto: network::proto::PowRequestBlock) -> anyhow::Result<Self> {
+        Ok(lcs::from_bytes(&proto.bytes)?)
+    }
+}
+
+impl TryFrom<PowBlockRetrievalRequest> for network::proto::PowRequestBlock {
+    type Error = anyhow::Error;
+
+    fn try_from(block_retrieval_request: PowBlockRetrievalRequest) -> anyhow::Result<Self> {
+        Ok(Self {
+            bytes: lcs::to_bytes(&block_retrieval_request)?,
+        })
+    }
+}
