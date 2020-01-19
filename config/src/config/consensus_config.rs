@@ -59,7 +59,9 @@ pub struct ConsensusConfig {
     pub safety_rules: SafetyRulesConfig,
     #[serde(skip)]
     pub base: Arc<BaseConfig>,
+    #[serde(skip)]
     pub dev_mode: bool,
+    #[serde(skip)]
     pub is_first: bool,
 }
 
@@ -130,8 +132,8 @@ impl ConsensusConfig {
             miner_client_enable: self.miner_client_enable,
             consensus_rpc_address: self.consensus_rpc_address.clone(),
             consensus_rpc_port: self.consensus_rpc_port.clone(),
-            dev_mode: self.dev_mode.clone(),
-            is_first: self.is_first.clone(),
+            dev_mode: self.dev_mode,
+            is_first: self.is_first,
         }
     }
 
