@@ -8,6 +8,8 @@ module TheFive {
     import 0x0.ChannelUtil;
     import 0x0.Vector;
     import 0x0.LibraSystem;
+    import 0x0.LibraCoin;
+    import 0x0.LibraAccount;
 
     resource T {
         grid: Vector.T<Vector.T<bool>>,  // 22x22, include borders
@@ -17,6 +19,14 @@ module TheFive {
         whose_turn: address,  // Alternate between black and white
         height: u64,
         status: u64,  // 0 newed, 1 joined, 2 closed
+    }
+
+    resource Deposit_1 {
+        coins: LibraCoin.T,  // deposit from player1
+    }
+
+    resource Deposit_2 {
+        coins: LibraCoin.T,  // deposit from player2
     }
 
     resource Score {
@@ -36,6 +46,7 @@ module TheFive {
         let t: Self.T;
         let grid: Vector.T<Vector.T<bool>>;
         let s: Self.Shared;
+        let d: Self.Deposit_1;
         let whose_turn: address;
         let row: Vector.T<bool>;
         let x: u64;
@@ -44,6 +55,7 @@ module TheFive {
         let t1: Self.Score;
         let sender: address;
         let status: u64;
+        let coins: LibraCoin.T;
 
         sender = get_txn_sender();
         if (!ChannelUtil.exist_channel_participant<Self.Score>(copy(sender))) {
@@ -86,6 +98,14 @@ module TheFive {
             };
             ChannelUtil.move_to_participant<Self.T>(copy(sender), move(t));
 
+            if (!ChannelUtil.exist_channel_shared<Self.Deposit_1>()) {
+                coins = LibraAccount.withdraw_from_channel(5);
+                d = Deposit_1 {
+                    coins: move(coins),
+                };
+                ChannelUtil.move_to_shared<Self.Deposit_1>(move(d));
+            }
+
             s = Shared {
                 whose_turn: copy(sender),
                 height: LibraSystem.get_current_block_height(),
@@ -111,6 +131,8 @@ module TheFive {
         let s_ref: &mut Self.Shared;
         let status_ref: &mut u64;
         let is_black: bool;
+        let d: Self.Deposit_2;
+        let coins: LibraCoin.T;
 
         sender = get_txn_sender();
         if (!ChannelUtil.exist_channel_participant<Self.Score>(copy(sender))) {
@@ -151,6 +173,14 @@ module TheFive {
                 grid: move(grid),
             };
             ChannelUtil.move_to_participant<Self.T>(copy(sender), move(t));
+
+            if (!ChannelUtil.exist_channel_shared<Self.Deposit_2>()) {
+                coins = LibraAccount.withdraw_from_channel(5);
+                d = Deposit_2 {
+                    coins: move(coins),
+                };
+                ChannelUtil.move_to_shared<Self.Deposit_2>(move(d));
+            }
 
             s_ref = ChannelUtil.borrow_from_shared_mut<Self.Shared>();
             status_ref = &mut copy(s_ref).status;
@@ -388,12 +418,13 @@ module TheFive {
         return;
     }
 
-    unwrap_Shared(s: Self.Shared) {
+    unwrap_Shared(s: Self.Shared) {      
         let whose_turn: address;
         let height: u64;
         let status: u64;
 
         Shared { whose_turn, height, status } = move(s);
+        
         return;
     }
 
@@ -419,7 +450,28 @@ module TheFive {
         return;
     }
 
-    end_game() {
+    clean_deposit(by_winner: bool, receiver: address) {
+        let d1: Self.Deposit_1;
+        let d2: Self.Deposit_2;
+        let coins1: LibraCoin.T;
+        let coins2: LibraCoin.T;
+        let coins: LibraCoin.T;
+
+        d1 = ChannelUtil.move_from_shared<Self.Deposit_1>();
+        d2 = ChannelUtil.move_from_shared<Self.Deposit_2>();
+        Deposit_1 { coins1 } = move(d1);
+        Deposit_2 { coins2 } = move(d2);
+        coins = LibraCoin.join(move(coins1), move(coins2));
+        if (copy(by_winner)) {
+            LibraAccount.deposit_to_channel(move(coins));
+        } else {
+            LibraAccount.deposit_to_participant(move(receiver), move(coins));
+        }
+
+        return;
+    }
+
+    end_game(by_winner: bool, receiver: address) {
         let s_ref: &mut Self.Shared;
         let status: &mut u64;
 
@@ -427,12 +479,12 @@ module TheFive {
         status = &mut copy(s_ref).status;
         *copy(status) = 2;
 
-        Self.update_score();
+        Self.clean_deposit(copy(by_winner), move(receiver));
+        Self.update_score(move(by_winner));
         return;
     }
 
-
-    update_score() {
+    update_score(by_winner: bool) {
         let score_ref: &mut Self.Score;
         let total_ref: &mut u64;
         let sender: address;
@@ -440,17 +492,34 @@ module TheFive {
         sender = get_txn_sender();
         score_ref = ChannelUtil.borrow_from_participant_mut<Self.Score>(copy(sender));
         total_ref = &mut copy(score_ref).total;
-        *copy(total_ref) = *copy(total_ref) + 1;
+        if (copy(by_winner)) {
+            *copy(total_ref) = *copy(total_ref) + 1;
+        } else {
+            if (*copy(total_ref) > 0) {
+                *copy(total_ref) = *copy(total_ref) - 1;
+            }
+        }
+        
         return;
     }
 
-    public play(receiver: address, x: u64, y: u64): u64 {
+    public play(receiver: address, canvas_x: u64, canvas_y: u64): u64 {
         let win: bool;
+        let x: u64;
+        let y: u64;
+        let status: u64;
+
+        status = Self.status();
+        if (copy(status) != 1) {
+            return 3;
+        }
 
         if (!Self.is_my_turn()) {
             return 1;
         }
 
+        x = move(canvas_x) + 1;
+        y = move(canvas_y) + 1;
         if (!Self.is_blank(copy(x), copy(y), copy(receiver))) {
             return 2;
         }
@@ -459,8 +528,7 @@ module TheFive {
         win = Self.is_five(move(x), move(y));
 
         if (move(win)) {
-            //Self.end_game(copy(receiver));
-            Self.end_game();
+            Self.end_game(true, move(receiver));
         }
         return 0;
     }
@@ -498,10 +566,14 @@ module TheFive {
         s_ref = ChannelUtil.borrow_from_shared<Self.Shared>();
         height_ref = &copy(s_ref).height;
         current_height = LibraSystem.get_current_block_height();
-        assert(move(current_height) > *copy(height_ref), 102);
+        assert(copy(current_height) > *copy(height_ref) + 3, copy(current_height));
 
-        //Self.end_game(copy(receiver));
-        Self.end_game();
+        Self.end_game(true, move(receiver)); // receiver timeout, sender score++
+        return;
+    }
+
+    public quit(receiver: address) {
+        Self.end_game(false, move(receiver)); // sender quit, receiver score++
         return;
     }
 }
@@ -551,7 +623,7 @@ import {{default}}.TheFive;
 main(){
     let result: u64;
     result = TheFive.join();
-    assert(move(result) == 0, 61);
+    assert(move(result) == 0, 62);
     return;
 }
 
@@ -565,7 +637,7 @@ main(receiver: address, x: u64, y: u64) {
     let result: u64;
 
     result = TheFive.play(move(receiver), move(x), move(y));
-    assert(move(result) == 0, 66);
+    assert(move(result) == 0, 63);
     return;
 }
 
@@ -580,7 +652,7 @@ main(receiver: address, x: u64, y: u64) {
     let result: u64;
 
     result = TheFive.play(move(receiver), move(x), move(y));
-    assert(move(result) == 0, 66);
+    assert(move(result) == 0, 64);
     return;
 }
 
@@ -594,7 +666,7 @@ main(receiver: address, x: u64, y: u64) {
     let result: u64;
 
     result = TheFive.play(move(receiver), move(x), move(y));
-    assert(move(result) == 0, 66);
+    assert(move(result) == 0, 65);
     return;
 }
 
@@ -622,7 +694,7 @@ main(receiver: address, x: u64, y: u64) {
     let result: u64;
 
     result = TheFive.play(move(receiver), move(x), move(y));
-    assert(move(result) == 0, 66);
+    assert(move(result) == 0, 67);
     return;
 }
 
@@ -636,7 +708,7 @@ main(receiver: address, x: u64, y: u64) {
     let result: u64;
 
     result = TheFive.play(move(receiver), move(x), move(y));
-    assert(move(result) == 0, 66);
+    assert(move(result) == 0, 68);
     return;
 }
 
@@ -650,7 +722,7 @@ main(receiver: address, x: u64, y: u64) {
     let result: u64;
 
     result = TheFive.play(move(receiver), move(x), move(y));
-    assert(move(result) == 0, 66);
+    assert(move(result) == 0, 69);
     return;
 }
 
@@ -664,7 +736,7 @@ main(receiver: address, x: u64, y: u64) {
     let result: u64;
 
     result = TheFive.play(move(receiver), move(x), move(y));
-    assert(move(result) == 0, 66);
+    assert(move(result) == 0, 70);
     return;
 }
 
@@ -679,7 +751,7 @@ main(receiver: address, x: u64, y: u64) {
     let win: bool;
 
     result = TheFive.play(move(receiver), copy(x), copy(y));
-    assert(move(result) == 0, 55);
+    assert(move(result) == 0, 71);
 
     return;
 }
@@ -688,12 +760,14 @@ main(receiver: address, x: u64, y: u64) {
 //! sender: alice
 //! txn-channel: ch1,alice
 import {{default}}.TheFive;
+import 0x0.LibraAccount;
 
 main() {
     let result: u64;
 
     result = TheFive.get_score();
-    assert(move(result) == 1, 55);
+    assert(move(result) == 1, 72);
+    assert(LibraAccount.channel_balance({{alice}}) == 15, 106);
 
     return;
 }
@@ -702,12 +776,14 @@ main() {
 //! sender: bob
 //! txn-channel: ch1,bob
 import {{default}}.TheFive;
+import 0x0.LibraAccount;
 
 main() {
     let result: u64;
 
     result = TheFive.get_score();
-    assert(move(result) == 0, 55);
+    assert(move(result) == 0, 73);
+    assert(LibraAccount.channel_balance({{bob}}) == 5, 107);
 
     return;
 }
@@ -721,7 +797,7 @@ import {{default}}.TheFive;
 main(receiver: address){
     let result: u64;
     result = TheFive.new(move(receiver));
-    assert(move(result) == 0, 61);
+    assert(move(result) == 0, 74);
     return;
 }
 
@@ -734,7 +810,7 @@ import {{default}}.TheFive;
 main(){
     let result: u64;
     result = TheFive.join();
-    assert(move(result) == 0, 61);
+    assert(move(result) == 0, 75);
     return;
 }
 
@@ -749,7 +825,7 @@ main(receiver: address, x: u64, y: u64) {
     let result: u64;
 
     result = TheFive.play(move(receiver), move(x), move(y));
-    assert(move(result) == 0, 66);
+    assert(move(result) == 0, 76);
     return;
 }
 
@@ -759,9 +835,147 @@ main(receiver: address, x: u64, y: u64) {
 //! args: {{bob}}
 
 import {{default}}.TheFive;
-import 0x0.LibraSystem;
+
 main(receiver: address) {
-    LibraSystem.block_prologue(100, h"aa", h"bb", {{vivian}});
+    TheFive.quit(move(receiver));
+    return;
+}
+
+//! new-transaction
+//! sender: alice
+//! txn-channel: ch1,alice
+import {{default}}.TheFive;
+import 0x0.LibraAccount;
+
+main() {
+    let result: u64;
+
+    result = TheFive.get_score();
+    assert(move(result) == 0, 77);
+    assert(LibraAccount.channel_balance({{alice}}) == 10, 106);
+
+    return;
+}
+
+//! new-transaction
+//! sender: bob
+//! txn-channel: ch1,bob
+import {{default}}.TheFive;
+import 0x0.LibraAccount;
+
+main() {
+    let result: u64;
+
+    result = TheFive.get_score();
+    assert(move(result) == 0, 78);
+    assert(LibraAccount.channel_balance({{bob}}) == 10, 106);
+
+    return;
+}
+
+//! new-transaction
+//! sender: alice
+//! txn-channel: ch1,alice
+//! args: {{bob}}
+import {{default}}.TheFive;
+
+main(receiver: address){
+    let result: u64;
+    result = TheFive.new(move(receiver));
+    assert(move(result) == 0, 79);
+    return;
+}
+
+//! new-transaction
+//! sender: bob
+//! txn-channel: ch1,bob
+
+import {{default}}.TheFive;
+
+main(){
+    let result: u64;
+    result = TheFive.join();
+    assert(move(result) == 0, 80);
+    return;
+}
+
+//! new-transaction
+//! sender: alice
+//! txn-channel: ch1,alice
+//! args: {{bob}},2,2
+
+import {{default}}.TheFive;
+
+main(receiver: address, x: u64, y: u64) {
+    let result: u64;
+
+    result = TheFive.play(move(receiver), move(x), move(y));
+    assert(move(result) == 0, 81);
+    return;
+}
+
+//! new-transaction
+import 0x0.LibraSystem;
+main() {
+    // TODO: this will stop working once we make the Block prologue private. We should delete this
+    // part (which will be done by the executor) and leave the second assert
+    LibraSystem.block_prologue(1, h"aa", h"bb", {{vivian}});
+    LibraSystem.block_prologue(2, h"aa", h"bb", {{vivian}});
+    LibraSystem.block_prologue(3, h"aa", h"bb", {{vivian}});
+    LibraSystem.block_prologue(4, h"aa", h"bb", {{vivian}});
+    return;
+}
+
+//! new-transaction
+//! sender: alice
+//! txn-channel: ch1,alice,false
+//! args: {{bob}}
+import {{default}}.TheFive;
+
+main(receiver: address) {
     TheFive.timeout(move(receiver));
+    return;
+}
+
+//! new-transaction
+//! sender: bob
+//! txn-channel: ch1,bob
+import 0x0.LibraAccount;
+main() {
+   assert(LibraAccount.channel_is_locked(), 108);
+   LibraAccount.resolve();
+   assert(!LibraAccount.channel_is_locked(), 109);
+   return;
+}
+
+//! new-transaction
+//! sender: alice
+//! txn-channel: ch1,alice
+import {{default}}.TheFive;
+import 0x0.LibraAccount;
+
+main() {
+    let result: u64;
+
+    result = TheFive.get_score();
+    assert(move(result) == 1, 82);
+    assert(LibraAccount.channel_balance({{alice}}) == 15, 106);
+
+    return;
+}
+
+//! new-transaction
+//! sender: bob
+//! txn-channel: ch1,bob
+import {{default}}.TheFive;
+import 0x0.LibraAccount;
+
+main() {
+    let result: u64;
+
+    result = TheFive.get_score();
+    assert(move(result) == 0, 83);
+    assert(LibraAccount.channel_balance({{bob}}) == 5, 106);
+
     return;
 }
