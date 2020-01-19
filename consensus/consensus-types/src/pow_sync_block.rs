@@ -15,10 +15,7 @@ pub struct PowSyncBlock {
 
 impl PowSyncBlock {
     pub fn new(height: u64, block_hash: HashValue) -> Self {
-        Self {
-            height,
-            block_hash,
-        }
+        Self { height, block_hash }
     }
     pub fn height(&self) -> u64 {
         self.height
@@ -65,16 +62,15 @@ pub struct PowSyncInfoReq {
 
 impl PowSyncInfoReq {
     pub fn new(latest_blocks: Vec<PowSyncBlock>) -> Self {
-        Self {
-            latest_blocks,
-        }
+        Self { latest_blocks }
     }
 
     pub fn new_req(latest_blocks: Vec<(u64, HashValue)>) -> Self {
         Self {
-            latest_blocks: latest_blocks.iter().map(|(h, id)| {
-                PowSyncBlock::new(h.clone(), id.clone())
-            }).collect(),
+            latest_blocks: latest_blocks
+                .iter()
+                .map(|(h, id)| PowSyncBlock::new(h.clone(), id.clone()))
+                .collect(),
         }
     }
 
@@ -85,11 +81,7 @@ impl PowSyncInfoReq {
 
 impl fmt::Display for PowSyncInfoReq {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "[PowSyncInfoReq with {:?} blocks]",
-            self.latest_blocks
-        )
+        write!(f, "[PowSyncInfoReq with {:?} blocks]", self.latest_blocks)
     }
 }
 

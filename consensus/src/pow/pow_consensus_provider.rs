@@ -198,7 +198,7 @@ impl PowConsensusProvider {
             new_block_sender,
             node_config.consensus.dev_mode,
             begin_mint_sender,
-            node_config.consensus.is_first
+            node_config.consensus.is_first,
         );
 
         //stop channel

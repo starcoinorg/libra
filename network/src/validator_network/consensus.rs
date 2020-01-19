@@ -6,7 +6,10 @@
 use crate::{
     error::NetworkError,
     interface::NetworkRequest,
-    proto::{ConsensusMsg, ConsensusMsg_oneof, RequestBlock, RespondBlock, PowSyncInfoReq, PowSyncInfoResp},
+    proto::{
+        ConsensusMsg, ConsensusMsg_oneof, PowSyncInfoReq, PowSyncInfoResp, RequestBlock,
+        RespondBlock,
+    },
     protocols::{direct_send::Message, rpc::error::RpcError},
     validator_network::{NetworkEvents, NetworkSender},
     NetworkPublicKeys, ProtocolId,

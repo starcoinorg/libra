@@ -20,8 +20,8 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use storage_client::StorageWrite;
 use std::time::{SystemTime, UNIX_EPOCH};
+use storage_client::StorageWrite;
 
 pub type BlockHeight = u64;
 
@@ -397,13 +397,18 @@ impl BlockTree {
                     break;
                 }
                 let tmp_height = height - i;
-                if let Ok(Some(block_index)) = self.block_store.query_block_index_by_height(tmp_height) {
+                if let Ok(Some(block_index)) =
+                    self.block_store.query_block_index_by_height(tmp_height)
+                {
                     self.tail_height = tmp_height;
 
                     let mut hash_list = Vec::new();
                     hash_list.push(block_index.id().clone());
 
-                    let timestamp_usecs = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+                    let timestamp_usecs = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs();
                     let new_block_info = BlockInfo::new_inner(
                         &block_index.id(),
                         block_index.parent_id_ref(),
@@ -412,7 +417,8 @@ impl BlockTree {
                         None,
                     );
 
-                    self.id_to_block.insert(block_index.id().clone(), new_block_info);
+                    self.id_to_block
+                        .insert(block_index.id().clone(), new_block_info);
 
                     self.indexes.insert(tmp_height, hash_list);
 
@@ -420,7 +426,7 @@ impl BlockTree {
 
                     latest_blocks.push((height, block_index.id()));
                 };
-            };
+            }
         }
 
         let height = self.height;
@@ -433,7 +439,7 @@ impl BlockTree {
                 Some(block_index) => latest_blocks.push((tmp, block_index.id())),
                 None => break,
             }
-        };
+        }
 
         (height, latest_blocks)
     }

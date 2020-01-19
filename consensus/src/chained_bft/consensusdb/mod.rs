@@ -269,7 +269,11 @@ impl ConsensusDB {
         Ok(block_index_list)
     }
 
-    pub fn query_blocks_by_height<T: Payload>(&self, begin_height: u64, size: usize) -> Result<Vec<Block<T>>> {
+    pub fn query_blocks_by_height<T: Payload>(
+        &self,
+        begin_height: u64,
+        size: usize,
+    ) -> Result<Vec<Block<T>>> {
         let mut block_list = vec![];
         let mut height = begin_height;
 
@@ -282,7 +286,7 @@ impl ConsensusDB {
                         Some(b) => {
                             block_list.push(b);
                             height = height + 1;
-                        },
+                        }
                         None => break,
                     }
                 }

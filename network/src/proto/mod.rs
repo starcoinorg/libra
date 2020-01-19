@@ -33,8 +33,8 @@ pub use self::{
     },
     consensus::{
         consensus_msg::Message as ConsensusMsg_oneof, Block, BlockPayloadExt, ConsensusMsg,
-        Proposal, RequestBlock, RequestEpoch, RespondBlock, SyncInfo, VoteMsg, VoteProposal,
-        PowSyncInfoReq, PowSyncInfoResp, PowSyncBlock, PowRequestBlock,
+        PowRequestBlock, PowSyncBlock, PowSyncInfoReq, PowSyncInfoResp, Proposal, RequestBlock,
+        RequestEpoch, RespondBlock, SyncInfo, VoteMsg, VoteProposal,
     },
     health_checker::{
         health_checker_msg::Message as HealthCheckerMsg_oneof, HealthCheckerMsg, Ping, Pong,

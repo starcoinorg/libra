@@ -4,7 +4,7 @@ use crate::pow::event_processor::EventProcessor;
 use anyhow::Result;
 use channel;
 use consensus_types::block_retrieval::{
-    PowBlockRetrievalRequest, BlockRetrievalResponse, BlockRetrievalStatus,
+    BlockRetrievalResponse, BlockRetrievalStatus, PowBlockRetrievalRequest,
 };
 use consensus_types::{block::Block, payload_ext::BlockPayloadExt};
 use futures::compat::Future01CompatExt;
@@ -82,56 +82,56 @@ impl SyncManager {
         let sync_fut = async move {
             loop {
                 ::futures::select! {
-                                (peer_id, (height, root_hash)) = sync_signal_receiver.select_next_some() => {
-                                    //1. sync data from latest block
-                                    //TODO:timeout
-                                    println!("--------sync_signal_receiver-----000----");
-                                    if sync_inner.chain_manager.is_run().await {
-                                        println!("--------sync_signal_receiver-----222----");
-                                        if sync_inner.sync_block_height.load(Ordering::Relaxed) < height {
-                                            sync_inner.sync_block_height.store(height, Ordering::Relaxed);
-                                            let sync_block_req_msg = Self::sync_block_req(false, height, root_hash);
-                                            EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(),
-                                                &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
-                                        }
-                                    } else {
-                                        println!("--------sync_signal_receiver-----111----");
-                                        let sync_block_req_msg = Self::sync_block_req(true, height, root_hash);
-                                        EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(),
-                                            &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
-                                    }
-                                },
-                                (peer_id, sync_block_resp) = sync_block_receiver.select_next_some() => {
-                                    println!("--------sync_block_receiver-----000----");
-                                    if sync_inner.chain_manager.is_run().await {
-                                        println!("--------sync_block_receiver-----111----");
-                                        Self::handle_desc_sync_resp(sync_inner.clone(), peer_id, sync_block_resp).await;
-                                    } else {
-                                        println!("--------sync_block_receiver-----222----");
-                                        Self::handle_asc_sync_resp(sync_inner.clone(), peer_id, sync_block_resp).await;
-                                    }
-                                }
-                                _ = sync_stop_receiver.select_next_some() => {
-                                    break;
-                                }
-                                complete => {
-                                    break;
-                                }
+                    (peer_id, (height, root_hash)) = sync_signal_receiver.select_next_some() => {
+                        //1. sync data from latest block
+                        //TODO:timeout
+                        println!("--------sync_signal_receiver-----000----");
+                        if sync_inner.chain_manager.is_run().await {
+                            println!("--------sync_signal_receiver-----222----");
+                            if sync_inner.sync_block_height.load(Ordering::Relaxed) < height {
+                                sync_inner.sync_block_height.store(height, Ordering::Relaxed);
+                                let sync_block_req_msg = Self::sync_block_req(false, height, root_hash);
+                                EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(),
+                                    &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
                             }
+                        } else {
+                            println!("--------sync_signal_receiver-----111----");
+                            let sync_block_req_msg = Self::sync_block_req(true, height, root_hash);
+                            EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(),
+                                &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
+                        }
+                    },
+                    (peer_id, sync_block_resp) = sync_block_receiver.select_next_some() => {
+                        println!("--------sync_block_receiver-----000----");
+                        if sync_inner.chain_manager.is_run().await {
+                            println!("--------sync_block_receiver-----111----");
+                            Self::handle_desc_sync_resp(sync_inner.clone(), peer_id, sync_block_resp).await;
+                        } else {
+                            println!("--------sync_block_receiver-----222----");
+                            Self::handle_asc_sync_resp(sync_inner.clone(), peer_id, sync_block_resp).await;
+                        }
+                    }
+                    _ = sync_stop_receiver.select_next_some() => {
+                        break;
+                    }
+                    complete => {
+                        break;
+                    }
+                }
             }
         };
         executor.spawn(sync_fut);
     }
 
-    async fn handle_asc_sync_resp(sync_inner:SyncInner, peer_id: PeerId, sync_block_resp: BlockRetrievalResponse<BlockPayloadExt>) {
+    async fn handle_asc_sync_resp(
+        sync_inner: SyncInner,
+        peer_id: PeerId,
+        sync_block_resp: BlockRetrievalResponse<BlockPayloadExt>,
+    ) {
         println!("-----------asc-------------");
         // 2. save data to cache
         let status = sync_block_resp.status();
-        debug!(
-            "Sync block from {:?}, status : {:?}",
-            peer_id,
-            status
-        );
+        debug!("Sync block from {:?}, status : {:?}", peer_id, status);
         let blocks = sync_block_resp.blocks();
 
         let mut err_block_flag = false;
@@ -144,7 +144,12 @@ impl SyncManager {
                     end_block_hash = Some(block.id());
 
                     latest_height = block.round();
-                    sync_inner.block_cache_sender.clone().send(block.clone()).await.expect("send block err.");
+                    sync_inner
+                        .block_cache_sender
+                        .clone()
+                        .send(block.clone())
+                        .await
+                        .expect("send block err.");
                 } else {
                     err_block_flag = true;
                     warn!("sync block verify failed.");
@@ -157,8 +162,16 @@ impl SyncManager {
             match status {
                 BlockRetrievalStatus::Succeeded => {
                     let asc = !sync_inner.chain_manager.is_run().await;
-                    let sync_block_req_msg = Self::sync_block_req(asc, latest_height, end_block_hash.unwrap());
-                    EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(), &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
+                    let sync_block_req_msg =
+                        Self::sync_block_req(asc, latest_height, end_block_hash.unwrap());
+                    EventProcessor::send_consensus_msg(
+                        peer_id,
+                        &mut sync_inner.network_sender.clone(),
+                        sync_inner.author.clone(),
+                        &mut sync_inner.self_sender.clone(),
+                        sync_block_req_msg,
+                    )
+                    .await;
                 }
                 _ => {
                     //                                    BlockRetrievalStatus::IdNotFound
@@ -169,22 +182,28 @@ impl SyncManager {
         }
     }
 
-    async fn handle_desc_sync_resp(sync_inner:SyncInner, peer_id: PeerId, sync_block_resp: BlockRetrievalResponse<BlockPayloadExt>) {
+    async fn handle_desc_sync_resp(
+        sync_inner: SyncInner,
+        peer_id: PeerId,
+        sync_block_resp: BlockRetrievalResponse<BlockPayloadExt>,
+    ) {
         println!("-----------desc-------------");
         // 2. save data to cache
         let status = sync_block_resp.status();
-        debug!(
-            "Sync block from {:?}, status : {:?}",
-            peer_id,
-            status
-        );
+        debug!("Sync block from {:?}, status : {:?}", peer_id, status);
         let blocks = sync_block_resp.blocks();
 
         let mut end_flag = false;
         let mut err_block_flag = false;
         let mut end_block_hash = None;
         let mut latest_height = 0;
-        let mut sync_block_cache_lock = sync_inner.sync_block_cache.clone().lock().compat().await.unwrap();
+        let mut sync_block_cache_lock = sync_inner
+            .sync_block_cache
+            .clone()
+            .lock()
+            .compat()
+            .await
+            .unwrap();
         if blocks.len() > 0 {
             if !sync_block_cache_lock.contains_key(&peer_id) {
                 let block_vec = Vec::new();
@@ -200,7 +219,10 @@ impl SyncManager {
 
                     // add to sync_block_cache
                     end_block_hash = Some(block.parent_id());
-                    sync_block_cache_lock.get_mut(&peer_id).expect("peer block not exist.").push(block.clone());
+                    sync_block_cache_lock
+                        .get_mut(&peer_id)
+                        .expect("peer block not exist.")
+                        .push(block.clone());
 
                     latest_height = block.round();
                 } else {
@@ -211,22 +233,34 @@ impl SyncManager {
         }
 
         if end_flag {
-            let mut block_vec = sync_block_cache_lock.remove(&peer_id).expect("peer block not exist.");
+            let mut block_vec = sync_block_cache_lock
+                .remove(&peer_id)
+                .expect("peer block not exist.");
             block_vec.reverse();
             for b in block_vec {
-                sync_inner.block_cache_sender.clone().send(b).await.expect("send block err.");
+                sync_inner
+                    .block_cache_sender
+                    .clone()
+                    .send(b)
+                    .await
+                    .expect("send block err.");
             }
-            info!(
-                "Sync block from {:?} end",
-                peer_id
-            );
+            info!("Sync block from {:?} end", peer_id);
         } else {
             if !err_block_flag {
                 match status {
                     BlockRetrievalStatus::Succeeded => {
                         let asc = !sync_inner.chain_manager.is_run().await;
-                        let sync_block_req_msg = Self::sync_block_req(asc, latest_height, end_block_hash.unwrap());
-                        EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(), &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
+                        let sync_block_req_msg =
+                            Self::sync_block_req(asc, latest_height, end_block_hash.unwrap());
+                        EventProcessor::send_consensus_msg(
+                            peer_id,
+                            &mut sync_inner.network_sender.clone(),
+                            sync_inner.author.clone(),
+                            &mut sync_inner.self_sender.clone(),
+                            sync_block_req_msg,
+                        )
+                        .await;
                     }
                     _ => {
                         //                                    BlockRetrievalStatus::IdNotFound
@@ -238,7 +272,7 @@ impl SyncManager {
         }
     }
 
-    fn sync_block_req(asc:bool, height:u64, hash: HashValue) -> ConsensusMsg {
+    fn sync_block_req(asc: bool, height: u64, hash: HashValue) -> ConsensusMsg {
         let num_blocks = 10;
 
         let req = PowBlockRetrievalRequest::new(height, hash, num_blocks, asc)

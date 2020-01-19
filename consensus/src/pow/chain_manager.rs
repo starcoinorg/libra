@@ -1,6 +1,7 @@
 use crate::chained_bft::consensusdb::ConsensusDB;
 use crate::pow::block_tree::{BlockTree, CommitData};
 use crate::state_replication::{StateComputer, TxnManager};
+use atomic_refcell::AtomicRefCell;
 use consensus_types::{block::Block, payload_ext::BlockPayloadExt};
 use futures::compat::Future01CompatExt;
 use futures::{channel::mpsc, SinkExt, StreamExt};
@@ -19,7 +20,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use storage_client::{StorageRead, StorageWrite};
 use tokio::runtime::Handle;
-use atomic_refcell::AtomicRefCell;
 
 pub struct ChainManager {
     inner: AtomicRefCell<ChainInner>,
@@ -58,15 +58,12 @@ impl ChainInner {
 
 #[derive(Clone)]
 struct ChainState {
-    state: State
+    state: State,
 }
 
 impl ChainState {
-
     fn new(state: State) -> Self {
-        ChainState {
-            state
-        }
+        ChainState { state }
     }
 
     fn set_run(&mut self) {
@@ -83,11 +80,13 @@ impl ChainState {
 
     pub fn is_run(&self) -> bool {
         println!("---is_run---0000---{:?}------", self.state.clone());
-        println!("---is_run---1111---{:?}------", (self.state.clone() == State::RUNNING));
+        println!(
+            "---is_run---1111---{:?}------",
+            (self.state.clone() == State::RUNNING)
+        );
         self.state.clone() == State::RUNNING
     }
 }
-
 
 #[derive(Clone, PartialEq, Debug)]
 enum State {
@@ -129,12 +128,17 @@ impl ChainManager {
             author,
             read_storage,
             new_block_sender,
-            chain_state: if is_first{Arc::new(RwLock::new(ChainState::new(State::RUNNING)))} else {
-                Arc::new(RwLock::new(ChainState::new(State::INIT)))},
-            is_first
+            chain_state: if is_first {
+                Arc::new(RwLock::new(ChainState::new(State::RUNNING)))
+            } else {
+                Arc::new(RwLock::new(ChainState::new(State::INIT)))
+            },
+            is_first,
         };
 
-        ChainManager { inner: AtomicRefCell::new(inner) }
+        ChainManager {
+            inner: AtomicRefCell::new(inner),
+        }
     }
 
     pub fn _process_orphan_blocks(&self) {
