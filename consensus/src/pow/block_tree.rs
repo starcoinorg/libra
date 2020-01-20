@@ -2,6 +2,7 @@ use crate::chained_bft::consensusdb::ConsensusDB;
 use crate::state_replication::TxnManager;
 use anyhow::{Result, *};
 use atomic_refcell::AtomicRefCell;
+use consensus_types::payload_ext::BlockPayloadExt;
 use consensus_types::{block::Block, common::Payload};
 use executor::ProcessedVMOutput;
 use libra_crypto::hash::PRE_GENESIS_BLOCK_ID;
@@ -133,49 +134,118 @@ impl BlockTree {
         info!("Dump path : {:?}", path);
 
         if !path.exists() {
-            let genesis_height = 0;
-            let genesis_block: Block<T> = Block::make_genesis_block();
-            let genesis_id = genesis_block.id();
-            let genesis_block_info =
-                BlockInfo::new_inner(&genesis_id, &PRE_GENESIS_BLOCK_ID, genesis_height, 0, None);
+            let latest_height = block_store.latest_height();
+            match latest_height {
+                Some(height) => {
+                    let mut indexes = HashMap::new();
+                    let mut id_to_block = HashMap::new();
+                    let main_chain = AtomicRefCell::new(HashMap::new());
+                    let mut tail_height = 0;
+                    for i in 0..10 {
+                        if height < i {
+                            break;
+                        }
+                        let tmp_height = height - i;
+                        if let Ok(block_index_by_height) =
+                            block_store.query_block_index_by_height(tmp_height)
+                        {
+                            match block_index_by_height {
+                                Some(block_index) => {
+                                    let block: Block<BlockPayloadExt> = block_store
+                                        .get_block_by_hash(&block_index.id())
+                                        .expect("block is none.");
 
-            //init block_store
-            let mut genesis_qcs = Vec::new();
-            genesis_qcs.push(genesis_block.quorum_cert().clone());
-            block_store
-                .save_blocks_and_quorum_certificates(vec![genesis_block], genesis_qcs)
-                .expect("save blocks failed.");
+                                    let mut hash_list = Vec::new();
+                                    hash_list.push(block_index.id().clone());
 
-            // indexes
-            let mut genesis_indexes = Vec::new();
-            genesis_indexes.push(genesis_id.clone());
-            let mut indexes = HashMap::new();
-            indexes.insert(genesis_height, genesis_indexes);
+                                    let new_block_info = BlockInfo::new_inner(
+                                        &block_index.id(),
+                                        block_index.parent_id_ref(),
+                                        tmp_height,
+                                        block.timestamp_usecs(),
+                                        None,
+                                    );
 
-            // main chain
-            let main_chain = AtomicRefCell::new(HashMap::new());
-            main_chain
-                .borrow_mut()
-                .insert(genesis_height, genesis_block_info.block_index().clone());
-            block_store
-                .insert_block_index(&genesis_height, &genesis_block_info.block_index().clone())
-                .expect("save genesis block index failed.");
+                                    id_to_block.insert(block_index.id().clone(), new_block_info);
 
-            // id to block
-            let mut id_to_block = HashMap::new();
-            id_to_block.insert(genesis_id.clone(), genesis_block_info);
+                                    indexes.insert(tmp_height, hash_list);
 
-            BlockTree {
-                height: genesis_height,
-                id_to_block,
-                indexes,
-                main_chain,
-                write_storage,
-                tail_height: genesis_height,
-                txn_manager,
-                rollback_mode,
-                block_store,
-                dump_path: path,
+                                    main_chain.borrow_mut().insert(tmp_height, block_index);
+
+                                    tail_height = tmp_height;
+                                }
+                                None => break,
+                            }
+                        };
+                    }
+
+                    BlockTree {
+                        height,
+                        id_to_block,
+                        indexes,
+                        main_chain,
+                        write_storage,
+                        tail_height,
+                        txn_manager,
+                        rollback_mode,
+                        block_store,
+                        dump_path: path,
+                    }
+                }
+                None => {
+                    let genesis_height = 0;
+                    let genesis_block: Block<T> = Block::make_genesis_block();
+                    let genesis_id = genesis_block.id();
+                    let genesis_block_info = BlockInfo::new_inner(
+                        &genesis_id,
+                        &PRE_GENESIS_BLOCK_ID,
+                        genesis_height,
+                        0,
+                        None,
+                    );
+
+                    //init block_store
+                    let mut genesis_qcs = Vec::new();
+                    genesis_qcs.push(genesis_block.quorum_cert().clone());
+                    block_store
+                        .save_blocks_and_quorum_certificates(vec![genesis_block], genesis_qcs)
+                        .expect("save blocks failed.");
+
+                    // indexes
+                    let mut genesis_indexes = Vec::new();
+                    genesis_indexes.push(genesis_id.clone());
+                    let mut indexes = HashMap::new();
+                    indexes.insert(genesis_height, genesis_indexes);
+
+                    // main chain
+                    let main_chain = AtomicRefCell::new(HashMap::new());
+                    main_chain
+                        .borrow_mut()
+                        .insert(genesis_height, genesis_block_info.block_index().clone());
+                    block_store
+                        .insert_block_index(
+                            &genesis_height,
+                            &genesis_block_info.block_index().clone(),
+                        )
+                        .expect("save genesis block index failed.");
+
+                    // id to block
+                    let mut id_to_block = HashMap::new();
+                    id_to_block.insert(genesis_id.clone(), genesis_block_info);
+
+                    BlockTree {
+                        height: genesis_height,
+                        id_to_block,
+                        indexes,
+                        main_chain,
+                        write_storage,
+                        tail_height: genesis_height,
+                        txn_manager,
+                        rollback_mode,
+                        block_store,
+                        dump_path: path,
+                    }
+                }
             }
         } else {
             let mut file = File::open(path.clone()).expect("open genesis err.");
@@ -382,7 +452,7 @@ impl BlockTree {
         self.id_to_block.get(block_id)
     }
 
-    pub fn reset_cache(&mut self) -> (u64, Vec<(u64, HashValue)>) {
+    pub fn query_latest_block_from_cache(&mut self) -> (u64, Vec<(u64, HashValue)>) {
         let mut latest_blocks: Vec<(u64, HashValue)> = Vec::new();
         let total = 10;
         if self.main_chain.borrow().len() == 0 {

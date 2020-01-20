@@ -189,7 +189,8 @@ impl EventProcessor {
                         };
                         match msg_message {
                             ConsensusMsg_oneof::NewBlock(new_block) => {
-                                if event_inner.chain_manager.is_run().await {
+                                let is_run = event_inner.chain_manager.is_run().await;
+                                if is_run {
                                     let block: Block<BlockPayloadExt> =
                                         Block::try_from(new_block).expect("parse block pb err.");
 
@@ -378,8 +379,10 @@ impl EventProcessor {
                     Event::NewPeer(peer_id) => {
                         info!("Peer {:?} connected", peer_id);
                         if event_inner.chain_manager.is_init().await {
-                            let (latest_height, latest_blocks) =
-                                event_inner.chain_manager.reset_cache().await;
+                            let (latest_height, latest_blocks) = event_inner
+                                .chain_manager
+                                .query_latest_block_from_cache()
+                                .await;
                             let req = PowSyncInfoReq::new_req(latest_blocks);
                             let resp = event_inner
                                 .network_sender
