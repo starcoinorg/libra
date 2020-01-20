@@ -79,11 +79,6 @@ impl ChainState {
     }
 
     pub fn is_run(&self) -> bool {
-        println!("---is_run---0000---{:?}------", self.state.clone());
-        println!(
-            "---is_run---1111---{:?}------",
-            (self.state.clone() == State::RUNNING)
-        );
         self.state.clone() == State::RUNNING
     }
 }
@@ -176,11 +171,8 @@ impl ChainManager {
             loop {
                 ::futures::select! {
                                 _ = begin_mint_receiver.select_next_some() => {
-                                    println!("--------begin_mint_receiver----0000-----");
                                     if !chain_inner.borrow().is_run().await {
-                                        println!("--------begin_mint_receiver----1111-----");
                                         chain_inner.borrow_mut().set_run().await;
-                                        println!("--------begin_mint_receiver----2222-----");
 
                                         new_block_sender
                                         .send(0)

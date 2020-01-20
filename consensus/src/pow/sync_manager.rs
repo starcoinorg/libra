@@ -85,9 +85,7 @@ impl SyncManager {
                     (peer_id, (height, root_hash)) = sync_signal_receiver.select_next_some() => {
                         //1. sync data from latest block
                         //TODO:timeout
-                        println!("--------sync_signal_receiver-----000----");
                         if sync_inner.chain_manager.is_run().await {
-                            println!("--------sync_signal_receiver-----222----");
                             if sync_inner.sync_block_height.load(Ordering::Relaxed) < height {
                                 sync_inner.sync_block_height.store(height, Ordering::Relaxed);
                                 let sync_block_req_msg = Self::sync_block_req(false, height, root_hash);
@@ -95,19 +93,15 @@ impl SyncManager {
                                     &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
                             }
                         } else {
-                            println!("--------sync_signal_receiver-----111----");
                             let sync_block_req_msg = Self::sync_block_req(true, height, root_hash);
                             EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(),
                                 &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
                         }
                     },
                     (peer_id, sync_block_resp) = sync_block_receiver.select_next_some() => {
-                        println!("--------sync_block_receiver-----000----");
                         if sync_inner.chain_manager.is_run().await {
-                            println!("--------sync_block_receiver-----111----");
                             Self::handle_desc_sync_resp(sync_inner.clone(), peer_id, sync_block_resp).await;
                         } else {
-                            println!("--------sync_block_receiver-----222----");
                             Self::handle_asc_sync_resp(sync_inner.clone(), peer_id, sync_block_resp).await;
                         }
                     }
@@ -128,7 +122,6 @@ impl SyncManager {
         peer_id: PeerId,
         sync_block_resp: BlockRetrievalResponse<BlockPayloadExt>,
     ) {
-        println!("-----------asc-------------");
         // 2. save data to cache
         let status = sync_block_resp.status();
         debug!("Sync block from {:?}, status : {:?}", peer_id, status);
@@ -187,7 +180,6 @@ impl SyncManager {
         peer_id: PeerId,
         sync_block_resp: BlockRetrievalResponse<BlockPayloadExt>,
     ) {
-        println!("-----------desc-------------");
         // 2. save data to cache
         let status = sync_block_resp.status();
         debug!("Sync block from {:?}, status : {:?}", peer_id, status);
