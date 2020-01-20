@@ -143,7 +143,6 @@ impl MintManager {
                             .await;
                     }
                     latest_height = new_block_receiver.select_next_some() => {
-                        println!("-------new_block_receiver------");
                         if mint_inner.dev_mode {
                             task::block_on(async move {
                                 let mut rng = thread_rng();

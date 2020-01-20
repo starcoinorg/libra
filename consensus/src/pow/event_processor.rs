@@ -189,9 +189,7 @@ impl EventProcessor {
                         };
                         match msg_message {
                             ConsensusMsg_oneof::NewBlock(new_block) => {
-                                println!("========NewBlock=====00000====");
                                 if event_inner.chain_manager.is_run().await {
-                                    println!("========NewBlock=====1111111====");
                                     let block: Block<BlockPayloadExt> =
                                         Block::try_from(new_block).expect("parse block pb err.");
 
@@ -396,13 +394,9 @@ impl EventProcessor {
                                 Ok(latest_resp) => {
                                     let pow_resp =
                                         PowSyncInfoResp::try_from(latest_resp).expect("parse err.");
-                                    println!("--------common_ancestor-----{:?}----", pow_resp);
                                     if pow_resp.latest_height() > latest_height {
-                                        println!("--------common_ancestor-----0000----");
                                         if let Some(common_ancestor) = pow_resp.common_ancestor() {
-                                            println!("--------common_ancestor-----1111----");
                                             if event_inner.chain_manager.is_init().await {
-                                                println!("--------common_ancestor-----2222----");
                                                 if let Err(err) = event_inner
                                                     .sync_signal_sender
                                                     .clone()
@@ -417,13 +411,10 @@ impl EventProcessor {
                                                 {
                                                     error!("send sync signal err: {:?}", err);
                                                 }
-                                                println!("--------common_ancestor-----3333----");
                                                 event_inner.chain_manager.set_sync().await;
-                                                println!("--------common_ancestor-----4444----");
                                             }
                                         }
                                     } else {
-                                        println!("--------begin_mint_sender-----111----");
                                         let _ =
                                             event_inner.begin_mint_sender.clone().send(()).await;
                                     }
@@ -455,11 +446,6 @@ impl EventProcessor {
             .block_store
             .query_blocks_by_height(height + 1, num_blocks as usize)
             .unwrap();
-        println!(
-            "============find_blocks_asc====={:?}===={:?}====",
-            height,
-            blocks.len()
-        );
 
         let status = if (blocks.len() as u64) == num_blocks {
             BlockRetrievalStatus::Succeeded
@@ -480,7 +466,6 @@ impl EventProcessor {
         num_blocks: u64,
         block_id: HashValue,
     ) -> ConsensusMsg {
-        println!("============find_blocks_desc============");
         let mut blocks = vec![];
         let mut latest_block = if block_id != HashValue::zero() {
             Some(block_id)

@@ -383,11 +383,9 @@ impl BlockTree {
     }
 
     pub fn reset_cache(&mut self) -> (u64, Vec<(u64, HashValue)>) {
-        println!("-----------reset cache-------0000------");
         let mut latest_blocks: Vec<(u64, HashValue)> = Vec::new();
         let total = 10;
         if self.main_chain.borrow().len() == 0 {
-            println!("-----------reset cache------1111-------");
             let height = self.block_store.latest_height().unwrap();
             self.height = height;
             self.rollback_mode = false;
