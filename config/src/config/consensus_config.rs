@@ -59,9 +59,7 @@ pub struct ConsensusConfig {
     pub safety_rules: SafetyRulesConfig,
     #[serde(skip)]
     pub base: Arc<BaseConfig>,
-    #[serde(skip)]
     pub dev_mode: bool,
-    #[serde(skip)]
     pub is_first: bool,
 }
 
