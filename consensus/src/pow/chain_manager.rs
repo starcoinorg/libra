@@ -329,7 +329,7 @@ impl ChainManager {
             .chain_height_and_root()
     }
 
-    pub async fn reset_cache(&self) -> (u64, Vec<(u64, HashValue)>) {
+    pub async fn query_latest_block_from_cache(&self) -> (u64, Vec<(u64, HashValue)>) {
         self.inner
             .borrow()
             .block_tree
@@ -338,6 +338,6 @@ impl ChainManager {
             .compat()
             .await
             .unwrap()
-            .reset_cache()
+            .query_latest_block_from_cache()
     }
 }
