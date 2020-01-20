@@ -2,7 +2,7 @@ use libra_crypto::HashValue;
 use libra_logger::prelude::*;
 use miner::types::{Algo, U256};
 
-pub const BLOCK_WINDOW: u32 = 12;
+pub const BLOCK_WINDOW: u32 = 24;
 pub const BLOCK_TIME_SEC: u32 = 5;
 
 pub fn difficult_1_target() -> U256 {
@@ -46,39 +46,36 @@ where
         );
         return difficult_1_target();
     }
-    let target = blocks[0].target;
-    let time_used = {
-        let mut time_used: u64 = 0;
-        let mut latest_block_index = 0;
-        while latest_block_index < blocks.len() - 1 {
-            info!(
-                "block_timestamp:{:?},{:?}",
-                blocks[latest_block_index].timestamp,
-                blocks[latest_block_index + 1].timestamp
-            );
-            let diff =
-                blocks[latest_block_index].timestamp - blocks[latest_block_index + 1].timestamp;
-            time_used += diff;
-            latest_block_index += 1;
-        }
-
-        if time_used == 0 {
-            1
-        } else {
-            time_used
-        }
-    };
-    let time_plan = BLOCK_TIME_SEC * (blocks.len() - 1) as u32;
-    // new_target = old_target * time_used/time_plan
+    let mut avg_time: u64 = 0;
+    let mut avg_target = U256::zero();
+    let mut latest_block_index = 0;
+    let block_n = blocks.len() - 1;
+    while latest_block_index < block_n {
+        let solve_time =
+            blocks[latest_block_index].timestamp - blocks[latest_block_index + 1].timestamp;
+        avg_time += solve_time * (block_n - latest_block_index) as u64;
+        debug!(
+            "solve_time:{:?}, avg_time:{:?}, block_n:{:?}",
+            solve_time, avg_time, block_n
+        );
+        avg_target = avg_target + blocks[latest_block_index].target / block_n.into();
+        latest_block_index += 1
+    }
+    avg_time = avg_time / ((block_n as u64) * ((block_n + 1) as u64) / 2);
+    if avg_time == 0 {
+        avg_time = 1
+    }
+    let time_plan = BLOCK_TIME_SEC;
+    // new_target = avg_target * avg_time_used/time_plan
     // avoid the target increase or reduce too fast.
     let new_target =
-        if let Some(new_target) = (target / time_plan.into()).checked_mul(time_used.into()) {
-            if new_target / 2.into() > target {
+        if let Some(new_target) = (avg_target / time_plan.into()).checked_mul(avg_time.into()) {
+            if new_target / 2.into() > avg_target {
                 info!("target increase too fast, limit to 2 times");
-                target * 2
-            } else if new_target < target / 2.into() {
+                avg_target * 2
+            } else if new_target < avg_target / 2.into() {
                 info!("target reduce too fase, limit to 2 times");
-                target / 2.into()
+                avg_target / 2.into()
             } else {
                 new_target
             }
@@ -86,16 +83,11 @@ where
             info!("target large than max value, set to 1_difficult");
             difficult_1_target()
         };
-
     info!(
-        "time_used:{:?}s, time_plan:{:?}s, each block used::{:?}s, target: {:?}",
-        time_used,
-        time_plan,
-        time_used / (blocks.len() - 1) as u64,
-        new_target
+        "avg_time:{:?}s, time_plan:{:?}s, target: {:?}",
+        avg_time, time_plan, new_target
     );
     new_target
-    //difficult_1_target()
 }
 
 #[derive(Clone)]
