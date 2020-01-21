@@ -298,6 +298,15 @@ impl BlockTree {
         new_block_info: BlockInfo,
         new_root: bool,
     ) {
+        //6. insert block
+        let mut qcs = Vec::new();
+        qcs.push(block.quorum_cert().clone());
+        let mut blocks: Vec<Block<T>> = Vec::new();
+        blocks.push(block);
+        self.block_store
+            .save_blocks_and_quorum_certificates(blocks, qcs)
+            .expect("save_blocks err.");
+
         //4. new root, rollback, commit
         if new_root {
             let old_root = self.root_hash().unwrap();
@@ -362,15 +371,6 @@ impl BlockTree {
         //5. add new block info
         self.id_to_block
             .insert(new_block_info.id().clone(), new_block_info);
-
-        //6. insert block
-        let mut qcs = Vec::new();
-        qcs.push(block.quorum_cert().clone());
-        let mut blocks: Vec<Block<T>> = Vec::new();
-        blocks.push(block);
-        self.block_store
-            .save_blocks_and_quorum_certificates(blocks, qcs)
-            .expect("save_blocks err.");
     }
 
     async fn commit_block(&self, block_info: &BlockInfo) {
