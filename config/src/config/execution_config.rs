@@ -82,24 +82,30 @@ impl ExecutionConfig {
         self.base.full_path(&self.genesis_file_location)
     }
 
+    fn genesis_file(&self) -> String {
+        let genesis_file_location = self.genesis_file_location().clone();
+        let tmp_path = genesis_file_location.to_str().unwrap();
+        if tmp_path.clone().ends_with(GENESIS_DEFAULT) {
+            tmp_path.to_string()
+        } else if tmp_path.clone().ends_with(std::path::MAIN_SEPARATOR) {
+            format!("{}{}", tmp_path, GENESIS_DEFAULT)
+        } else {
+            format!("{}/{}", tmp_path, GENESIS_DEFAULT)
+        }
+    }
     pub fn save_genesis(&mut self, genesis_tx: Transaction) {
-        let genesis_file = format!(
-            "{}{}",
-            self.genesis_file_location().to_str().unwrap(),
-            GENESIS_DEFAULT
-        );
-        let mut file = File::create(genesis_file).expect("Unable to create genesis.blob");
-        file.write_all(&lcs::to_bytes(&genesis_tx).expect("Unable to serialize genesis"))
-            .expect("Unable to write genesis");
-        file.flush().expect("flush genesis file err.");
+        let genesis_file = self.genesis_file();
+
+        if !PathBuf::from(genesis_file.clone()).exists() {
+            let mut file = File::create(genesis_file).expect("Unable to create genesis.blob");
+            file.write_all(&lcs::to_bytes(&genesis_tx).expect("Unable to serialize genesis"))
+                .expect("Unable to write genesis");
+            file.flush().expect("flush genesis file err.");
+        }
     }
 
     pub fn reload_genesis(&mut self) {
-        let genesis_file = format!(
-            "{}{}",
-            self.genesis_file_location().to_str().unwrap(),
-            GENESIS_DEFAULT
-        );
+        let genesis_file = self.genesis_file();
         let mut file = File::open(genesis_file).expect("open genesis err.");
         let mut buffer = vec![];
         file.read_to_end(&mut buffer).expect("reload genesis err.");

@@ -56,7 +56,7 @@ impl Drop for BlockTree {
         let dump = self.to_dump();
         let bytes: Vec<u8> = dump.into();
         let mut file =
-            File::create(self.dump_path.clone()).expect("Unable to create blocktree.blob");
+            File::create(self.dump_path.clone()).expect("Unable to create block_tree.blob");
         file.write_all(bytes.as_ref())
             .expect("Unable to dump block tree.");
         file.flush().expect("flush block tree file err.");
