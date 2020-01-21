@@ -253,13 +253,18 @@ impl BlockTree {
             file.read_to_end(&mut buffer).expect("reload genesis err.");
             let block_tree_dump =
                 BlockTree4Dump::try_from(buffer).expect("BlockTree4Dump try_from err.");
-            from_dump(
+
+            let _ = std::fs::remove_file(path.clone());
+
+            let tmp = from_dump(
                 block_tree_dump,
                 write_storage,
                 txn_manager,
                 block_store,
                 path,
-            )
+            );
+
+            tmp
         }
     }
 
