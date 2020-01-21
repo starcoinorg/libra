@@ -882,58 +882,58 @@ where
         let mut pending_inbound_substreams = FuturesUnordered::new();
         while !self.shutdown {
             futures::select! {
-                maybe_req = self.requests_rx.next() => {
-                    if let Some(request) = maybe_req {
-                        self.handle_request(&mut pending_outbound_substreams, request).await;
-                    } else {
-                        // This branch will only be taken if the PeerRequest sender for this Peer
-                        // gets dropped.  This should never happen because PeerManager should also
-                        // issue a shutdown request before dropping the sender
-                        unreachable!(
-                            "Peer {} PeerRequest sender gets dropped",
-                            self.identity.peer_id().short_str()
-                        );
-                    }
-                },
-                maybe_substream = substream_rx.next() => {
-                    match maybe_substream {
-                        Some(Ok(substream)) => {
-                            self.handle_inbound_substream(&mut pending_inbound_substreams, substream);
-                        }
-                        Some(Err(e)) => {
-                            warn!("Inbound substream error {:?} with peer {}",
-                                  e, self.identity.peer_id().short_str());
-                            self.close_connection(DisconnectReason::ConnectionLost).await;
-                        }
-                        None => {
-                            warn!("Inbound substreams exhausted with peer {}",
-                                  self.identity.peer_id().short_str());
-                            self.close_connection(DisconnectReason::ConnectionLost).await;
-                        }
-                    }
-                },
-                inbound_substream = pending_inbound_substreams.select_next_some() => {
-                    match inbound_substream {
-                        Ok(negotiated_substream) => {
-                            let event = PeerNotification::NewSubstream(
-                                self.identity.peer_id(),
-                                negotiated_substream,
-                            );
-                            self.peer_notifs_tx.send(event).await.unwrap();
-                        }
-                        Err(e) => {
-                            error!(
-                                "Inbound substream negotiation for peer {} failed: {}",
-                                self.identity.peer_id().short_str(), e
-                            );
-                        }
-                    }
-                },
-                _ = pending_outbound_substreams.select_next_some() => {
-                    // Do nothing since these futures have an output of "()"
-                },
-                complete => unreachable!(),
-            }
+                                        maybe_req = self.requests_rx.next() => {
+                                            if let Some(request) = maybe_req {
+                                                self.handle_request(&mut pending_outbound_substreams, request).await;
+            //                                } else {
+            //                                    // This branch will only be taken if the PeerRequest sender for this Peer
+            //                                    // gets dropped.  This should never happen because PeerManager should also
+            //                                    // issue a shutdown request before dropping the sender
+            //                                    unreachable!(
+            //                                        "Peer {} PeerRequest sender gets dropped",
+            //                                        self.identity.peer_id().short_str()
+            //                                    );
+                                            }
+                                        },
+                                        maybe_substream = substream_rx.next() => {
+                                            match maybe_substream {
+                                                Some(Ok(substream)) => {
+                                                    self.handle_inbound_substream(&mut pending_inbound_substreams, substream);
+                                                }
+                                                Some(Err(e)) => {
+                                                    warn!("Inbound substream error {:?} with peer {}",
+                                                          e, self.identity.peer_id().short_str());
+                                                    self.close_connection(DisconnectReason::ConnectionLost).await;
+                                                }
+                                                None => {
+                                                    warn!("Inbound substreams exhausted with peer {}",
+                                                          self.identity.peer_id().short_str());
+                                                    self.close_connection(DisconnectReason::ConnectionLost).await;
+                                                }
+                                            }
+                                        },
+                                        inbound_substream = pending_inbound_substreams.select_next_some() => {
+                                            match inbound_substream {
+                                                Ok(negotiated_substream) => {
+                                                    let event = PeerNotification::NewSubstream(
+                                                        self.identity.peer_id(),
+                                                        negotiated_substream,
+                                                    );
+                                                    self.peer_notifs_tx.send(event).await.unwrap();
+                                                }
+                                                Err(e) => {
+                                                    error!(
+                                                        "Inbound substream negotiation for peer {} failed: {}",
+                                                        self.identity.peer_id().short_str(), e
+                                                    );
+                                                }
+                                            }
+                                        },
+                                        _ = pending_outbound_substreams.select_next_some() => {
+                                            // Do nothing since these futures have an output of "()"
+                                        },
+                                        complete => unreachable!(),
+                                    }
         }
         debug!(
             "Peer actor '{}' shutdown",

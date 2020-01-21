@@ -56,7 +56,7 @@ impl Drop for BlockTree {
         let dump = self.to_dump();
         let bytes: Vec<u8> = dump.into();
         let mut file =
-            File::create(self.dump_path.clone()).expect("Unable to create blocktree.blob");
+            File::create(self.dump_path.clone()).expect("Unable to create block_tree.blob");
         file.write_all(bytes.as_ref())
             .expect("Unable to dump block tree.");
         file.flush().expect("flush block tree file err.");
@@ -253,13 +253,18 @@ impl BlockTree {
             file.read_to_end(&mut buffer).expect("reload genesis err.");
             let block_tree_dump =
                 BlockTree4Dump::try_from(buffer).expect("BlockTree4Dump try_from err.");
-            from_dump(
+
+            let _ = std::fs::remove_file(path.clone());
+
+            let tmp = from_dump(
                 block_tree_dump,
                 write_storage,
                 txn_manager,
                 block_store,
                 path,
-            )
+            );
+
+            tmp
         }
     }
 
@@ -293,6 +298,15 @@ impl BlockTree {
         new_block_info: BlockInfo,
         new_root: bool,
     ) {
+        //6. insert block
+        let mut qcs = Vec::new();
+        qcs.push(block.quorum_cert().clone());
+        let mut blocks: Vec<Block<T>> = Vec::new();
+        blocks.push(block);
+        self.block_store
+            .save_blocks_and_quorum_certificates(blocks, qcs)
+            .expect("save_blocks err.");
+
         //4. new root, rollback, commit
         if new_root {
             let old_root = self.root_hash().unwrap();
@@ -357,15 +371,6 @@ impl BlockTree {
         //5. add new block info
         self.id_to_block
             .insert(new_block_info.id().clone(), new_block_info);
-
-        //6. insert block
-        let mut qcs = Vec::new();
-        qcs.push(block.quorum_cert().clone());
-        let mut blocks: Vec<Block<T>> = Vec::new();
-        blocks.push(block);
-        self.block_store
-            .save_blocks_and_quorum_certificates(blocks, qcs)
-            .expect("save_blocks err.");
     }
 
     async fn commit_block(&self, block_info: &BlockInfo) {
