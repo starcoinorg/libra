@@ -591,7 +591,7 @@ impl BlockTree {
     pub fn print_block_chain_root(&self, peer_id: PeerId) {
         let height = self.height;
         let begin_height = if height > TOTAL_BLOCK {
-            height - (TOTAL_BLOCK / 2)
+            height - (TOTAL_BLOCK / 5)
         } else {
             0
         };
