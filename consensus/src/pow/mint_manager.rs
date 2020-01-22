@@ -281,8 +281,8 @@ impl MintManager {
                         break;
                     }
                     complete => {
-                       break;
-                   }
+                        break;
+                    }
                 }
             }
         };

@@ -40,6 +40,7 @@ use vm_runtime::MoveVM;
 
 pub struct PowConsensusProvider {
     runtime: Option<tokio::runtime::Runtime>,
+    mint_runtime: Option<tokio::runtime::Runtime>,
     event_handle: Option<EventProcessor>,
     miner_proxy: Option<Server>,
     _block_storage_server: ServerHandle,
@@ -64,6 +65,8 @@ struct StopInner {
     mint_stop_receiver: Option<mpsc::Receiver<()>>,
     state_stop_sender: mpsc::Sender<()>,
     state_stop_receiver: Option<mpsc::Receiver<()>>,
+    event_stop_sender: mpsc::Sender<()>,
+    event_stop_receiver: Option<mpsc::Receiver<()>>,
 }
 
 impl StopInner {
@@ -72,6 +75,7 @@ impl StopInner {
         let (chain_stop_sender, chain_stop_receiver) = mpsc::channel(1);
         let (mint_stop_sender, mint_stop_receiver) = mpsc::channel(1);
         let (state_stop_sender, state_stop_receiver) = mpsc::channel(1);
+        let (event_stop_sender, event_stop_receiver) = mpsc::channel(1);
 
         StopInner {
             sync_stop_sender,
@@ -82,6 +86,8 @@ impl StopInner {
             mint_stop_receiver: Some(mint_stop_receiver),
             state_stop_sender,
             state_stop_receiver: Some(state_stop_receiver),
+            event_stop_sender,
+            event_stop_receiver: Some(event_stop_receiver),
         }
     }
 
@@ -92,16 +98,19 @@ impl StopInner {
         mpsc::Receiver<()>,
         mpsc::Receiver<()>,
         mpsc::Receiver<()>,
+        mpsc::Receiver<()>,
     ) {
         let sync_stop_receiver = self.sync_stop_receiver.take().unwrap();
         let chain_stop_receiver = self.chain_stop_receiver.take().unwrap();
         let mint_stop_receiver = self.mint_stop_receiver.take().unwrap();
         let state_stop_receiver = self.state_stop_receiver.take().unwrap();
+        let event_stop_receiver = self.event_stop_receiver.take().unwrap();
         (
             sync_stop_receiver,
             chain_stop_receiver,
             mint_stop_receiver,
             state_stop_receiver,
+            event_stop_receiver,
         )
     }
 
@@ -111,6 +120,7 @@ impl StopInner {
             let _ = self.sync_stop_sender.clone().send(()).await;
             let _ = self.chain_stop_sender.clone().send(()).await;
             let _ = self.mint_stop_sender.clone().send(()).await;
+            let _ = self.event_stop_sender.clone().send(()).await;
         });
     }
 }
@@ -134,6 +144,12 @@ impl PowConsensusProvider {
             .enable_all()
             .build()
             .expect("Failed to create Tokio runtime!");
+
+        let mint_runtime = runtime::Builder::new()
+            .threaded_scheduler()
+            .enable_all()
+            .build()
+            .expect("Failed to create Tokio mint runtime!");
 
         let txn_manager = Arc::new(MempoolProxy::new(mempool_client.clone()));
         let state_computer = Arc::new(ExecutionProxy::new(executor, synchronizer_client.clone()));
@@ -205,6 +221,7 @@ impl PowConsensusProvider {
         let stop_inner = StopInner::new();
         Self {
             runtime: Some(runtime),
+            mint_runtime: Some(mint_runtime),
             event_handle: Some(event_handle),
             miner_proxy: Some(miner_proxy),
             _block_storage_server: ServerHandle::setup(block_storage_server),
@@ -224,6 +241,7 @@ impl PowConsensusProvider {
     pub fn event_handle(
         &mut self,
         executor: Handle,
+        mint_executor: Handle,
         chain_state_network_sender: ChainStateNetworkSender,
         chain_state_network_events: ChainStateNetworkEvents,
         self_key: Ed25519PrivateKey,
@@ -237,6 +255,7 @@ impl PowConsensusProvider {
         mint_stop_receiver: mpsc::Receiver<()>,
         state_stop_receiver: mpsc::Receiver<()>,
         begin_mint_receiver: mpsc::Receiver<()>,
+        event_stop_receiver: mpsc::Receiver<()>,
     ) {
         match self.event_handle.take() {
             Some(mut handle) => {
@@ -247,7 +266,7 @@ impl PowConsensusProvider {
 
                 //mint
                 handle.mint_manager.mint(
-                    executor.clone(),
+                    mint_executor.clone(),
                     self_key,
                     new_block_receiver,
                     mint_stop_receiver,
@@ -264,6 +283,7 @@ impl PowConsensusProvider {
                     executor.clone(),
                     event_handle_network_events,
                     event_handle_receiver,
+                    event_stop_receiver,
                 );
 
                 //save
@@ -295,6 +315,12 @@ impl ConsensusProvider for PowConsensusProvider {
             .runtime
             .as_ref()
             .expect("Consensus start: No valid runtime found!")
+            .handle()
+            .clone();
+        let mint_executor = self
+            .mint_runtime
+            .as_ref()
+            .expect("Consensus start: No valid mint runtime found!")
             .handle()
             .clone();
         let chain_state_network_sender = self
@@ -331,11 +357,17 @@ impl ConsensusProvider for PowConsensusProvider {
             .take()
             .expect("begin_mint_receiver is none.");
 
-        let (sync_stop_receiver, chain_stop_receiver, mint_stop_receiver, state_stop_receiver) =
-            self.stop_inner.take_receiver();
+        let (
+            sync_stop_receiver,
+            chain_stop_receiver,
+            mint_stop_receiver,
+            state_stop_receiver,
+            event_stop_receiver,
+        ) = self.stop_inner.take_receiver();
 
         self.event_handle(
             executor,
+            mint_executor,
             chain_state_network_sender,
             chain_state_network_events,
             mint_key,
@@ -349,6 +381,7 @@ impl ConsensusProvider for PowConsensusProvider {
             mint_stop_receiver,
             state_stop_receiver,
             begin_mint_receiver,
+            event_stop_receiver,
         );
         info!("PowConsensusProvider start succ.");
         Ok(())
@@ -363,6 +396,10 @@ impl ConsensusProvider for PowConsensusProvider {
 
         if let Some(runtime) = self.runtime.take() {
             drop(runtime);
+        }
+
+        if let Some(mint_runtime) = self.mint_runtime.take() {
+            drop(mint_runtime);
         }
     }
 }

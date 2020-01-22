@@ -157,6 +157,7 @@ impl EventProcessor {
         executor: Handle,
         network_events: ConsensusNetworkEvents,
         mut event_handle_receiver: channel::Receiver<Result<Event<ConsensusMsg>>>,
+        mut event_stop_receiver: mpsc::Receiver<()>,
     ) {
         let mut network_events = network_events.map_err(Into::<Error>::into);
         let event_inner = self.inner.clone();
@@ -168,6 +169,12 @@ impl EventProcessor {
                     }
                     event = event_handle_receiver.select_next_some() => {
                         Self::handle_event(event, event_inner.clone()).await;
+                    }
+                    _ = event_stop_receiver.select_next_some() => {
+                        break;
+                    }
+                    complete => {
+                        break;
                     }
                 }
             }

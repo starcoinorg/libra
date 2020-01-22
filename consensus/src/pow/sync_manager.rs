@@ -86,7 +86,8 @@ impl SyncManager {
                         //1. sync data from latest block
                         //TODO:timeout
                         if sync_inner.chain_manager.is_run().await {
-                            if sync_inner.sync_block_height.load(Ordering::Relaxed) < height {
+                            let tmp_heigh = sync_inner.sync_block_height.load(Ordering::Relaxed);
+                            if tmp_heigh == 0 && height > 0 {
                                 sync_inner.sync_block_height.store(height, Ordering::Relaxed);
                                 let sync_block_req_msg = Self::sync_block_req(false, height, root_hash);
                                 EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(),
@@ -220,6 +221,7 @@ impl SyncManager {
                 } else {
                     err_block_flag = true;
                     let _ = sync_block_cache_lock.remove(&peer_id);
+                    sync_inner.sync_block_height.store(0, Ordering::Relaxed);
                 }
             }
         }
@@ -238,6 +240,7 @@ impl SyncManager {
                     .expect("send block err.");
             }
             info!("Sync block from {:?} end", peer_id);
+            sync_inner.sync_block_height.store(0, Ordering::Relaxed);
         } else {
             if !err_block_flag {
                 match status {
