@@ -97,9 +97,6 @@ impl SyncManager {
                             let sync_block_req_msg = Self::sync_block_req(true, height, root_hash);
 
                             EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(),
-                                &mut sync_inner.self_sender.clone(), sync_block_req_msg.clone()).await;
-
-                            EventProcessor::send_consensus_msg(peer_id, &mut sync_inner.network_sender.clone(), sync_inner.author.clone(),
                                 &mut sync_inner.self_sender.clone(), sync_block_req_msg).await;
                         }
                     },
