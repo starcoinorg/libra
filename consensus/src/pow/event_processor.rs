@@ -6,6 +6,7 @@ use crate::pow::mint_manager::MintManager;
 use crate::pow::sync_manager::SyncManager;
 use crate::state_replication::{StateComputer, TxnManager};
 use anyhow::{format_err, Error, Result};
+use async_std::task;
 use channel;
 use consensus_types::block_retrieval::{
     BlockRetrievalResponse, BlockRetrievalStatus, PowBlockRetrievalRequest,
@@ -385,6 +386,9 @@ impl EventProcessor {
                     }
                     Event::NewPeer(peer_id) => {
                         info!("Peer {:?} connected", peer_id);
+                        task::block_on(async move {
+                            task::sleep(Duration::from_secs(5)).await;
+                        });
                         if event_inner.chain_manager.is_init().await {
                             let (latest_height, latest_blocks) = event_inner
                                 .chain_manager
