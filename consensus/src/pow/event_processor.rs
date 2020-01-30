@@ -408,7 +408,7 @@ impl EventProcessor {
                                 Ok(latest_resp) => {
                                     let pow_resp =
                                         PowSyncInfoResp::try_from(latest_resp).expect("parse err.");
-                                    info!("pow_resp: {:?}", pow_resp);
+                                    info!("event pow_resp: {:?}", pow_resp);
                                     if pow_resp.latest_height() > latest_height {
                                         if let Some(common_ancestor) = pow_resp.common_ancestor() {
                                             if event_inner.chain_manager.is_init().await {

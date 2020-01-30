@@ -6,6 +6,7 @@ use channel;
 use consensus_types::block_retrieval::{
     BlockRetrievalResponse, BlockRetrievalStatus, PowBlockRetrievalRequest,
 };
+use consensus_types::pow_sync_block::{PowSyncInfoReq, PowSyncInfoResp};
 use consensus_types::{block::Block, payload_ext::BlockPayloadExt};
 use futures::compat::Future01CompatExt;
 use futures::SinkExt;
@@ -23,9 +24,11 @@ use network::{
     validator_network::{ConsensusNetworkSender, Event},
 };
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::runtime::Handle;
 
 pub struct SyncManager {
@@ -153,27 +156,57 @@ impl SyncManager {
             }
         }
 
+        let mut end_flag = false;
         if !err_block_flag {
             match status {
                 BlockRetrievalStatus::Succeeded => {
-                    let asc = !sync_inner.chain_manager.is_run().await;
-                    let sync_block_req_msg =
-                        Self::sync_block_req(asc, latest_height, end_block_hash.unwrap());
-                    EventProcessor::send_consensus_msg(
-                        peer_id,
-                        &mut sync_inner.network_sender.clone(),
-                        sync_inner.author.clone(),
-                        &mut sync_inner.self_sender.clone(),
-                        sync_block_req_msg,
-                    )
-                    .await;
+                    debug!("Succeeded");
                 }
                 _ => {
-                    //                                    BlockRetrievalStatus::IdNotFound
-                    //                                    BlockRetrievalStatus::NotEnoughBlocks
-                    let _ = sync_inner.begin_mint_sender.clone().send(()).await;
+//                      BlockRetrievalStatus::IdNotFound
+//                      BlockRetrievalStatus::NotEnoughBlocks
+
+                    let req = PowSyncInfoReq::new_req(Vec::new());
+                    let resp = sync_inner
+                        .network_sender
+                        .clone()
+                        .sync_block_by_pow(
+                            peer_id,
+                            req.try_into().unwrap(),
+                            Duration::from_secs(10),
+                        )
+                        .await;
+                    match resp {
+                        Ok(latest_resp) => {
+                            let pow_resp =
+                                PowSyncInfoResp::try_from(latest_resp).expect("parse err.");
+                            info!("sync pow_resp: {:?}", pow_resp);
+                            if pow_resp.latest_height() < (latest_height + 5) {
+                                end_flag = true;
+                            }
+                        }
+                        Err(e) => {
+                            warn!("{:?}", e);
+                        }
+                    }
                 }
             };
+        }
+
+        if end_flag {
+            let _ = sync_inner.begin_mint_sender.clone().send(()).await;
+        } else {
+            let asc = !sync_inner.chain_manager.is_run().await;
+            let sync_block_req_msg =
+                Self::sync_block_req(asc, latest_height, end_block_hash.unwrap());
+            EventProcessor::send_consensus_msg(
+                peer_id,
+                &mut sync_inner.network_sender.clone(),
+                sync_inner.author.clone(),
+                &mut sync_inner.self_sender.clone(),
+                sync_block_req_msg,
+            )
+            .await;
         }
     }
 
