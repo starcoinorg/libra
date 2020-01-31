@@ -40,10 +40,12 @@ struct ChainInner {
 
 impl ChainInner {
     async fn set_run(&mut self) {
+        info!("change chain state to run.");
         self.chain_state.write().compat().await.unwrap().set_run()
     }
 
     pub async fn set_sync(&mut self) {
+        info!("change chain state to sync.");
         self.chain_state.write().compat().await.unwrap().set_sync()
     }
 

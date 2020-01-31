@@ -345,8 +345,22 @@ impl LibraDB {
         &self,
         start_epoch: u64,
     ) -> Result<Vec<LedgerInfoWithSignatures>> {
-        self.ledger_store
-            .get_epoch_change_ledger_infos(start_epoch, self.get_latest_version()?)
+        self.ledger_store.get_epoch_change_ledger_infos(
+            start_epoch,
+            self.get_latest_version()?,
+            true,
+        )
+    }
+
+    pub fn get_epoch_change_ledger_infos_verify_version(
+        &self,
+        start_epoch: u64,
+    ) -> Result<Vec<LedgerInfoWithSignatures>> {
+        self.ledger_store.get_epoch_change_ledger_infos(
+            start_epoch,
+            self.get_latest_version()?,
+            false,
+        )
     }
 
     /// Persist transactions. Called by the executor module when either syncing nodes or committing
@@ -588,8 +602,11 @@ impl LibraDB {
             ledger_info.epoch()
         };
         let validator_change_proof = if client_epoch < current_epoch {
-            self.ledger_store
-                .get_epoch_change_ledger_infos(client_epoch, ledger_info.version())?
+            self.ledger_store.get_epoch_change_ledger_infos(
+                client_epoch,
+                ledger_info.version(),
+                true,
+            )?
         } else {
             Vec::new()
         };
@@ -728,7 +745,7 @@ impl LibraDB {
               block_id, current_epoch, ledger_info_with_sigs.ledger_info().epoch());
 
         let ledger_info_with_validators = self
-            .get_epoch_change_ledger_infos(current_epoch - 1)?
+            .get_epoch_change_ledger_infos_verify_version(current_epoch - 1)?
             .pop()
             .ok_or_else(|| format_err!("ledger info with validators not found"))?;
 
