@@ -22,6 +22,7 @@ use libra_crypto::{
     hash::{CryptoHash, TransactionAccumulatorHasher},
     HashValue,
 };
+use libra_logger::prelude::*;
 use libra_types::{
     crypto_proxies::LedgerInfoWithSignatures,
     proof::{
@@ -32,7 +33,6 @@ use libra_types::{
 };
 use schemadb::{ReadOptions, DB};
 use std::{ops::Deref, sync::Arc};
-use libra_logger::prelude::*;
 
 pub(crate) struct LedgerStore {
     db: Arc<DB>,
@@ -94,6 +94,7 @@ impl LedgerStore {
         &self,
         start_epoch: u64,
         ledger_version: Version,
+        verify_version: bool,
     ) -> Result<Vec<LedgerInfoWithSignatures>> {
         let mut iter = self.db.iter::<LedgerInfoSchema>(ReadOptions::default())?;
         iter.seek(&start_epoch)?;
@@ -101,7 +102,7 @@ impl LedgerStore {
         let mut result = Vec::new();
         for res in iter {
             let (_epoch, ledger_info_with_sigs) = res?;
-            if ledger_info_with_sigs.ledger_info().version() > ledger_version {
+            if verify_version && (ledger_info_with_sigs.ledger_info().version() > ledger_version) {
                 info!(
                     "[get_epoch_change_ledger_infos] version: {:?}, ledger_version: {:?}",
                     ledger_info_with_sigs.ledger_info().version(),
