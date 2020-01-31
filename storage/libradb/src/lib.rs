@@ -724,6 +724,9 @@ impl LibraDB {
             ledger_info_with_sigs.ledger_info().epoch()
         };
 
+        info!("[get_history_startup_info_by_block_id] block_id: {:?}, current_epoch: {:?}, epoch: {:?}",
+              block_id, current_epoch, ledger_info_with_sigs.ledger_info().epoch());
+
         let ledger_info_with_validators = self
             .get_epoch_change_ledger_infos(current_epoch - 1)?
             .pop()

@@ -32,6 +32,7 @@ use libra_types::{
 };
 use schemadb::{ReadOptions, DB};
 use std::{ops::Deref, sync::Arc};
+use libra_logger::prelude::*;
 
 pub(crate) struct LedgerStore {
     db: Arc<DB>,
@@ -101,6 +102,11 @@ impl LedgerStore {
         for res in iter {
             let (_epoch, ledger_info_with_sigs) = res?;
             if ledger_info_with_sigs.ledger_info().version() > ledger_version {
+                info!(
+                    "[get_epoch_change_ledger_infos] version: {:?}, ledger_version: {:?}",
+                    ledger_info_with_sigs.ledger_info().version(),
+                    ledger_version
+                );
                 break;
             }
             if ledger_info_with_sigs
@@ -108,6 +114,7 @@ impl LedgerStore {
                 .next_validator_set()
                 .is_none()
             {
+                info!("[get_epoch_change_ledger_infos] validator is none.");
                 break;
             }
             if result.len() >= MAX_NUM_EPOCH_CHANGE_LEDGER_INFO {
@@ -120,6 +127,10 @@ impl LedgerStore {
             result.push(ledger_info_with_sigs);
         }
 
+        info!(
+            "[get_epoch_change_ledger_infos] validator size : {:?}",
+            result.len()
+        );
         Ok(result)
     }
 
@@ -251,6 +262,11 @@ impl LedgerStore {
             cs.batch
                 .put::<EpochByVersionSchema>(&ledger_info.version(), &(ledger_info.epoch() + 1))?;
         }
+        info!(
+            "[put_ledger_info] epoch: {:?}, validator: {:?}",
+            ledger_info_with_sigs.ledger_info().epoch(),
+            ledger_info.next_validator_set().is_some()
+        );
         cs.batch.put::<LedgerInfoSchema>(
             &ledger_info_with_sigs.ledger_info().epoch(),
             ledger_info_with_sigs,

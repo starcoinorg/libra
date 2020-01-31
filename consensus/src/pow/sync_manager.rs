@@ -163,8 +163,8 @@ impl SyncManager {
                     debug!("Succeeded");
                 }
                 _ => {
-//                      BlockRetrievalStatus::IdNotFound
-//                      BlockRetrievalStatus::NotEnoughBlocks
+                    //                      BlockRetrievalStatus::IdNotFound
+                    //                      BlockRetrievalStatus::NotEnoughBlocks
 
                     let req = PowSyncInfoReq::new_req(Vec::new());
                     let resp = sync_inner
