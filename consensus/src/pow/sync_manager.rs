@@ -181,7 +181,7 @@ impl SyncManager {
                             let pow_resp =
                                 PowSyncInfoResp::try_from(latest_resp).expect("parse err.");
                             info!("sync pow_resp: {:?}", pow_resp);
-                            if pow_resp.latest_height() < (latest_height + 5) {
+                            if blocks.len() == 0 || pow_resp.latest_height() < (latest_height + 5) {
                                 end_flag = true;
                             }
                         }
