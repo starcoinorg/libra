@@ -197,6 +197,7 @@ impl ChainManager {
                                     let parent_block_id = block.parent_id();
                                     let block_index = BlockIndex::new(&block.id(), &parent_block_id);
                                     let mut chain_lock = chain_inner.borrow().block_tree.write().compat().await.unwrap();
+                                    info!("current block : height {:?}, id {:?}", block.round(), block.id());
                                     if chain_lock.block_exist(&parent_block_id) && !chain_lock.block_exist(&block.id()) {
                                         //2. find ancestors
                                         let find_ancestor = chain_lock.find_ancestor_until_main_chain(&parent_block_id);
@@ -221,12 +222,13 @@ impl ChainManager {
                                                     None => warn!("gen_block_info return none."),
                                                 }
                                             },
-                                            None => warn!("find ancestors return none."),
+                                            None => warn!("find ancestors return none. height {:?}, id {:?}", block.round(), block.id()),
                                         }
                                     } else {
                                         //save orphan block
                     //                    let mut write_lock = chain_inner.borrow().orphan_blocks.lock().compat().await.unwrap();
                     //                    write_lock.insert(block_index.parent_id(), vec![block_index.id()]);
+                                        info!("orphan block : height {:?}, id {:?}", block.round(), block.id());
                                     }
                                 }
                                 _ = chain_stop_receiver.select_next_some() => {
