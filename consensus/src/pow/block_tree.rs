@@ -1,13 +1,14 @@
 use crate::chained_bft::consensusdb::ConsensusDB;
-use crate::state_replication::TxnManager;
+use crate::pow::chain_manager::gen_block_info;
+use crate::state_replication::{StateComputer, TxnManager};
 use anyhow::{Result, *};
 use atomic_refcell::AtomicRefCell;
 use consensus_types::payload_ext::BlockPayloadExt;
 use consensus_types::{block::Block, common::Payload};
-use executor::ProcessedVMOutput;
 use libra_crypto::hash::PRE_GENESIS_BLOCK_ID;
 use libra_crypto::HashValue;
 use libra_logger::prelude::*;
+use libra_types::account_address::AccountAddress;
 use libra_types::block_index::BlockIndex;
 use libra_types::crypto_proxies::LedgerInfoWithSignatures;
 use libra_types::transaction::{
@@ -47,6 +48,8 @@ pub struct BlockTree {
     rollback_mode: bool,
     block_store: Arc<ConsensusDB>,
     dump_path: PathBuf,
+    state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
+    author: AccountAddress,
 }
 
 const TOTAL_BLOCK: u64 = 100;
@@ -94,6 +97,8 @@ fn from_dump(
     txn_manager: Arc<dyn TxnManager<Payload = Vec<SignedTransaction>>>,
     block_store: Arc<ConsensusDB>,
     dump_path: PathBuf,
+    state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
+    author: AccountAddress,
 ) -> BlockTree {
     BlockTree {
         height: dump.height,
@@ -106,6 +111,8 @@ fn from_dump(
         rollback_mode: dump.rollback_mode,
         block_store,
         dump_path,
+        state_computer,
+        author,
     }
 }
 
@@ -127,6 +134,8 @@ impl BlockTree {
         rollback_mode: bool,
         block_store: Arc<ConsensusDB>,
         dump_path: PathBuf,
+        state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
+        author: AccountAddress,
     ) -> Self {
         //dump path
         let tmp: &Path = dump_path.as_ref();
@@ -190,6 +199,8 @@ impl BlockTree {
                         rollback_mode,
                         block_store,
                         dump_path: path,
+                        state_computer,
+                        author,
                     }
                 }
                 None => {
@@ -244,6 +255,8 @@ impl BlockTree {
                         rollback_mode,
                         block_store,
                         dump_path: path,
+                        state_computer,
+                        author,
                     }
                 }
             }
@@ -262,6 +275,8 @@ impl BlockTree {
                 txn_manager,
                 block_store,
                 path,
+                state_computer,
+                author,
             );
 
             tmp
@@ -327,11 +342,56 @@ impl BlockTree {
                 self.write_storage.rollback_by_block_id(rollback_block_id);
 
                 // commit
+                let total = ancestors.len();
+                let mut ct: u64 = 0;
                 for ancestor in ancestors {
-                    let block_info = self
-                        .find_block_info_by_block_id(&ancestor)
-                        .expect("ancestor block info is none.");
-                    self.commit_block(block_info).await;
+                    ct = ct + 1;
+                    let block_info = self.find_block_info_by_block_id(&ancestor);
+                    let mut direct_commit = false;
+                    match block_info {
+                        Some(info) => {
+                            if info.exist_commit() {
+                                direct_commit = true;
+                                self.commit_block(info).await;
+                            }
+                        }
+                        None => {}
+                    }
+
+                    if !direct_commit {
+                        let tmp_block = self
+                            .block_store
+                            .get_block_by_hash::<BlockPayloadExt>(&ancestor)
+                            .expect("find blocks err.");
+
+                        let parent_block_id = tmp_block.parent_id();
+
+                        let find_ancestor = self.find_ancestor_until_main_chain(&parent_block_id);
+                        match find_ancestor {
+                            Some((tmp_ancestors, tmp_pre_block_index)) => {
+                                // 3. find blocks
+                                let tmp_blocks = self
+                                    .block_store
+                                    .get_blocks_by_hashs::<BlockPayloadExt>(tmp_ancestors)
+                                    .expect("find blocks err.");
+                                let tmp_block_info = gen_block_info(
+                                    tmp_block.clone(),
+                                    tmp_pre_block_index,
+                                    tmp_blocks,
+                                    self.state_computer.clone(),
+                                    self.author.clone(),
+                                )
+                                .await;
+                                match tmp_block_info {
+                                    Some(info) => self.commit_block(&info).await,
+                                    None => warn!("gen_block_info return none."),
+                                }
+                            }
+                            None => warn!("find ancestors return none."),
+                        }
+                    }
+
+                    info!("Rollback total: {:?}, ct: {:?}", total, ct);
                 }
             } else {
                 if self.rollback_mode && (self.height - self.tail_height) > 2 {
@@ -417,37 +477,29 @@ impl BlockTree {
     pub async fn add_block_info<T: Payload>(
         &mut self,
         block: Block<T>,
-        parent_id: &HashValue,
-        vm_output: ProcessedVMOutput,
-        commit_data: CommitData,
+        new_block_info: BlockInfo,
     ) -> Result<(bool, u64)> {
         //1. new_block_info not exist
-        let id_exist = self.id_to_block.contains_key(&block.id());
+        let id_exist = self.block_exist(&block.id());
         ensure!(!id_exist, "block already exist in block tree.");
 
-        //2. parent exist
-        let parent_height = self
-            .id_to_block
-            .get(parent_id)
-            .expect("parent block not exist in block tree.")
-            .height();
+        //        //2. parent exist
+        //        let parent_height = self
+        //            .id_to_block
+        //            .get(parent_id)
+        //            .expect("parent block not exist in block tree.")
+        //            .height();
 
+        let next_height = self.height + 1;
+        ensure!((block.round() <= next_height), "block height err.");
         //3. is new root
-        let (height, new_root) = if parent_height == self.height {
+        let (height, new_root) = if block.round() == next_height {
             // new root
-            (self.height + 1, true)
+            (block.round(), true)
         } else {
-            (parent_height + 1, false)
+            (block.round(), false)
         };
 
-        let new_block_info = BlockInfo::new(
-            &block.id(),
-            parent_id,
-            height,
-            block.timestamp_usecs(),
-            vm_output.state_compute_result().status().clone(),
-            commit_data,
-        );
         self.add_block_info_inner(block, new_block_info, new_root)
             .await;
         Ok((new_root, height))
@@ -457,7 +509,7 @@ impl BlockTree {
         self.id_to_block.get(block_id)
     }
 
-    pub fn query_latest_block_from_cache(&mut self) -> (u64, Vec<(u64, HashValue)>) {
+    fn _query_latest_block_from_cache(&mut self) -> (u64, Vec<(u64, HashValue)>) {
         let mut latest_blocks: Vec<(u64, HashValue)> = Vec::new();
         let total = 10;
         if self.main_chain.borrow().len() == 0 {
@@ -526,7 +578,11 @@ impl BlockTree {
     }
 
     pub fn block_exist(&self, block_hash: &HashValue) -> bool {
-        self.id_to_block.contains_key(block_hash)
+        let block: Option<Block<BlockPayloadExt>> = self.block_store.get_block_by_hash(block_hash);
+        match block {
+            Some(_) => true,
+            None => false,
+        }
     }
 
     pub fn root_hash(&self) -> Option<HashValue> {
@@ -613,6 +669,12 @@ pub struct BlockInfo {
     height: BlockHeight,
     output_commit_data: Option<(Vec<TransactionStatus>, CommitData)>,
     timestamp_usecs: u64,
+}
+
+impl BlockInfo {
+    fn exist_commit(&self) -> bool {
+        self.output_commit_data.is_some()
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
