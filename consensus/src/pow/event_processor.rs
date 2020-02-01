@@ -83,7 +83,7 @@ impl EventProcessor {
         begin_mint_sender: mpsc::Sender<()>,
         is_first: bool,
     ) -> Self {
-        let (block_cache_sender, block_cache_receiver) = mpsc::channel(1024);
+        let (block_cache_sender, block_cache_receiver) = mpsc::channel(10240);
         let chain_manager = Arc::new(ChainManager::new(
             Arc::clone(&block_store),
             txn_manager.clone(),
