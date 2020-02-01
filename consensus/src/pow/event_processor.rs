@@ -390,52 +390,85 @@ impl EventProcessor {
                             task::sleep(Duration::from_secs(5)).await;
                         });
                         if event_inner.chain_manager.is_init().await {
-                            let (latest_height, latest_blocks) = event_inner
-                                .chain_manager
-                                .query_latest_block_from_cache()
-                                .await;
-                            let req = PowSyncInfoReq::new_req(latest_blocks);
-                            let resp = event_inner
-                                .network_sender
-                                .clone()
-                                .sync_block_by_pow(
-                                    peer_id,
-                                    req.try_into().unwrap(),
-                                    Duration::from_secs(10),
-                                )
-                                .await;
-                            match resp {
-                                Ok(latest_resp) => {
-                                    let pow_resp =
-                                        PowSyncInfoResp::try_from(latest_resp).expect("parse err.");
-                                    info!("event pow_resp: {:?}", pow_resp);
-                                    if pow_resp.latest_height() > latest_height {
-                                        if let Some(common_ancestor) = pow_resp.common_ancestor() {
-                                            if event_inner.chain_manager.is_init().await {
-                                                if let Err(err) = event_inner
-                                                    .sync_signal_sender
-                                                    .clone()
-                                                    .send((
-                                                        peer_id,
-                                                        (
-                                                            common_ancestor.height(),
-                                                            common_ancestor.block_hash(),
-                                                        ),
-                                                    ))
-                                                    .await
-                                                {
-                                                    error!("send sync signal err: {:?}", err);
-                                                }
-                                                event_inner.chain_manager.set_sync().await;
-                                            }
+                            let mut query_height = None;
+                            loop {
+                                match query_height {
+                                    Some(tmp) => {
+                                        if tmp == 0 {
+                                            info!("event query_height is {:?}", tmp);
+                                            break;
                                         }
-                                    } else {
-                                        let _ =
-                                            event_inner.begin_mint_sender.clone().send(()).await;
                                     }
+                                    None => {}
                                 }
-                                Err(e) => {
-                                    warn!("{:?}", e);
+                                let (latest_height, blocks, end_height) = event_inner
+                                    .chain_manager
+                                    .query_blocks_by_height(query_height)
+                                    .await;
+                                if blocks.len() == 0 {
+                                    info!("event blocks len is {:?}", blocks.len());
+                                    break;
+                                }
+                                query_height = end_height;
+                                let req = PowSyncInfoReq::new_req(blocks);
+                                info!("event PowSyncInfoReq : {:?}", req);
+                                let resp = event_inner
+                                    .network_sender
+                                    .clone()
+                                    .sync_block_by_pow(
+                                        peer_id,
+                                        req.try_into().unwrap(),
+                                        Duration::from_secs(10),
+                                    )
+                                    .await;
+                                match resp {
+                                    Ok(latest_resp) => {
+                                        let pow_resp = PowSyncInfoResp::try_from(latest_resp)
+                                            .expect("parse err.");
+                                        info!("event pow_resp: {:?}", pow_resp);
+                                        if pow_resp.latest_height() > latest_height {
+                                            if let Some(common_ancestor) =
+                                                pow_resp.common_ancestor()
+                                            {
+                                                info!("event find ancestor height : {:?}, latest height: {:?}, end height: {:?}",
+                                                      common_ancestor.height(), latest_height, pow_resp.latest_height());
+                                                if event_inner.chain_manager.is_init().await {
+                                                    if let Err(err) = event_inner
+                                                        .sync_signal_sender
+                                                        .clone()
+                                                        .send((
+                                                            peer_id,
+                                                            (
+                                                                common_ancestor.height(),
+                                                                common_ancestor.block_hash(),
+                                                            ),
+                                                        ))
+                                                        .await
+                                                    {
+                                                        error!("send sync signal err: {:?}", err);
+                                                    }
+                                                    event_inner.chain_manager.set_sync().await;
+                                                }
+                                                break;
+                                            }
+                                        } else {
+                                            let _ = event_inner
+                                                .begin_mint_sender
+                                                .clone()
+                                                .send(())
+                                                .await;
+                                            info!(
+                                                "event mine height: {:?}, seed height: {:?}",
+                                                latest_height,
+                                                pow_resp.latest_height()
+                                            );
+                                            break;
+                                        }
+                                    }
+                                    Err(e) => {
+                                        warn!("event rpc err:{:?}", e);
+                                        break;
+                                    }
                                 }
                             }
                         }

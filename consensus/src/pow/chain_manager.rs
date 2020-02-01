@@ -1,5 +1,5 @@
 use crate::chained_bft::consensusdb::ConsensusDB;
-use crate::pow::block_tree::{BlockTree, CommitData};
+use crate::pow::block_tree::{BlockInfo, BlockTree, CommitData};
 use crate::state_replication::{StateComputer, TxnManager};
 use atomic_refcell::AtomicRefCell;
 use consensus_types::{block::Block, payload_ext::BlockPayloadExt};
@@ -117,6 +117,8 @@ impl ChainManager {
             rollback_mode,
             Arc::clone(&block_store),
             dump_path,
+            state_computer.clone(),
+            author,
         )));
 
         let inner = ChainInner {
@@ -196,93 +198,30 @@ impl ChainManager {
                                     let block_index = BlockIndex::new(&block.id(), &parent_block_id);
                                     let mut chain_lock = chain_inner.borrow().block_tree.write().compat().await.unwrap();
                                     if chain_lock.block_exist(&parent_block_id) && !chain_lock.block_exist(&block.id()) {
-                                        // 2. find ancestors
+                                        //2. find ancestors
                                         let find_ancestor = chain_lock.find_ancestor_until_main_chain(&parent_block_id);
                                         match find_ancestor {
                                             Some((ancestors, pre_block_index)) => {
                                                 // 3. find blocks
                                                 let blocks = chain_inner.borrow().block_store.get_blocks_by_hashs::<BlockPayloadExt>(ancestors).expect("find blocks err.");
-
-                                                let mut commit_txn_vec = Vec::<(BlockMetadata, Vec<SignedTransaction>)>::new();
-                                                for b in blocks {
-                                                    let mut tmp_txns = match b.payload() {
-                                                        Some(t) => t.get_txns(),
-                                                        None => vec![],
-                                                    };
-
-                                                    let miner_address = b.quorum_cert().commit_info().next_validator_set().expect("validator_set err.").payload().clone()[0].account_address();
-                                                    let block_meta_data = BlockMetadata::new(b.parent_id().clone(), b.timestamp_usecs(), BTreeMap::new(), miner_address.clone());
-                                                    commit_txn_vec.push((block_meta_data, tmp_txns));
-                                                }
-
-                                                let pre_compute_grandpa_block_id = pre_block_index.parent_id();
-                                                let pre_compute_parent_block_id = pre_block_index.id();
-                                                let miner_address = block.quorum_cert().commit_info().next_validator_set().expect("validator_set err.").payload().clone()[0].account_address();
-                                                let block_meta_data = BlockMetadata::new(parent_block_id.clone(), block.timestamp_usecs(), BTreeMap::new(), miner_address.clone());
-                                                commit_txn_vec.push((block_meta_data.clone(), payload.clone()));
-
-                                                // 4. call pre_compute
-                                                match chain_inner.borrow().state_computer.compute_by_hash(&pre_compute_grandpa_block_id, &parent_block_id, &block.id(), commit_txn_vec).await {
-                                                    Ok(processed_vm_output) => {
-                                                        let executed_trees = processed_vm_output.executed_trees();
-                                                        let state_id = executed_trees.state_root();
-                                                        let txn_accumulator_hash = executed_trees.txn_accumulator().root_hash();
-                                                        let txn_len = executed_trees.version().expect("version err.");
-
-                                                        if txn_accumulator_hash == block.quorum_cert().ledger_info().ledger_info().transaction_accumulator_hash() && state_id == block.quorum_cert().ledger_info().ledger_info().consensus_data_hash() {
-
-                                                            let mut txn_vec = vec![Transaction::BlockMetadata(block_meta_data)];
-                                                            txn_vec.extend(
-                                                                payload
-                                                                    .iter()
-                                                                    .map(|txn| Transaction::UserTransaction(txn.clone())),
-                                                            );
-                                                            let len = txn_vec.len();
-                                                            let mut txn_data_list = vec![];
-                                                            let total_len = processed_vm_output.transaction_data().len();
-
-                                                            for i in 0..len {
-                                                                txn_data_list.push(processed_vm_output.transaction_data()[total_len - len + i].clone());
+                                                let block_info = gen_block_info(block.clone(), pre_block_index, blocks,
+                                                                                chain_inner.borrow().state_computer.clone(),
+                                                                                chain_inner.borrow().author.clone()).await;
+                                                match block_info {
+                                                    Some(info) => {
+                                                        let (new_root, latest_height) = chain_lock.add_block_info(block, info).await.expect("add_block_info failed.");
+                                                        if new_root {
+                                                            if chain_inner.borrow().is_run().await {
+                                                                let _ = new_block_sender.send(latest_height).await;
                                                             }
 
-                                                            let mut txns_to_commit = vec![];
-                                                            for (txn, txn_data) in itertools::zip_eq(txn_vec, txn_data_list) {
-                                                                if let TransactionStatus::Keep(_) = txn_data.status() {
-                                                                    txns_to_commit.push(TransactionToCommit::new(
-                                                                        txn,
-                                                                        txn_data.account_blobs().clone(),
-                                                                        txn_data.events().to_vec(),
-                                                                        txn_data.gas_used(),
-                                                                        txn_data.status().vm_status().major_status,
-                                                                    ));
-                                                                }
-                                                            }
-                                                            let commit_len = txns_to_commit.len();
-                                                            if (block.quorum_cert().ledger_info().ledger_info().commit_info().version() == txn_len) {
-                                                                let commit_data = CommitData {txns_to_commit,
-                                                                    first_version: (txn_len - (commit_len as u64) + 1) as u64,
-                                                                    ledger_info_with_sigs: Some(block.quorum_cert().ledger_info().clone())};
-
-                                                                let (new_root, latest_height) = chain_lock.add_block_info(block, &parent_block_id, processed_vm_output, commit_data).await.expect("add_block_info failed.");
-                                                                if new_root {
-                                                                    if chain_inner.borrow().is_run().await {
-                                                                        let _ = new_block_sender.send(latest_height).await;
-                                                                    }
-
-                                                                    chain_lock.print_block_chain_root(chain_inner.borrow().author);
-                                                                }
-                                                            } else {
-                                                                warn!("Peer id {:?}, Drop block {:?}, block version is {}, vm output version is {}", chain_inner.borrow().author, block.id(),
-                                                                block.quorum_cert().ledger_info().ledger_info().commit_info().version(), txn_len);
-                                                            }
-                                                        } else {
-                                                            warn!("Peer id {:?}, Drop block {:?}, parent_block_id {:?}, grandpa_block_id {:?}", chain_inner.borrow().author, block.id(), parent_block_id, pre_compute_grandpa_block_id);
+                                                            chain_lock.print_block_chain_root(chain_inner.borrow().author);
                                                         }
                                                     },
-                                                    Err(e) => {error!("error: {:?}", e)},
+                                                    None => warn!("gen_block_info return none."),
                                                 }
                                             },
-                                            None => warn!("find ancestors is none."),
+                                            None => warn!("find ancestors return none."),
                                         }
                                     } else {
                                         //save orphan block
@@ -338,15 +277,193 @@ impl ChainManager {
             .chain_height_and_root()
     }
 
-    pub async fn query_latest_block_from_cache(&self) -> (u64, Vec<(u64, HashValue)>) {
-        self.inner
-            .borrow()
-            .block_tree
-            .clone()
-            .write()
-            .compat()
-            .await
-            .unwrap()
-            .query_latest_block_from_cache()
+    pub async fn query_blocks_by_height(
+        &self,
+        height: Option<u64>,
+    ) -> (u64, Vec<(u64, HashValue)>, Option<u64>) {
+        let mut blocks = Vec::new();
+        let latest_height = self.inner.borrow().block_store.latest_height().unwrap();
+        let begin_height = match height {
+            Some(h) => h,
+            None => latest_height,
+        };
+        let mut end_height = None;
+        for i in 0..10 {
+            let current_height = begin_height - i;
+            let block_index = self
+                .inner
+                .borrow()
+                .block_store
+                .query_block_index_by_height(current_height)
+                .expect("query_block_index_by_height err.");
+            match block_index {
+                Some(b) => {
+                    blocks.push((current_height, b.id()));
+                    end_height = Some(current_height);
+                }
+                None => {
+                    break;
+                }
+            }
+
+            if current_height == 0 {
+                break;
+            }
+        }
+
+        (latest_height, blocks, end_height)
     }
+}
+
+pub async fn gen_block_info(
+    block: Block<BlockPayloadExt>,
+    pre_block_index: BlockIndex,
+    blocks: Vec<Block<BlockPayloadExt>>,
+    state_computer: Arc<dyn StateComputer<Payload = Vec<SignedTransaction>>>,
+    author: AccountAddress,
+) -> Option<BlockInfo> {
+    let payload = match block.payload() {
+        Some(p) => p.get_txns(),
+        None => vec![],
+    };
+    let mut block_info = None;
+    let mut commit_txn_vec = Vec::<(BlockMetadata, Vec<SignedTransaction>)>::new();
+    for b in blocks {
+        let tmp_txns = match b.payload() {
+            Some(t) => t.get_txns(),
+            None => vec![],
+        };
+
+        let miner_address = b
+            .quorum_cert()
+            .commit_info()
+            .next_validator_set()
+            .expect("validator_set err.")
+            .payload()
+            .clone()[0]
+            .account_address();
+        let block_meta_data = BlockMetadata::new(
+            b.parent_id().clone(),
+            b.timestamp_usecs(),
+            BTreeMap::new(),
+            miner_address.clone(),
+        );
+        commit_txn_vec.push((block_meta_data, tmp_txns));
+    }
+
+    let parent_block_id = block.parent_id();
+    let pre_compute_grandpa_block_id = pre_block_index.parent_id();
+    let miner_address = block
+        .quorum_cert()
+        .commit_info()
+        .next_validator_set()
+        .expect("validator_set err.")
+        .payload()
+        .clone()[0]
+        .account_address();
+    let block_meta_data = BlockMetadata::new(
+        parent_block_id.clone(),
+        block.timestamp_usecs(),
+        BTreeMap::new(),
+        miner_address.clone(),
+    );
+    commit_txn_vec.push((block_meta_data.clone(), payload.clone()));
+
+    // 4. call pre_compute
+    match state_computer
+        .compute_by_hash(
+            &pre_compute_grandpa_block_id,
+            &parent_block_id,
+            &block.id(),
+            commit_txn_vec,
+        )
+        .await
+    {
+        Ok(processed_vm_output) => {
+            let executed_trees = processed_vm_output.executed_trees();
+            let state_id = executed_trees.state_root();
+            let txn_accumulator_hash = executed_trees.txn_accumulator().root_hash();
+            let txn_len = executed_trees.version().expect("version err.");
+
+            if txn_accumulator_hash
+                == block
+                    .quorum_cert()
+                    .ledger_info()
+                    .ledger_info()
+                    .transaction_accumulator_hash()
+                && state_id
+                    == block
+                        .quorum_cert()
+                        .ledger_info()
+                        .ledger_info()
+                        .consensus_data_hash()
+            {
+                let mut txn_vec = vec![Transaction::BlockMetadata(block_meta_data)];
+                txn_vec.extend(
+                    payload
+                        .iter()
+                        .map(|txn| Transaction::UserTransaction(txn.clone())),
+                );
+                let len = txn_vec.len();
+                let mut txn_data_list = vec![];
+                let total_len = processed_vm_output.transaction_data().len();
+
+                for i in 0..len {
+                    txn_data_list
+                        .push(processed_vm_output.transaction_data()[total_len - len + i].clone());
+                }
+
+                let mut txns_to_commit = vec![];
+                for (txn, txn_data) in itertools::zip_eq(txn_vec, txn_data_list) {
+                    if let TransactionStatus::Keep(_) = txn_data.status() {
+                        txns_to_commit.push(TransactionToCommit::new(
+                            txn,
+                            txn_data.account_blobs().clone(),
+                            txn_data.events().to_vec(),
+                            txn_data.gas_used(),
+                            txn_data.status().vm_status().major_status,
+                        ));
+                    }
+                }
+                let commit_len = txns_to_commit.len();
+                if block
+                    .quorum_cert()
+                    .ledger_info()
+                    .ledger_info()
+                    .commit_info()
+                    .version()
+                    == txn_len
+                {
+                    let commit_data = CommitData {
+                        txns_to_commit,
+                        first_version: (txn_len - (commit_len as u64) + 1) as u64,
+                        ledger_info_with_sigs: Some(block.quorum_cert().ledger_info().clone()),
+                    };
+
+                    let new_block_info = BlockInfo::new(
+                        &block.id(),
+                        &parent_block_id,
+                        block.round(),
+                        block.timestamp_usecs(),
+                        processed_vm_output.state_compute_result().status().clone(),
+                        commit_data,
+                    );
+                    block_info = Some(new_block_info);
+                } else {
+                    warn!("Peer id {:?}, Drop block {:?}, block version is {}, vm output version is {}", author, block.id(),
+                          block.quorum_cert().ledger_info().ledger_info().commit_info().version(), txn_len);
+                }
+            } else {
+                warn!(
+                    "Peer id {:?}, Drop block {:?}, parent_block_id {:?}, grandpa_block_id {:?}",
+                    author,
+                    block.id(),
+                    parent_block_id,
+                    pre_compute_grandpa_block_id
+                );
+            }
+        }
+        Err(e) => error!("error: {:?}", e),
+    }
+    return block_info;
 }
