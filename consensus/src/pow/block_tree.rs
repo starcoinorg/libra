@@ -421,16 +421,20 @@ impl BlockTree {
             self.indexes.insert(new_block_info.height(), hash_list);
 
             self.prune();
-        } else {
-            self.indexes
-                .get_mut(&new_block_info.height())
-                .unwrap()
-                .push(new_block_info.id().clone());
         }
 
-        //5. add new block info
-        self.id_to_block
-            .insert(new_block_info.id().clone(), new_block_info);
+        if self.tail_height <= new_block_info.height() {
+            if !new_root {
+                self.indexes
+                    .get_mut(&new_block_info.height())
+                    .unwrap()
+                    .push(new_block_info.id().clone());
+            }
+
+            //5. add new block info
+            self.id_to_block
+                .insert(new_block_info.id().clone(), new_block_info);
+        }
     }
 
     async fn commit_block(&self, block_info: &BlockInfo) {
@@ -593,7 +597,7 @@ impl BlockTree {
         }
     }
 
-    fn find_height_and_index_by_block_id(
+    fn _find_height_and_index_by_block_id(
         &self,
         block_id: &HashValue,
     ) -> Option<(BlockHeight, BlockIndex)> {
@@ -610,39 +614,79 @@ impl BlockTree {
         let mut ancestors = vec![];
         let mut latest_id = block_id.clone();
         let mut block_index = None;
-        let mut height = self.height;
-        while height >= self.tail_height {
-            let (h, b_i) = match self.find_height_and_index_by_block_id(&latest_id) {
-                Some(h_i) => h_i,
-                None => return None,
-            };
+        loop {
+            let block: Option<Block<BlockPayloadExt>> =
+                self.block_store.get_block_by_hash(&latest_id);
+            match block {
+                Some(b) => {
+                    let current_id = b.id();
+                    latest_id = b.parent_id();
+                    let current_height = b.round();
 
-            let current_id = b_i.id();
-            latest_id = b_i.parent_id();
-            block_index = Some(b_i.clone());
-
-            let main_chain_id = match self.main_chain.borrow().get(&h) {
-                Some(block_index_from_cache) => block_index_from_cache.id(),
-                None => {
-                    let block_index = self
+                    match self
                         .block_store
-                        .query_block_index_by_height(h)
-                        .expect("query_block_index_by_height failed.");
-                    block_index.expect("block_index is none.").id()
+                        .query_block_index_by_height(current_height)
+                        .expect("query_block_index_by_height err.")
+                    {
+                        Some(b_i) => {
+                            block_index = Some(b_i.clone());
+                            if b_i.id() == current_id {
+                                break;
+                            } else {
+                                ancestors.push(current_id);
+                            }
+                        }
+                        None => return None,
+                    }
                 }
-            };
-            if main_chain_id == current_id {
-                break;
-            } else {
-                ancestors.push(current_id);
+                None => return None,
             }
-
-            height = h;
         }
 
         ancestors.reverse();
         Some((ancestors, block_index.expect("block_index is none.")))
     }
+
+    //    pub fn find_ancestor_until_main_chain(
+    //        &self,
+    //        block_id: &HashValue,
+    //    ) -> Option<(Vec<HashValue>, BlockIndex)> {
+    //        let mut ancestors = vec![];
+    //        let mut latest_id = block_id.clone();
+    //        let mut block_index = None;
+    //        let mut height = self.height;
+    //        while height >= self.tail_height {
+    //            let (h, b_i) = match self.find_height_and_index_by_block_id(&latest_id) {
+    //                Some(h_i) => h_i,
+    //                None => return None,
+    //            };
+    //
+    //            let current_id = b_i.id();
+    //            latest_id = b_i.parent_id();
+    //            block_index = Some(b_i.clone());
+    //
+    //            let main_chain_id = match self.main_chain.borrow().get(&h) {
+    //                Some(block_index_from_cache) => block_index_from_cache.id(),
+    //                None => {
+    //                    let block_index = self
+    //                        .block_store
+    //                        .query_block_index_by_height(h)
+    //                        .expect("query_block_index_by_height failed.");
+    //                    block_index.expect("block_index is none.").id()
+    //                }
+    //            };
+    //            if main_chain_id == current_id {
+    //                break;
+    //            } else {
+    //                ancestors.push(current_id);
+    //            }
+    //
+    //            height = h;
+    //        }
+    //
+    //        ancestors.reverse();
+    //        Some((ancestors, block_index.expect("block_index is none.")))
+    //    }
 
     pub fn print_block_chain_root(&self, peer_id: PeerId) {
         let height = self.height;
