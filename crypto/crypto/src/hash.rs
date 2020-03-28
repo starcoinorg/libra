@@ -283,8 +283,9 @@ impl<'de> de::Deserialize<'de> for HashValue {
         D: de::Deserializer<'de>,
     {
         if deserializer.is_human_readable() {
-            let encoded_hash: &str = ::serde::Deserialize::deserialize(deserializer)?;
-            HashValue::from_hex(encoded_hash).map_err(<D::Error as ::serde::de::Error>::custom)
+            let encoded_hash = ::serde::private::de::borrow_cow_str(deserializer)?;
+            HashValue::from_hex(encoded_hash.as_ref())
+                .map_err(<D::Error as ::serde::de::Error>::custom)
         } else {
             let b = <&[u8]>::deserialize(deserializer)?;
             Self::from_slice(b).map_err(<D::Error as ::serde::de::Error>::custom)
