@@ -153,7 +153,7 @@ pub fn deserialize_key(source: TokenStream) -> TokenStream {
                 D: ::serde::Deserializer<'de>,
             {
                 if deserializer.is_human_readable() {
-                    let encoded_key = ::serde::private::de::borrow_cow_str(deserializer)?;
+                    let encoded_key: ::std::borrow::Cow<str> = ::serde::private::de::borrow_cow_str(deserializer)?;
                     ValidKeyStringExt::from_encoded_string(encoded_key.as_ref())
                         .map_err(<D::Error as ::serde::de::Error>::custom)
                 } else {
