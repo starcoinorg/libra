@@ -5,13 +5,16 @@ use crate::{
     data_cache::{RemoteCache, TransactionDataCache, TransactionEffects},
     runtime::VMRuntime,
 };
+use libra_logger::prelude::*;
 use move_core_types::{
     account_address::AccountAddress,
     identifier::IdentStr,
     language_storage::{ModuleId, TypeTag},
 };
+use move_vm_types::data_store::DataStore;
 use move_vm_types::{gas_schedule::CostStrategy, values::Value};
 use vm::errors::*;
+use vm::CompiledModule;
 
 pub struct Session<'r, 'l, R> {
     pub(crate) runtime: &'l VMRuntime,
@@ -64,6 +67,26 @@ impl<'r, 'l, R: RemoteCache> Session<'r, 'l, R> {
     ) -> VMResult<()> {
         self.runtime
             .publish_module(module, sender, &mut self.data_cache, cost_strategy)
+    }
+
+    pub fn verify_module(&self, module: &[u8]) -> VMResult<CompiledModule> {
+        let compiled_module = match CompiledModule::deserialize(module) {
+            Ok(module) => module,
+            Err(err) => {
+                warn!("[VM] module deserialization failed {:?}", err);
+                return Err(err.finish(Location::Undefined));
+            }
+        };
+        self.runtime.loader().verify_module(&compiled_module)?;
+        Ok(compiled_module)
+    }
+
+    pub fn exists_module(&self, module_id: &ModuleId) -> VMResult<bool> {
+        self.data_cache.exists_module(module_id)
+    }
+
+    pub fn load_module(&self, module_id: &ModuleId) -> VMResult<Vec<u8>> {
+        self.data_cache.load_module(module_id)
     }
 
     pub fn num_mutated_accounts(&self) -> u64 {
