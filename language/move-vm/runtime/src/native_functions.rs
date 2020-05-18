@@ -3,11 +3,12 @@
 
 use crate::{interpreter::Interpreter, loader::Resolver};
 use libra_types::account_config::CORE_CODE_ADDRESS;
+use move_core_types::language_storage::TypeTag;
 use move_core_types::{
     account_address::AccountAddress, gas_schedule::CostTable, value::MoveTypeLayout,
     vm_status::StatusType,
 };
-use move_vm_natives::{account, debug, event, hash, lcs, signature, signer, vector};
+use move_vm_natives::{account, debug, event, hash, lcs, signature, signer, token, vector};
 use move_vm_types::{
     data_store::DataStore,
     gas_schedule::CostStrategy,
@@ -45,6 +46,7 @@ pub(crate) enum NativeFunction {
     SignerBorrowAddress,
     CreateSigner,
     DestroySigner,
+    TokenNameOf,
 }
 
 impl NativeFunction {
@@ -71,11 +73,12 @@ impl NativeFunction {
             (&CORE_CODE_ADDRESS, "Vector", "destroy_empty") => VectorDestroyEmpty,
             (&CORE_CODE_ADDRESS, "Vector", "swap") => VectorSwap,
             (&CORE_CODE_ADDRESS, "Event", "write_to_event_store") => AccountWriteEvent,
-            (&CORE_CODE_ADDRESS, "LibraAccount", "create_signer") => CreateSigner,
-            (&CORE_CODE_ADDRESS, "LibraAccount", "destroy_signer") => DestroySigner,
+            (&CORE_CODE_ADDRESS, "Account", "create_signer") => CreateSigner,
+            (&CORE_CODE_ADDRESS, "Account", "destroy_signer") => DestroySigner,
             (&CORE_CODE_ADDRESS, "Debug", "print") => DebugPrint,
             (&CORE_CODE_ADDRESS, "Debug", "print_stack_trace") => DebugPrintStackTrace,
             (&CORE_CODE_ADDRESS, "Signer", "borrow_address") => SignerBorrowAddress,
+            (&CORE_CODE_ADDRESS, "Token", "name_of") => TokenNameOf,
             _ => return None,
         })
     }
@@ -108,6 +111,7 @@ impl NativeFunction {
             Self::SignerBorrowAddress => signer::native_borrow_address(ctx, t, v),
             Self::CreateSigner => account::native_create_signer(ctx, t, v),
             Self::DestroySigner => account::native_destroy_signer(ctx, t, v),
+            Self::TokenNameOf => token::native_token_name_of(ctx, t, v),
         };
         debug_assert!(match &result {
             Err(e) => e.major_status().status_type() == StatusType::InvariantViolation,
@@ -170,6 +174,10 @@ impl<'a> NativeContext for FunctionContext<'a> {
             Err(e) if e.major_status().status_type() == StatusType::InvariantViolation => Err(e),
             Err(_) => Ok(None),
         }
+    }
+
+    fn type_to_type_tag(&self, ty: &Type) -> PartialVMResult<TypeTag> {
+        self.resolver.type_to_type_tag(ty)
     }
 
     fn is_resource(&self, ty: &Type) -> bool {
