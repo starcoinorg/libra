@@ -78,7 +78,7 @@ impl<L: LogContext> Interpreter<L> {
         cost_strategy: &mut CostStrategy,
         loader: &Loader,
         log_context: &L,
-    ) -> VMResult<()> {
+    ) -> VMResult<Vec<Value>> {
         // We count the intrinsic cost of the transaction here, since that needs to also cover the
         // setup of the function.
         let mut interp = Self::new(log_context.clone());
@@ -104,7 +104,7 @@ impl<L: LogContext> Interpreter<L> {
         function: Arc<Function>,
         ty_args: Vec<Type>,
         args: Vec<Value>,
-    ) -> VMResult<()> {
+    ) -> VMResult<Vec<Value>> {
         // No unwinding of the call stack and value stack need to be done here -- the context will
         // take care of that.
         self.execute_main(loader, data_store, cost_strategy, function, ty_args, args)
@@ -126,7 +126,8 @@ impl<L: LogContext> Interpreter<L> {
         function: Arc<Function>,
         ty_args: Vec<Type>,
         args: Vec<Value>,
-    ) -> VMResult<()> {
+    ) -> VMResult<Vec<Value>> {
+        let ret_signature = function.returns().clone();
         let mut locals = Locals::new(function.local_count());
         for (i, value) in args.into_iter().enumerate() {
             locals
@@ -147,7 +148,17 @@ impl<L: LogContext> Interpreter<L> {
                         current_frame = frame;
                         current_frame.pc += 1; // advance past the Call instruction in the caller
                     } else {
-                        return Ok(());
+                        if !ret_signature.is_empty() {
+                            let mut return_values = Vec::new();
+                            for _i in 0..ret_signature.len() {
+                                return_values.push(
+                                    self.operand_stack.pop().map_err(|e| self.set_location(e))?,
+                                );
+                            }
+                            return_values.reverse();
+                            return Ok(return_values);
+                        }
+                        return Ok(vec![]);
                     }
                 }
                 ExitCode::Call(fh_idx) => {
@@ -1103,7 +1114,6 @@ impl Frame {
                         cost_strategy.charge_instr_with_size(Opcodes::MOVE_TO_GENERIC, size)?;
                     }
                     Bytecode::FreezeRef => {
-                        cost_strategy.charge_instr(Opcodes::FREEZE_REF)?;
                         // FreezeRef should just be a null op as we don't distinguish between mut
                         // and immut ref at runtime.
                     }

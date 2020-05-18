@@ -56,7 +56,6 @@ pub fn native_push_back(
         NativeCostIndex::PUSH_BACK,
         e.size().get() as usize,
     );
-
     r.push_back(e, &ty_args[0], context)?;
     Ok(NativeResult::ok(cost, smallvec![]))
 }
