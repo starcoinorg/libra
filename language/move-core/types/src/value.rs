@@ -25,10 +25,10 @@ pub enum MoveValue {
     Signer(AccountAddress),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MoveStructLayout(Vec<MoveTypeLayout>);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum MoveTypeLayout {
     Bool,
     U8,
