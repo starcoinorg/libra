@@ -11,4 +11,5 @@ pub mod event;
 pub mod hash;
 pub mod signature;
 pub mod signer;
+pub mod token;
 pub mod vector;
