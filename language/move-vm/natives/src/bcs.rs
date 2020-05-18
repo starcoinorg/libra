@@ -11,6 +11,8 @@ use move_vm_types::{
 use smallvec::smallvec;
 use std::collections::VecDeque;
 use vm::errors::PartialVMResult;
+use move_core_types::account_address::AccountAddress;
+use std::convert::TryFrom;
 
 /// Rust implementation of Move's `native public fun to_bytes<T>(&T): vector<u8>`
 pub fn native_to_bytes(
@@ -49,3 +51,28 @@ pub fn native_to_bytes(
         smallvec![Value::vector_u8(serialized_value)],
     ))
 }
+
+/// Rust implementation of Move's `public fun from_public_key_vec(pub_key_vec: vector<u8>): address;`
+pub fn native_to_address(
+    context: &mut impl NativeContext,
+    mut _ty_args: Vec<Type>,
+    mut args: VecDeque<Value>,
+) -> PartialVMResult<NativeResult> {
+    debug_assert!(_ty_args.is_empty());
+    debug_assert!(args.len() == 1);
+
+    let key_bytes = pop_arg!(args, Vec<u8>);
+    assert_eq!(key_bytes.len(), AccountAddress::LENGTH);
+
+    let address =  AccountAddress::try_from(&key_bytes[..AccountAddress::LENGTH]).unwrap();
+
+    let cost = native_gas(
+        context.cost_table(),
+        NativeCostIndex::LCS_TO_ADDRESS,
+        key_bytes.len(),
+    );
+
+    let return_values = vec![Value::address(address)];
+    Ok(NativeResult::ok(cost, return_values))
+}
+
