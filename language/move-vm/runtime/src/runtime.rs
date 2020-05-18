@@ -17,10 +17,9 @@ use move_core_types::{
 };
 use move_vm_types::{data_store::DataStore, gas_schedule::CostStrategy, values::Value};
 use vm::{
-    access::ModuleAccess,
-    errors::{verification_error, Location, PartialVMError, PartialVMResult, VMResult},
+    errors::{Location, PartialVMError, PartialVMResult, VMResult},
     file_format::SignatureToken,
-    CompiledModule, IndexKind,
+    CompiledModule,
 };
 
 /// An instantiation of the MoveVM.
@@ -46,7 +45,7 @@ impl VMRuntime {
     pub(crate) fn publish_module(
         &self,
         module: Vec<u8>,
-        sender: AccountAddress,
+        _sender: AccountAddress,
         data_store: &mut impl DataStore,
         _cost_strategy: &mut CostStrategy,
         log_context: &impl LogContext,
@@ -61,26 +60,7 @@ impl VMRuntime {
             }
         };
 
-        // Make sure the module's self address matches the transaction sender. The self address is
-        // where the module will actually be published. If we did not check this, the sender could
-        // publish a module under anyone's account.
-        if compiled_module.address() != &sender {
-            return Err(verification_error(
-                StatusCode::MODULE_ADDRESS_DOES_NOT_MATCH_SENDER,
-                IndexKind::AddressIdentifier,
-                compiled_module.self_handle_idx().0,
-            )
-            .finish(Location::Undefined));
-        }
-
-        // Make sure that there is not already a module with this name published
-        // under the transaction sender's account.
         let module_id = compiled_module.self_id();
-        if data_store.exists_module(&module_id)? {
-            return Err(
-                PartialVMError::new(StatusCode::DUPLICATE_MODULE_NAME).finish(Location::Undefined)
-            );
-        };
 
         // perform bytecode and loading verification
         self.loader.verify_module_verify_no_missing_dependencies(
@@ -149,7 +129,8 @@ impl VMRuntime {
             cost_strategy,
             &self.loader,
             log_context,
-        )
+        )?;
+        Ok(())
     }
 
     // See Session::execute_function for what contracts to follow.
@@ -165,7 +146,7 @@ impl VMRuntime {
     ) -> VMResult<()> {
         // load the function in the given module, perform verification of the module and
         // its dependencies if the module was not loaded
-        let (func, type_params) =
+        let (func, type_params, _) =
             self.loader
                 .load_function(function_name, module, &ty_args, data_store, log_context)?;
 
@@ -181,7 +162,49 @@ impl VMRuntime {
             cost_strategy,
             &self.loader,
             log_context,
-        )
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn execute_readonly_function(
+        &self,
+        module: &ModuleId,
+        function_name: &IdentStr,
+        ty_args: Vec<TypeTag>,
+        args: Vec<Value>,
+        data_store: &mut impl DataStore,
+        cost_strategy: &mut CostStrategy,
+        log_context: &impl LogContext,
+    ) -> VMResult<Vec<(TypeTag, Value)>> {
+        // load the function in the given module, perform verification of the module and
+        // its dependencies if the module was not loaded
+        let (func, type_params, return_type_tags) =
+            self.loader
+                .load_function(function_name, module, &ty_args, data_store, log_context)?;
+
+        // check the arguments provided are of restricted types
+        check_args(&args).map_err(|e| e.finish(Location::Module(module.clone())))?;
+
+        // run the function
+        let returned_value = Interpreter::entrypoint(
+            func,
+            type_params,
+            args,
+            data_store,
+            cost_strategy,
+            &self.loader,
+            log_context,
+        )?;
+
+        let result: Vec<_> = return_type_tags
+            .into_iter()
+            .zip(returned_value.into_iter())
+            .collect();
+        Ok(result)
+    }
+
+    pub(crate) fn loader(&self) -> &Loader {
+        &self.loader
     }
 }
 
