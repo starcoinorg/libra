@@ -77,7 +77,7 @@ impl<'a> CostStrategy<'a> {
         if !self.charge {
             return Ok(());
         }
-        debug_assert!(amount.get() > 0);
+        //debug_assert!(amount.get() > 0);
         if self
             .gas_left
             .app(&amount, |curr_gas, gas_amt| curr_gas >= gas_amt)
@@ -315,4 +315,6 @@ pub enum NativeCostIndex {
     CREATE_SIGNER = 15,
     DESTROY_SIGNER = 16,
     EMIT_EVENT = 17,
+    LCS_TO_ADDRESS = 18,
+    TOKEN_NAME_OF = 19,
 }

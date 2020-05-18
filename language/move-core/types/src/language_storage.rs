@@ -142,7 +142,7 @@ impl ModuleId {
 
 impl Display for ModuleId {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{}::{}", self.address, self.name)
+        write!(f, "{:#x}::{}", self.address, self.name)
     }
 }
 
@@ -150,8 +150,8 @@ impl Display for StructTag {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "0x{}::{}::{}",
-            self.address.short_str_lossless(),
+            "{:#x}::{}::{}",
+            &self.address, // should not use short_str.
             self.module,
             self.name
         )?;
