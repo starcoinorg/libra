@@ -7,7 +7,7 @@ use libra_types::{
     contract_event::ContractEvent,
 };
 use move_core_types::{gas_schedule::CostTable, identifier::IdentStr, language_storage::ModuleId};
-use move_vm_natives::{account, debug, event, hash, lcs, signature, signer, vector};
+use move_vm_natives::{account, debug, event, generic, hash, lcs, signature, signer, vector};
 use move_vm_types::{
     data_store::DataStore,
     gas_schedule::CostStrategy,
@@ -46,6 +46,7 @@ pub(crate) enum NativeFunction {
     SignerBorrowAddress,
     CreateSigner,
     DestroySigner,
+    GenericTypeOf,
 }
 
 impl NativeFunction {
@@ -80,6 +81,7 @@ impl NativeFunction {
             (&CORE_CODE_ADDRESS, "Debug", "print") => DebugPrint,
             (&CORE_CODE_ADDRESS, "Debug", "print_stack_trace") => DebugPrintStackTrace,
             (&CORE_CODE_ADDRESS, "Signer", "borrow_address") => SignerBorrowAddress,
+            (&CORE_CODE_ADDRESS, "Generic", "type_of") => GenericTypeOf,
             _ => return None,
         })
     }
@@ -115,6 +117,7 @@ impl NativeFunction {
             Self::SignerBorrowAddress => signer::native_borrow_address(ctx, t, v),
             Self::CreateSigner => account::native_create_signer(ctx, t, v),
             Self::DestroySigner => account::native_destroy_signer(ctx, t, v),
+            Self::GenericTypeOf => generic::native_type_of(ctx, t, v),
         }
     }
 }
