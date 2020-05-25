@@ -6,6 +6,7 @@ extern crate move_vm_types;
 
 pub mod account;
 pub mod event;
+pub mod generic;
 pub mod hash;
 pub mod lcs;
 pub mod signature;

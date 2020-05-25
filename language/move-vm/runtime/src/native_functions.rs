@@ -7,7 +7,7 @@ use libra_types::{
     contract_event::ContractEvent,
 };
 use move_core_types::{gas_schedule::CostTable, identifier::IdentStr, language_storage::ModuleId};
-use move_vm_natives::{account, event, hash, lcs, signature};
+use move_vm_natives::{account, event, generic, hash, lcs, signature};
 use move_vm_types::{
     interpreter_context::InterpreterContext,
     loaded_data::{runtime_types::Type, types::FatType},
@@ -43,6 +43,7 @@ pub(crate) enum NativeFunction {
     AccountSaveAccount,
     DebugPrint,
     DebugPrintStackTrace,
+    GenericTypeOf,
 }
 
 impl NativeFunction {
@@ -75,6 +76,7 @@ impl NativeFunction {
             (&CORE_CODE_ADDRESS, "Account", "save_account") => AccountSaveAccount,
             (&CORE_CODE_ADDRESS, "Debug", "print") => DebugPrint,
             (&CORE_CODE_ADDRESS, "Debug", "print_stack_trace") => DebugPrintStackTrace,
+            (&CORE_CODE_ADDRESS, "Generic", "type_of") => GenericTypeOf,
             _ => return None,
         })
     }
@@ -108,6 +110,7 @@ impl NativeFunction {
             Self::LCSToBytes => lcs::native_to_bytes(ctx, t, v),
             Self::DebugPrint => debug::native_print(ctx, t, v),
             Self::DebugPrintStackTrace => debug::native_print_stack_trace(ctx, t, v),
+            Self::GenericTypeOf => generic::native_type_of(ctx, t, v),
         }
     }
 }
