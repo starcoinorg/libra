@@ -16,10 +16,9 @@ use move_core_types::{
 };
 use move_vm_types::{data_store::DataStore, gas_schedule::CostStrategy, values::Value};
 use vm::{
-    access::ModuleAccess,
-    errors::{verification_error, Location, PartialVMError, PartialVMResult, VMResult},
+    errors::{Location, PartialVMError, PartialVMResult, VMResult},
     file_format::SignatureToken,
-    CompiledModule, IndexKind,
+    CompiledModule,
 };
 
 /// An instantiation of the MoveVM.
@@ -44,7 +43,7 @@ impl VMRuntime {
     pub(crate) fn publish_module(
         &self,
         module: Vec<u8>,
-        sender: AccountAddress,
+        _sender: AccountAddress,
         data_store: &mut impl DataStore,
         _cost_strategy: &mut CostStrategy,
     ) -> VMResult<()> {
@@ -56,27 +55,6 @@ impl VMRuntime {
                 warn!("[VM] module deserialization failed {:?}", err);
                 return Err(err.finish(Location::Undefined));
             }
-        };
-
-        // Make sure the module's self address matches the transaction sender. The self address is
-        // where the module will actually be published. If we did not check this, the sender could
-        // publish a module under anyone's account.
-        if compiled_module.address() != &sender {
-            return Err(verification_error(
-                StatusCode::MODULE_ADDRESS_DOES_NOT_MATCH_SENDER,
-                IndexKind::AddressIdentifier,
-                compiled_module.self_handle_idx().0,
-            )
-            .finish(Location::Undefined));
-        }
-
-        // Make sure that there is not already a module with this name published
-        // under the transaction sender's account.
-        let module_id = compiled_module.self_id();
-        if data_store.exists_module(&module_id) {
-            return Err(
-                PartialVMError::new(StatusCode::DUPLICATE_MODULE_NAME).finish(Location::Undefined)
-            );
         };
 
         // perform bytecode and loading verification
@@ -151,6 +129,10 @@ impl VMRuntime {
             cost_strategy,
             &self.loader,
         )
+    }
+
+    pub(crate) fn loader(&self) -> &Loader {
+        &self.loader
     }
 }
 
