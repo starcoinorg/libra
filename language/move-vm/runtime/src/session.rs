@@ -73,7 +73,7 @@ impl<'r, 'l, R: RemoteCache> Session<'r, 'l, R> {
             .publish_module(module, sender, &mut self.data_cache, cost_strategy)
     }
 
-    pub fn verify_module(&self, module: &[u8]) -> VMResult<CompiledModule> {
+    pub fn verify_module(&mut self, module: &[u8]) -> VMResult<CompiledModule> {
         let compiled_module = match CompiledModule::deserialize(module) {
             Ok(module) => module,
             Err(err) => {
@@ -81,7 +81,7 @@ impl<'r, 'l, R: RemoteCache> Session<'r, 'l, R> {
                 return Err(err.finish(Location::Undefined));
             }
         };
-        self.runtime.loader().verify_module(&compiled_module)?;
+        self.runtime.loader().verify_module_verify_no_missing_dependencies(&compiled_module, &mut self.data_cache)?;
         Ok(compiled_module)
     }
 
