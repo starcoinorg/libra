@@ -61,7 +61,7 @@ impl VMRuntime {
 
         // perform bytecode and loading verification
         self.loader
-            .verify_module_verify_no_missing_dependencies(&compiled_module, data_store)?;
+            .verify_module(&compiled_module)?;
 
         data_store.publish_module(&module_id, module)
     }

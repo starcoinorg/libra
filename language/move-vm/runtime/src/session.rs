@@ -81,7 +81,7 @@ impl<'r, 'l, R: RemoteCache> Session<'r, 'l, R> {
                 return Err(err.finish(Location::Undefined));
             }
         };
-        self.runtime.loader().verify_module_verify_no_missing_dependencies(&compiled_module, &mut self.data_cache)?;
+        self.runtime.loader().verify_module(&compiled_module)?;
         Ok(compiled_module)
     }
 
