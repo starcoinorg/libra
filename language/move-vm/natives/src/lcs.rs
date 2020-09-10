@@ -11,6 +11,7 @@ use move_vm_types::{
 use std::collections::VecDeque;
 use vm::errors::PartialVMResult;
 use move_core_types::account_address::AccountAddress;
+use std::convert::TryFrom;
 
 /// Rust implementation of Move's `native public fun to_bytes<T>(&T): vector<u8>`
 pub fn native_to_bytes(
@@ -51,7 +52,7 @@ pub fn native_to_bytes(
 }
 
 /// Rust implementation of Move's `public fun from_public_key_vec(pub_key_vec: vector<u8>): address;`
-pub fn native_from_public_key_vec(
+pub fn native_to_address(
     context: &mut impl NativeContext,
     mut _ty_args: Vec<Type>,
     mut args: VecDeque<Value>,
@@ -60,14 +61,13 @@ pub fn native_from_public_key_vec(
     debug_assert!(args.len() == 1);
 
     let key_bytes = pop_arg!(args, Vec<u8>);
+    assert_eq!(key_bytes.len() == AccountAddress::LENGTH);
 
-    let mut array = [0u8; AccountAddress::LENGTH];
-    array.copy_from_slice(&key_bytes[AccountAddress::LENGTH..]);
-    let address =  AccountAddress::new(array);
+    let address =  AccountAddress::try_from(&key_bytes)?;
 
     let cost = native_gas(
         context.cost_table(),
-        NativeCostIndex::LCS_FROM_PUBLIC_KEY,
+        NativeCostIndex::LCS_TO_ADDRESS,
         key_bytes.len(),
     );
 

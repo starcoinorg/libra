@@ -307,5 +307,5 @@ pub enum NativeCostIndex {
     SIGNER_BORROW = 14,
     CREATE_SIGNER = 15,
     DESTROY_SIGNER = 16,
-    LCS_FROM_PUBLIC_KEY = 17,
+    LCS_TO_ADDRESS = 17,
 }
