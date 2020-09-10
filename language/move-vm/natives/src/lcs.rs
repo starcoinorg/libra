@@ -61,7 +61,7 @@ pub fn native_to_address(
     debug_assert!(args.len() == 1);
 
     let key_bytes = pop_arg!(args, Vec<u8>);
-    assert_eq!(key_bytes.len() == AccountAddress::LENGTH);
+    assert_eq!(key_bytes.len(), AccountAddress::LENGTH);
 
     let address =  AccountAddress::try_from(&key_bytes)?;
 
