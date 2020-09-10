@@ -63,7 +63,7 @@ pub fn native_to_address(
     let key_bytes = pop_arg!(args, Vec<u8>);
     assert_eq!(key_bytes.len(), AccountAddress::LENGTH);
 
-    let address =  AccountAddress::try_from(&key_bytes)?;
+    let address =  AccountAddress::try_from(&key_bytes[..AccountAddress::LENGTH]).unwrap();
 
     let cost = native_gas(
         context.cost_table(),
