@@ -3,3 +3,4 @@
 
 pub mod loader_tests;
 pub mod vm_arguments_tests;
+pub mod readonly_function_tests;

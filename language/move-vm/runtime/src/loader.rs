@@ -1574,6 +1574,10 @@ impl Function {
                 .with_message("Missing Native Function".to_string())
         })
     }
+
+    pub(crate) fn returns(&self) -> &Signature {
+        &self.return_
+    }
 }
 
 //

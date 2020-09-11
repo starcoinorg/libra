@@ -113,7 +113,8 @@ impl VMRuntime {
             data_store,
             cost_strategy,
             &self.loader,
-        )
+        )?;
+        Ok(())
     }
 
     pub(crate) fn execute_function(
@@ -125,6 +126,36 @@ impl VMRuntime {
         data_store: &mut impl DataStore,
         cost_strategy: &mut CostStrategy,
     ) -> VMResult<()> {
+        // load the function in the given module, perform verification of the module and
+        // its dependencies if the module was not loaded
+        let (func, type_params) =
+            self.loader
+                .load_function(function_name, module, &ty_args, data_store)?;
+
+        // check the arguments provided are of restricted types
+        check_args(&args).map_err(|e| e.finish(Location::Module(module.clone())))?;
+
+        // run the function
+        Interpreter::entrypoint(
+            func,
+            type_params,
+            args,
+            data_store,
+            cost_strategy,
+            &self.loader,
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn execute_readonly_function(
+        &self,
+        module: &ModuleId,
+        function_name: &IdentStr,
+        ty_args: Vec<TypeTag>,
+        args: Vec<Value>,
+        data_store: &mut impl DataStore,
+        cost_strategy: &mut CostStrategy,
+    ) -> VMResult<Vec<Value>> {
         // load the function in the given module, perform verification of the module and
         // its dependencies if the module was not loaded
         let (func, type_params) =
