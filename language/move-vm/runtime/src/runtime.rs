@@ -118,7 +118,8 @@ impl VMRuntime {
             data_store,
             cost_strategy,
             &self.loader,
-        )
+        )?;
+        Ok(())
     }
 
     pub(crate) fn execute_function(
@@ -132,7 +133,7 @@ impl VMRuntime {
     ) -> VMResult<()> {
         // load the function in the given module, perform verification of the module and
         // its dependencies if the module was not loaded
-        let (func, type_params) =
+        let (func, type_params, _) =
             self.loader
                 .load_function(function_name, module, &ty_args, data_store)?;
 
@@ -147,7 +148,43 @@ impl VMRuntime {
             data_store,
             cost_strategy,
             &self.loader,
-        )
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn execute_readonly_function(
+        &self,
+        module: &ModuleId,
+        function_name: &IdentStr,
+        ty_args: Vec<TypeTag>,
+        args: Vec<Value>,
+        data_store: &mut impl DataStore,
+        cost_strategy: &mut CostStrategy,
+    ) -> VMResult<Vec<(TypeTag, Value)>> {
+        // load the function in the given module, perform verification of the module and
+        // its dependencies if the module was not loaded
+        let (func, type_params, return_type_tags) =
+            self.loader
+                .load_function(function_name, module, &ty_args, data_store)?;
+
+        // check the arguments provided are of restricted types
+        check_args(&args).map_err(|e| e.finish(Location::Module(module.clone())))?;
+
+        // run the function
+        let returned_value = Interpreter::entrypoint(
+            func,
+            type_params,
+            args,
+            data_store,
+            cost_strategy,
+            &self.loader,
+        )?;
+
+        let result: Vec<_> = return_type_tags
+            .into_iter()
+            .zip(returned_value.into_iter())
+            .collect();
+        Ok(result)
     }
 
     pub(crate) fn loader(&self) -> &Loader {
