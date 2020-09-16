@@ -4,5 +4,5 @@
 #![forbid(unsafe_code)]
 
 mod abigen;
-
+mod module_abi;
 pub use crate::abigen::*;
