@@ -536,7 +536,7 @@ impl Loader {
         module_id: &ModuleId,
         ty_args: &[TypeTag],
         data_store: &mut impl DataStore,
-    ) -> VMResult<(Arc<Function>, Vec<Type>)> {
+    ) -> VMResult<(Arc<Function>, Vec<Type>, Vec<MoveTypeLayout>)> {
         self.load_module_expect_no_missing_dependencies(module_id, data_store)?;
         let idx = self
             .module_cache
@@ -554,7 +554,23 @@ impl Loader {
         self.verify_ty_args(func.type_parameters(), &type_params)
             .map_err(|e| e.finish(Location::Module(module_id.clone())))?;
 
-        Ok((func, type_params))
+        // type layout of returned value
+        let module = self.get_module(module_id);
+        let mut layouts = vec![];
+        for token in func.return_.0.as_slice() {
+            let ty = self
+                .module_cache
+                .lock()
+                .unwrap()
+                .make_type(module.module(), token)
+                .map_err(|e| e.finish(Location::Module(module_id.clone())))?;
+            let layout = self
+                .type_to_type_layout(&ty)
+                .map_err(|e| e.finish(Location::Module(module_id.clone())))?;
+            layouts.push(layout);
+        }
+
+        Ok((func, type_params, layouts))
     }
 
     // Entry point for module publishing (`MoveVM::publish_module`).

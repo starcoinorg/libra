@@ -148,13 +148,14 @@ impl Interpreter {
                         if !ret_signature.is_empty() {
                             let mut return_values = Vec::new();
                             for _i in 0..ret_signature.len() {
-                                return_values.push(self.operand_stack.pop()
-                                    .map_err(|e| self.set_location(e))?);
+                                return_values.push(
+                                    self.operand_stack.pop().map_err(|e| self.set_location(e))?,
+                                );
                             }
                             return_values.reverse();
-                            return Ok(return_values)
+                            return Ok(return_values);
                         }
-                        return Ok(vec![])
+                        return Ok(vec![]);
                     }
                 }
                 ExitCode::Call(fh_idx) => {

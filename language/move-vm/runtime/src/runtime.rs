@@ -12,6 +12,7 @@ use move_core_types::{
     account_address::AccountAddress,
     identifier::IdentStr,
     language_storage::{ModuleId, TypeTag},
+    value::MoveTypeLayout,
     vm_status::StatusCode,
 };
 use move_vm_types::{data_store::DataStore, gas_schedule::CostStrategy, values::Value};
@@ -128,7 +129,7 @@ impl VMRuntime {
     ) -> VMResult<()> {
         // load the function in the given module, perform verification of the module and
         // its dependencies if the module was not loaded
-        let (func, type_params) =
+        let (func, type_params, _) =
             self.loader
                 .load_function(function_name, module, &ty_args, data_store)?;
 
@@ -155,10 +156,10 @@ impl VMRuntime {
         args: Vec<Value>,
         data_store: &mut impl DataStore,
         cost_strategy: &mut CostStrategy,
-    ) -> VMResult<Vec<Value>> {
+    ) -> VMResult<Vec<(MoveTypeLayout, Value)>> {
         // load the function in the given module, perform verification of the module and
         // its dependencies if the module was not loaded
-        let (func, type_params) =
+        let (func, type_params, returned_type_layouts) =
             self.loader
                 .load_function(function_name, module, &ty_args, data_store)?;
 
@@ -166,14 +167,20 @@ impl VMRuntime {
         check_args(&args).map_err(|e| e.finish(Location::Module(module.clone())))?;
 
         // run the function
-        Interpreter::entrypoint(
+        let returned_value = Interpreter::entrypoint(
             func,
             type_params,
             args,
             data_store,
             cost_strategy,
             &self.loader,
-        )
+        )?;
+
+        let result: Vec<_> = returned_type_layouts
+            .into_iter()
+            .zip(returned_value.into_iter())
+            .collect();
+        Ok(result)
     }
 
     pub(crate) fn loader(&self) -> &Loader {

@@ -10,6 +10,7 @@ use move_core_types::{
     account_address::AccountAddress,
     identifier::IdentStr,
     language_storage::{ModuleId, TypeTag},
+    value::MoveTypeLayout,
     vm_status::VMStatus,
 };
 use move_vm_types::data_store::DataStore;
@@ -54,7 +55,7 @@ impl<'r, 'l, R: RemoteCache> Session<'r, 'l, R> {
         _sender: AccountAddress,
         cost_strategy: &mut CostStrategy,
         error_specializer: F,
-    ) -> Result<Vec<Value>, VMStatus> {
+    ) -> Result<Vec<(MoveTypeLayout, Value)>, VMStatus> {
         self.runtime
             .execute_readonly_function(
                 module,
@@ -103,7 +104,9 @@ impl<'r, 'l, R: RemoteCache> Session<'r, 'l, R> {
                 return Err(err.finish(Location::Undefined));
             }
         };
-        self.runtime.loader().verify_module_verify_no_missing_dependencies(&compiled_module, &mut self.data_cache)?;
+        self.runtime
+            .loader()
+            .verify_module_verify_no_missing_dependencies(&compiled_module, &mut self.data_cache)?;
         Ok(compiled_module)
     }
 
