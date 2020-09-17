@@ -10,7 +10,6 @@ use move_core_types::{
     account_address::AccountAddress,
     identifier::IdentStr,
     language_storage::{ModuleId, TypeTag},
-    value::MoveTypeLayout,
     vm_status::VMStatus,
 };
 use move_vm_types::data_store::DataStore;
@@ -55,7 +54,7 @@ impl<'r, 'l, R: RemoteCache> Session<'r, 'l, R> {
         _sender: AccountAddress,
         cost_strategy: &mut CostStrategy,
         error_specializer: F,
-    ) -> Result<Vec<(MoveTypeLayout, Value)>, VMStatus> {
+    ) -> Result<Vec<(TypeTag, Value)>, VMStatus> {
         self.runtime
             .execute_readonly_function(
                 module,

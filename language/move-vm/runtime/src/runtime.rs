@@ -12,7 +12,6 @@ use move_core_types::{
     account_address::AccountAddress,
     identifier::IdentStr,
     language_storage::{ModuleId, TypeTag},
-    value::MoveTypeLayout,
     vm_status::StatusCode,
 };
 use move_vm_types::{data_store::DataStore, gas_schedule::CostStrategy, values::Value};
@@ -156,10 +155,10 @@ impl VMRuntime {
         args: Vec<Value>,
         data_store: &mut impl DataStore,
         cost_strategy: &mut CostStrategy,
-    ) -> VMResult<Vec<(MoveTypeLayout, Value)>> {
+    ) -> VMResult<Vec<(TypeTag, Value)>> {
         // load the function in the given module, perform verification of the module and
         // its dependencies if the module was not loaded
-        let (func, type_params, returned_type_layouts) =
+        let (func, type_params, return_type_tags) =
             self.loader
                 .load_function(function_name, module, &ty_args, data_store)?;
 
@@ -176,7 +175,7 @@ impl VMRuntime {
             &self.loader,
         )?;
 
-        let result: Vec<_> = returned_type_layouts
+        let result: Vec<_> = return_type_tags
             .into_iter()
             .zip(returned_value.into_iter())
             .collect();

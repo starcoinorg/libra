@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{data_cache::RemoteCache, move_vm::MoveVM};
+use move_core_types::language_storage::StructTag;
 use move_core_types::{
     account_address::AccountAddress,
     gas_schedule::{GasAlgebra, GasUnits},
     identifier::Identifier,
     language_storage::{ModuleId, TypeTag},
-    value::{MoveStructLayout, MoveTypeLayout},
 };
 use move_lang::{compiled_unit::CompiledUnit, shared::Address};
 use move_vm_types::gas_schedule::{zero_cost_schedule, CostStrategy};
@@ -57,7 +57,7 @@ impl Adapter {
         &self,
         module: &ModuleId,
         name: &Identifier,
-    ) -> Vec<(MoveTypeLayout, Value)> {
+    ) -> Vec<(TypeTag, Value)> {
         let cost_table = zero_cost_schedule();
         let mut cost_strategy = CostStrategy::system(&cost_table, GasUnits::new(0));
         let mut session = self.vm.new_session(&self.store);
@@ -136,24 +136,28 @@ fn readonly_func_call() -> PartialVMResult<()> {
     let module_id = ModuleId::new(WORKING_ACCOUNT, Identifier::new("A").unwrap());
     let name = Identifier::new("get_1").unwrap();
     let result = adapter.call_readonly_function(&module_id, &name);
-    assert!(result[0].0 == MoveTypeLayout::U64);
+    assert_eq!(result[0].0, TypeTag::U64);
     assert!(result[0].1.equals(&Value::u64(20))?);
 
     let module_id = ModuleId::new(WORKING_ACCOUNT, Identifier::new("A").unwrap());
     let name = Identifier::new("get_2").unwrap();
     let result = adapter.call_readonly_function(&module_id, &name);
-    assert!(result[0].0 == MoveTypeLayout::U64);
+    assert_eq!(result[0].0, TypeTag::U64);
     assert!(result[0].1.equals(&Value::u64(20))?);
-    assert!(result[1].0 == MoveTypeLayout::U64);
+    assert_eq!(result[1].0, TypeTag::U64);
     assert!(result[1].1.equals(&Value::u64(1))?);
 
     let module_id = ModuleId::new(WORKING_ACCOUNT, Identifier::new("A").unwrap());
     let name = Identifier::new("get_s").unwrap();
     let result = adapter.call_readonly_function(&module_id, &name);
     let value = Value::struct_(Struct::pack(vec![Value::u64(20)], false));
-    assert!(
-        result[0].0 == MoveTypeLayout::Struct(MoveStructLayout::new(vec![MoveTypeLayout::U64]))
-    );
+    let return_type_tag = TypeTag::Struct(StructTag {
+        address: AccountAddress::from_hex_literal("0x2").unwrap(),
+        module: Identifier::new("A").unwrap(),
+        name: Identifier::new("S").unwrap(),
+        type_params: vec![],
+    });
+    assert_eq!(result[0].0, return_type_tag);
     assert!(result[0].1.equals(&value)?);
 
     Ok(())
