@@ -51,7 +51,6 @@ impl<'r, 'l, R: RemoteCache> Session<'r, 'l, R> {
         function_name: &IdentStr,
         ty_args: Vec<TypeTag>,
         args: Vec<Value>,
-        _sender: AccountAddress,
         cost_strategy: &mut CostStrategy,
         error_specializer: F,
     ) -> Result<Vec<(TypeTag, Value)>, VMStatus> {

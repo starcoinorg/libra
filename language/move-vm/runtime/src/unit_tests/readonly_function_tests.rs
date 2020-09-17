@@ -67,7 +67,6 @@ impl Adapter {
                 name,
                 vec![],
                 vec![],
-                WORKING_ACCOUNT,
                 &mut cost_strategy,
                 |e| e,
             )
