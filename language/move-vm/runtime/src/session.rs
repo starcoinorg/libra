@@ -41,15 +41,14 @@ impl<'r, 'l, R: RemoteCache> Session<'r, 'l, R> {
         )
     }
 
-    pub fn execute_readonly_function<F: FnOnce(VMStatus) -> VMStatus>(
+    pub fn execute_readonly_function(
         &mut self,
         module: &ModuleId,
         function_name: &IdentStr,
         ty_args: Vec<TypeTag>,
         args: Vec<Value>,
         cost_strategy: &mut CostStrategy,
-        error_specializer: F,
-    ) -> Result<Vec<(TypeTag, Value)>, VMStatus> {
+    ) -> VMResult<Vec<(TypeTag, Value)>> {
         self.runtime
             .execute_readonly_function(
                 module,
@@ -59,7 +58,6 @@ impl<'r, 'l, R: RemoteCache> Session<'r, 'l, R> {
                 &mut self.data_cache,
                 cost_strategy,
             )
-            .map_err(|e| error_specializer(e.into_vm_status()))
     }
 
     pub fn execute_script(
