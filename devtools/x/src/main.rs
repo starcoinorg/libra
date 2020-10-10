@@ -9,21 +9,21 @@ use log::Level;
 use std::io::Write;
 use structopt::StructOpt;
 
-mod bench;
-mod cargo;
-mod check;
-mod clippy;
-mod config;
-mod context;
-mod diff_summary;
-mod fix;
-mod fmt;
-mod generate_summaries;
-mod installer;
-mod lint;
-mod test;
-mod tools;
-mod utils;
+pub mod bench;
+pub mod cargo;
+pub mod check;
+pub mod clippy;
+pub mod config;
+pub mod context;
+pub mod diff_summary;
+pub mod fix;
+pub mod fmt;
+pub mod generate_summaries;
+pub mod installer;
+pub mod lint;
+pub mod test;
+pub mod tools;
+pub mod utils;
 
 type Result<T> = anyhow::Result<T>;
 
