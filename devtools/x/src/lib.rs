@@ -1,6 +1,8 @@
 // Copyright (c) The Starcoin Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+type Result<T> = anyhow::Result<T>;
+
 pub mod bench;
 pub mod cargo;
 pub mod check;

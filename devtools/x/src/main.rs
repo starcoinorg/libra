@@ -81,7 +81,7 @@ fn main() -> Result<()> {
 
     match args.cmd {
         Command::Tools(args) => x::tools::run(args, xctx),
-        Command::Test(args) => test::run(args, xctx),
+        Command::Test(args) => x::test::run(args, xctx),
         Command::Check(args) => x::check::run(args, xctx),
         Command::Clippy(args) => x::clippy::run(args, xctx),
         Command::Fix(args) => x::fix::run(args, xctx),
