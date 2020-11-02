@@ -246,6 +246,32 @@ impl HashValue {
     pub fn from_hex(hex_str: &str) -> Result<Self> {
         Self::from_slice(hex::decode(hex_str)?.as_slice())
     }
+
+    /// Parse a given hex string to a hash value
+    pub fn from_hex_literal(literal: &str) -> Result<Self> {
+        ensure!(literal.starts_with("0x"), "literal must start with 0x.");
+        let hex_len = literal.len() - 2;
+        let mut result = if hex_len % 2 != 0 {
+            let mut hex_str = String::with_capacity(hex_len + 1);
+            hex_str.push('0');
+            hex_str.push_str(&literal[2..]);
+            hex::decode(&hex_str)?
+        } else {
+            hex::decode(&literal[2..])?
+        };
+
+        let len = result.len();
+        let padded_result = if len < Self::LENGTH {
+            let mut padded = Vec::with_capacity(Self::LENGTH);
+            padded.resize(Self::LENGTH - len, 0u8);
+            padded.append(&mut result);
+            padded
+        } else {
+            result
+        };
+
+        Self::from_slice(padded_result.as_slice())
+    }
 }
 
 // TODO(#1307)
@@ -255,7 +281,7 @@ impl ser::Serialize for HashValue {
         S: ser::Serializer,
     {
         if serializer.is_human_readable() {
-            serializer.serialize_str(&self.to_hex())
+            serializer.serialize_str(&format!("0x{}", self.to_hex()))
         } else {
             // In order to preserve the Serde data model and help analysis tools,
             // make sure to wrap our value in a container with the same name
@@ -273,7 +299,7 @@ impl<'de> de::Deserialize<'de> for HashValue {
     {
         if deserializer.is_human_readable() {
             let encoded_hash = <String>::deserialize(deserializer)?;
-            HashValue::from_hex(encoded_hash.as_str())
+            HashValue::from_hex_literal(encoded_hash.as_str())
                 .map_err(<D::Error as ::serde::de::Error>::custom)
         } else {
             // See comment in serialize.

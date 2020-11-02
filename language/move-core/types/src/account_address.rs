@@ -231,7 +231,7 @@ impl<'de> Deserialize<'de> for AccountAddress {
     {
         if deserializer.is_human_readable() {
             let s = <String>::deserialize(deserializer)?;
-            AccountAddress::try_from(s).map_err(D::Error::custom)
+            AccountAddress::from_hex_literal(&s).map_err(D::Error::custom)
         } else {
             // In order to preserve the Serde data model and help analysis tools,
             // make sure to wrap our value in a container with the same name
@@ -252,7 +252,7 @@ impl Serialize for AccountAddress {
         S: Serializer,
     {
         if serializer.is_human_readable() {
-            self.to_string().serialize(serializer)
+            format!("0x{:#x}", self).serialize(serializer)
         } else {
             // See comment in deserialize.
             serializer.serialize_newtype_struct("AccountAddress", &self.0)
@@ -262,9 +262,19 @@ impl Serialize for AccountAddress {
 
 #[cfg(test)]
 mod tests {
+    use crate::account_address::AccountAddress;
     use super::*;
     use hex::FromHex;
 
+    #[test]
+    fn test_serialize() {
+        let addr = AccountAddress::random();
+
+        let json_value = serde_json::to_string(&addr).unwrap();
+        println!("{}", json_value);
+        let de_addr = serde_json::from_slice::<AccountAddress>(json_value.as_bytes()).unwrap();
+        assert_eq!(addr, de_addr);
+    }
     #[test]
     fn test_short_str_lossless() {
         let hex = Vec::from_hex("00c0f1f95c5b1c5f0eda533eff269000")
