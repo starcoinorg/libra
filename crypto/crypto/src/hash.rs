@@ -276,15 +276,15 @@ impl HashValue {
 
     /// Parse a given hex string to a hash value
     pub fn from_hex_literal(literal: &str) -> Result<Self> {
-        ensure!(literal.starts_with("0x"), "literal must start with 0x.");
-        let hex_len = literal.len() - 2;
+        let literal = literal.strip_prefix("0x").unwrap_or_else(|| literal);
+        let hex_len = literal.len();
         let mut result = if hex_len % 2 != 0 {
             let mut hex_str = String::with_capacity(hex_len + 1);
             hex_str.push('0');
-            hex_str.push_str(&literal[2..]);
+            hex_str.push_str(literal);
             hex::decode(&hex_str)?
         } else {
-            hex::decode(&literal[2..])?
+            hex::decode(literal)?
         };
 
         let len = result.len();
@@ -308,7 +308,7 @@ impl ser::Serialize for HashValue {
         S: ser::Serializer,
     {
         if serializer.is_human_readable() {
-            serializer.serialize_str(&format!("0x{}", self.to_hex()))
+            serializer.serialize_str(&self.to_string())
         } else {
             // In order to preserve the Serde data model and help analysis tools,
             // make sure to wrap our value in a container with the same name
@@ -326,7 +326,7 @@ impl<'de> de::Deserialize<'de> for HashValue {
     {
         if deserializer.is_human_readable() {
             let encoded_hash = <String>::deserialize(deserializer)?;
-            HashValue::from_hex_literal(encoded_hash.as_str())
+            HashValue::from_str(encoded_hash.as_str())
                 .map_err(<D::Error as ::serde::de::Error>::custom)
         } else {
             // See comment in serialize.
@@ -380,20 +380,13 @@ impl fmt::LowerHex for HashValue {
 
 impl fmt::Debug for HashValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HashValue(")?;
-        <Self as fmt::LowerHex>::fmt(self, f)?;
-        write!(f, ")")?;
-        Ok(())
+        write!(f, "HashValue(0x{:#x})", self)
     }
 }
 
-/// Will print shortened (4 bytes) hash
 impl fmt::Display for HashValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for byte in self.hash.iter().take(4) {
-            write!(f, "{:02x}", byte)?;
-        }
-        Ok(())
+        write!(f, "0x{:#x}", self)
     }
 }
 
@@ -407,7 +400,7 @@ impl FromStr for HashValue {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        HashValue::from_hex(s)
+        HashValue::from_hex_literal(s)
     }
 }
 
@@ -681,5 +674,21 @@ impl<T: ser::Serialize + ?Sized> TestOnlyHash for T {
         let mut hasher = TestOnlyHasher::default();
         hasher.update(&bytes);
         hasher.finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::HashValue;
+
+    #[test]
+    fn test_serialize() {
+        let hash = HashValue::random();
+
+        let json_value = serde_json::to_string(&hash).unwrap();
+        println!("{}", json_value);
+        assert_eq!(json_value, format!("\"{}\"", hash.to_string()));
+        let de_hash = serde_json::from_slice::<HashValue>(json_value.as_bytes()).unwrap();
+        assert_eq!(hash, de_hash);
     }
 }

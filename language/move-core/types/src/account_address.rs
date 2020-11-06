@@ -54,16 +54,15 @@ impl AccountAddress {
     }
 
     pub fn from_hex_literal(literal: &str) -> Result<Self> {
-        ensure!(literal.starts_with("0x"), "literal must start with 0x.");
-
-        let hex_len = literal.len() - 2;
+        let literal = literal.strip_prefix("0x").unwrap_or_else(|| literal);
+        let hex_len = literal.len();
         let mut result = if hex_len % 2 != 0 {
             let mut hex_str = String::with_capacity(hex_len + 1);
             hex_str.push('0');
-            hex_str.push_str(&literal[2..]);
+            hex_str.push_str(literal);
             hex::decode(&hex_str)?
         } else {
-            hex::decode(&literal[2..])?
+            hex::decode(literal)?
         };
 
         let len = result.len();
@@ -111,15 +110,15 @@ impl AsRef<[u8]> for AccountAddress {
 
 impl fmt::Display for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-        // Forward to the UpperHex impl with a "0x" prepended (the # flag).
-        write!(f, "{:#X}", self)
+        // Forward to the LowerHex impl with a "0x" prepended (the # flag).
+        write!(f, "0x{:#x}", self)
     }
 }
 
 impl fmt::Debug for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Forward to the UpperHex impl with a "0x" prepended (the # flag).
-        write!(f, "{:#X}", self)
+        // Forward to the LowerHex impl with a "0x" prepended (the # flag).
+        write!(f, "0x{:#x}", self)
     }
 }
 
@@ -203,8 +202,7 @@ impl TryFrom<String> for AccountAddress {
     type Error = Error;
 
     fn try_from(s: String) -> Result<AccountAddress> {
-        let bytes_out = ::hex::decode(s)?;
-        AccountAddress::try_from(bytes_out.as_slice())
+        AccountAddress::from_str(s.as_str())
     }
 }
 
@@ -212,8 +210,7 @@ impl FromStr for AccountAddress {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let bytes_out = ::hex::decode(s)?;
-        AccountAddress::try_from(bytes_out.as_slice())
+        AccountAddress::from_hex_literal(s)
     }
 }
 
@@ -224,7 +221,7 @@ impl<'de> Deserialize<'de> for AccountAddress {
     {
         if deserializer.is_human_readable() {
             let s = <String>::deserialize(deserializer)?;
-            AccountAddress::from_hex_literal(&s).map_err(D::Error::custom)
+            AccountAddress::from_str(&s).map_err(D::Error::custom)
         } else {
             // In order to preserve the Serde data model and help analysis tools,
             // make sure to wrap our value in a container with the same name
@@ -245,7 +242,7 @@ impl Serialize for AccountAddress {
         S: Serializer,
     {
         if serializer.is_human_readable() {
-            format!("0x{:#x}", self).serialize(serializer)
+            self.to_string().serialize(serializer)
         } else {
             // See comment in deserialize.
             serializer.serialize_newtype_struct("AccountAddress", &self.0)
@@ -263,6 +260,7 @@ mod tests {
 
         let json_value = serde_json::to_string(&addr).unwrap();
         println!("{}", json_value);
+        assert_eq!(json_value, format!("\"{}\"", addr.to_string()));
         let de_addr = serde_json::from_slice::<AccountAddress>(json_value.as_bytes()).unwrap();
         assert_eq!(addr, de_addr);
     }
