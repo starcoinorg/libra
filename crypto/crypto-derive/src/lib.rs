@@ -154,8 +154,7 @@ pub fn deserialize_key(source: TokenStream) -> TokenStream {
             {
                 if deserializer.is_human_readable() {
                     let encoded_key = <String>::deserialize(deserializer)?;
-                    let encoded_key = encoded_key.strip_prefix("0x").unwrap_or(encoded_key.as_str());
-                    ValidCryptoMaterialStringExt::from_encoded_string(encoded_key)
+                    ValidCryptoMaterialStringExt::from_encoded_string(encoded_key.as_str())
                         .map_err(<D::Error as ::serde::de::Error>::custom)
                 } else {
                     // In order to preserve the Serde data model and help analysis tools,
@@ -191,7 +190,7 @@ pub fn serialize_key(source: TokenStream) -> TokenStream {
                 if serializer.is_human_readable() {
                     self.to_encoded_string()
                         .map_err(<S::Error as ::serde::ser::Error>::custom)
-                        .and_then(|str| serializer.serialize_str(&format!("0x{}", &str[..])))
+                        .and_then(|str| serializer.serialize_str(&str[..]))
                 } else {
                     // See comment in deserialize_key.
                     serializer.serialize_newtype_struct(
