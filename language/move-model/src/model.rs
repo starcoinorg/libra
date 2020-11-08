@@ -1560,7 +1560,7 @@ impl<'env> ModuleEnv<'env> {
 
     /// Converts an address identifier to a number representing the address.
     pub fn addr_to_big_uint(addr: &AccountAddress) -> BigUint {
-        BigUint::from_str_radix(&addr.to_string(), 16).unwrap()
+        BigUint::from_str_radix(&format!("{:#x}", addr), 16).unwrap()
     }
 
     /// Returns specification variables of this module.
