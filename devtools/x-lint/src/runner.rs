@@ -226,7 +226,7 @@ impl<'cfg> LintEngine<'cfg> {
             .split(|b| b == &0)
             .filter_map(|s| {
                 // TODO: make global exclusions configurable.
-                if !s.is_empty() && !s.starts_with(b"testsuite/libra-fuzzer/artifacts/") {
+                if !s.is_empty() && !s.starts_with(b"testsuite/libra-fuzzer/artifacts/") && cfg!(unix) {
                     // `OsStr::from_bytes` only works on Unix, since "OS strings" on Windows are
                     // actually UTF-16ish. Would be cool to get it working on Windows at some point
                     // too, but it needs to be done with some care.
@@ -235,10 +235,13 @@ impl<'cfg> LintEngine<'cfg> {
                     // * https://doc.rust-lang.org/std/ffi/index.html#conversions
                     // * https://www.mercurial-scm.org/wiki/EncodingStrategy and
                     // * https://en.wikipedia.org/wiki/Mojibake.
-                    use std::os::unix::ffi::OsStrExt;
-
-                    let s = OsStr::from_bytes(s);
-                    Some(Path::new(s))
+                    let mut path = None;
+                    #[cfg(unix)]{
+                        use std::os::unix::ffi::OsStrExt;
+                        let s = OsStr::from_bytes(s);
+                        path = Some(Path::new(s));
+                    }
+                    path
                 } else {
                     None
                 }
