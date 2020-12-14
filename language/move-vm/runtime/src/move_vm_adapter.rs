@@ -4,7 +4,7 @@ use crate::{
     data_cache::{RemoteCache, TransactionEffects},
     session::Session,
 };
-use libra_logger::prelude::*;
+use diem_logger::prelude::*;
 use move_core_types::{
     account_address::AccountAddress,
     identifier::IdentStr,
@@ -137,8 +137,8 @@ impl<'r, 'l, R: RemoteCache> SessionAdapter<'r, 'l, R> {
         self.session.data_cache.load_module(module_id)
     }
 
-    pub fn num_mutated_accounts(&self) -> u64 {
-        self.session.num_mutated_accounts()
+    pub fn num_mutated_accounts(&self, sender: &AccountAddress) -> u64 {
+        self.session.num_mutated_accounts(sender)
     }
 
     pub fn finish(self) -> VMResult<TransactionEffects> {
