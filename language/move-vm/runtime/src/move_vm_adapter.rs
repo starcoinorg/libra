@@ -4,7 +4,7 @@ use crate::{
     data_cache::{RemoteCache, TransactionEffects},
     session::Session,
 };
-use libra_logger::prelude::*;
+use diem_logger::prelude::*;
 use move_core_types::{
     account_address::AccountAddress,
     identifier::IdentStr,
