@@ -5,6 +5,7 @@ use crate::{
     account_address::AccountAddress,
     identifier::{IdentStr, Identifier},
 };
+use diem_crypto::hash::CryptoHash;
 use diem_crypto_derive::{CryptoHasher, LCSCryptoHash};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
@@ -56,7 +57,7 @@ impl StructTag {
         let mut key = vec![];
         key.push(RESOURCE_TAG);
 
-        key.append(&mut lcs::to_bytes(self).unwrap());
+        key.append(&mut self.hash().to_vec());
         key
     }
 
@@ -134,7 +135,7 @@ impl ModuleId {
         let mut key = vec![];
         key.push(CODE_TAG);
 
-        key.append(&mut lcs::to_bytes(self).unwrap());
+        key.append(&mut self.hash().to_vec());
         key
     }
 }
