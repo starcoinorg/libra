@@ -141,7 +141,7 @@ impl ModuleId {
 
 impl Display for ModuleId {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{:#x}::{}", self.address, self.name)
+        write!(f, "{}::{}", self.address, self.name)
     }
 }
 
@@ -149,7 +149,7 @@ impl Display for StructTag {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         write!(
             f,
-            "{:#x}::{}::{}",
+            "{}::{}::{}",
             &self.address, // should not use short_str.
             self.module,
             self.name
@@ -170,13 +170,13 @@ impl Display for TypeTag {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             TypeTag::Struct(s) => write!(f, "{}", s),
-            TypeTag::Vector(ty) => write!(f, "Vector<{}>", ty),
-            TypeTag::U8 => write!(f, "U8"),
-            TypeTag::U64 => write!(f, "U64"),
-            TypeTag::U128 => write!(f, "U128"),
-            TypeTag::Address => write!(f, "Address"),
-            TypeTag::Signer => write!(f, "Signer"),
-            TypeTag::Bool => write!(f, "Bool"),
+            TypeTag::Vector(ty) => write!(f, "vector<{}>", ty),
+            TypeTag::U8 => write!(f, "u8"),
+            TypeTag::U64 => write!(f, "u64"),
+            TypeTag::U128 => write!(f, "u128"),
+            TypeTag::Address => write!(f, "address"),
+            TypeTag::Signer => write!(f, "signer"),
+            TypeTag::Bool => write!(f, "bool"),
         }
     }
 }
