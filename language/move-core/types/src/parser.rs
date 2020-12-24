@@ -425,3 +425,24 @@ fn tests_parse_transaction_argument_negative() {
         assert!(parse_transaction_argument(s).is_err())
     }
 }
+
+#[test]
+fn tests_parse_type_tag() {
+    for t in &[
+        TypeTag::U8,
+        TypeTag::U64,
+        TypeTag::U128,
+        TypeTag::Address,
+        TypeTag::Bool,
+        TypeTag::Struct(StructTag {
+            address: AccountAddress::random(),
+            module: Identifier::from_utf8("A".to_string().into_bytes()).unwrap(),
+            name: Identifier::from_utf8("B".to_string().into_bytes()).unwrap(),
+            type_params: vec![TypeTag::Address],
+        }),
+        TypeTag::Vector(Box::new(TypeTag::U8)),
+    ] {
+        let actual = parse_type_tag(t.to_string().as_str()).unwrap();
+        assert_eq!(&actual, t);
+    }
+}
