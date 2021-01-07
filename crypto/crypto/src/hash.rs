@@ -113,7 +113,7 @@ use tiny_keccak::{Hasher, Sha3};
 /// A prefix used to begin the salt of every diem hashable structure. The salt
 /// consists in this global prefix, concatenated with the specified
 /// serialization name of the struct.
-pub(crate) const DIEM_HASH_PREFIX: &[u8] = b"DIEM::";
+pub(crate) const STARCOIN_HASH_PREFIX: &[u8] = b"STARCOIN::";
 
 /// Output value of our hash function. Intentionally opaque for safety and modularity.
 #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -473,7 +473,7 @@ impl DefaultHasher {
     pub fn prefixed_hash(buffer: &[u8]) -> [u8; HashValue::LENGTH] {
         // The salt is initial material we prefix to actual value bytes for
         // domain separation. Its length is variable.
-        let salt: Vec<u8> = [DIEM_HASH_PREFIX, buffer].concat();
+        let salt: Vec<u8> = [STARCOIN_HASH_PREFIX, buffer].concat();
         // The seed is a fixed-length hash of the salt, thereby preventing
         // suffix attacks on the domain separation bytes.
         HashValue::sha3_256_of(&salt[..]).hash
