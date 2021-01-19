@@ -8,9 +8,9 @@ use crate::{
 use diem_crypto_derive::{BCSCryptoHash, CryptoHasher};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-
 pub const CODE_TAG: u8 = 0;
 pub const RESOURCE_TAG: u8 = 1;
 
@@ -18,7 +18,7 @@ pub const CORE_CODE_ADDRESS: AccountAddress = AccountAddress::new([
     0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 1u8,
 ]);
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone, PartialOrd, Ord)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Hash, Eq, Clone, PartialOrd, Ord, JsonSchema)]
 pub enum TypeTag {
     Bool,
     U8,
@@ -42,6 +42,7 @@ pub enum TypeTag {
     Ord,
     CryptoHasher,
     BCSCryptoHash,
+    JsonSchema,
 )]
 pub struct StructTag {
     pub address: AccountAddress,
@@ -103,6 +104,7 @@ impl ResourceKey {
     Ord,
     CryptoHasher,
     BCSCryptoHash,
+    JsonSchema,
 )]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 #[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]

@@ -1404,6 +1404,7 @@ dependencies = [
  "rand 0.7.3",
  "rand_core 0.5.1",
  "ripemd160",
+ "schemars",
  "serde",
  "serde-name",
  "serde_bytes",
@@ -2557,6 +2558,12 @@ name = "dtoa"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88d7ed2934d741c6b37e33e3832298e8850b53fd2d2bea03873375596c7cea4e"
+
+[[package]]
+name = "dyn-clone"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee2626afccd7561a06cf1367e2950c4718ea04565e20fb5029b6c7d8ad09abcf"
 
 [[package]]
 name = "ed25519"
@@ -4144,6 +4151,7 @@ dependencies = [
  "rand 0.7.3",
  "ref-cast",
  "regex",
+ "schemars",
  "serde",
  "serde_bytes",
  "serde_json",
@@ -5972,6 +5980,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "schemars"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "763f667253711994847f7e73befe859d6fff7bea2b7a7f01669d2c5b60765c37"
+dependencies = [
+ "dyn-clone",
+ "schemars_derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1d457e2e37415f32b7628ddc5a7fea06ef63bd029ed180d65166e87ca25ce21"
+dependencies = [
+ "proc-macro2 1.0.24",
+ "quote 1.0.8",
+ "serde_derive_internals",
+ "syn 1.0.57",
+]
+
+[[package]]
 name = "scoped-tls"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6160,6 +6192,17 @@ dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
  "syn 1.0.58",
+]
+
+[[package]]
+name = "serde_derive_internals"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1dbab34ca63057a1f15280bdf3c39f2b1eb1b54c17e98360e511637aef7418c6"
+dependencies = [
+ "proc-macro2 1.0.24",
+ "quote 1.0.8",
+ "syn 1.0.57",
 ]
 
 [[package]]

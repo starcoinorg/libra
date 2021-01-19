@@ -1,6 +1,7 @@
 // Copyright (c) The Diem Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use move_core_types::account_address::AccountAddress;
 use move_core_types::vm_status::sub_status::NFE_BCS_SERIALIZATION_FAILURE;
 use move_vm_types::{
     gas_schedule::NativeCostIndex,
@@ -9,9 +10,8 @@ use move_vm_types::{
     values::{values_impl::Reference, Value},
 };
 use std::collections::VecDeque;
-use vm::errors::PartialVMResult;
-use move_core_types::account_address::AccountAddress;
 use std::convert::TryFrom;
+use vm::errors::PartialVMResult;
 
 /// Rust implementation of Move's `native public fun to_bytes<T>(&T): vector<u8>`
 pub fn native_to_bytes(
@@ -63,7 +63,7 @@ pub fn native_to_address(
     let key_bytes = pop_arg!(args, Vec<u8>);
     assert_eq!(key_bytes.len(), AccountAddress::LENGTH);
 
-    let address =  AccountAddress::try_from(&key_bytes[..AccountAddress::LENGTH]).unwrap();
+    let address = AccountAddress::try_from(&key_bytes[..AccountAddress::LENGTH]).unwrap();
 
     let cost = native_gas(
         context.cost_table(),
@@ -74,4 +74,3 @@ pub fn native_to_address(
     let return_values = vec![Value::address(address)];
     Ok(NativeResult::ok(cost, return_values))
 }
-

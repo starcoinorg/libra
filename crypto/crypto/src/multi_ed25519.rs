@@ -21,6 +21,7 @@ use core::convert::TryFrom;
 use diem_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
 use mirai_annotations::*;
 use rand::Rng;
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::{convert::TryInto, fmt};
 
@@ -38,7 +39,7 @@ pub struct MultiEd25519PrivateKey {
 static_assertions::assert_not_impl_any!(MultiEd25519PrivateKey: Clone);
 
 /// Vector of public keys in the multi-key Ed25519 structure along with the threshold.
-#[derive(Clone, DeserializeKey, Eq, PartialEq, SerializeKey)]
+#[derive(Clone, DeserializeKey, Eq, PartialEq, SerializeKey, JsonSchema)]
 pub struct MultiEd25519PublicKey {
     public_keys: Vec<Ed25519PublicKey>,
     threshold: u8,
@@ -46,6 +47,7 @@ pub struct MultiEd25519PublicKey {
 
 #[cfg(mirai)]
 use crate::tags::ValidatedPublicKeyTag;
+
 #[cfg(not(mirai))]
 struct ValidatedPublicKeyTag {}
 
@@ -54,7 +56,7 @@ struct ValidatedPublicKeyTag {}
 ///
 /// Note that bits are read from left to right. For instance, in the following bitmap
 /// [0b0001_0000, 0b0000_0000, 0b0000_0000, 0b0000_0001], the 3rd and 31st positions are set.
-#[derive(Clone, DeserializeKey, Eq, PartialEq, SerializeKey)]
+#[derive(Clone, DeserializeKey, Eq, PartialEq, SerializeKey, JsonSchema)]
 pub struct MultiEd25519Signature {
     signatures: Vec<Ed25519Signature>,
     bitmap: [u8; BITMAP_NUM_OF_BYTES],
@@ -511,7 +513,7 @@ impl Signature for MultiEd25519Signature {
                 return Err(anyhow!(
                     "{}",
                     CryptoMaterialError::BitVecError("Signature index is out of range".to_string())
-                ))
+                ));
             }
         };
         if bitmap_count_ones(self.bitmap) < public_key.threshold as u32 {

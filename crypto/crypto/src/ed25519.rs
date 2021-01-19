@@ -42,9 +42,9 @@ use anyhow::{anyhow, Result};
 use core::convert::TryFrom;
 use diem_crypto_derive::{DeserializeKey, SerializeKey, SilentDebug, SilentDisplay};
 use mirai_annotations::*;
+use schemars::JsonSchema;
 use serde::Serialize;
 use std::{cmp::Ordering, fmt};
-
 /// The length of the Ed25519PrivateKey
 pub const ED25519_PRIVATE_KEY_LENGTH: usize = ed25519_dalek::SECRET_KEY_LENGTH;
 /// The length of the Ed25519PublicKey
@@ -74,8 +74,8 @@ impl Clone for Ed25519PrivateKey {
 }
 
 /// An Ed25519 public key
-#[derive(DeserializeKey, Clone, SerializeKey)]
-pub struct Ed25519PublicKey(ed25519_dalek::PublicKey);
+#[derive(DeserializeKey, Clone, SerializeKey, JsonSchema)]
+pub struct Ed25519PublicKey(#[schemars(with = "String")] ed25519_dalek::PublicKey);
 
 #[cfg(mirai)]
 use crate::tags::ValidatedPublicKeyTag;
@@ -83,8 +83,8 @@ use crate::tags::ValidatedPublicKeyTag;
 struct ValidatedPublicKeyTag {}
 
 /// An Ed25519 signature
-#[derive(DeserializeKey, Clone, SerializeKey)]
-pub struct Ed25519Signature(ed25519_dalek::Signature);
+#[derive(DeserializeKey, Clone, SerializeKey, JsonSchema)]
+pub struct Ed25519Signature(#[schemars(with="String")] ed25519_dalek::Signature);
 
 impl Ed25519PrivateKey {
     /// The length of the Ed25519PrivateKey

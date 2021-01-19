@@ -8,8 +8,8 @@ use crate::{
     Result,
 };
 use anyhow::Context;
-use x_core::XCoreContext;
 use std::path::Path;
+use x_core::XCoreContext;
 
 /// Global context shared across x commands.
 pub struct XContext {

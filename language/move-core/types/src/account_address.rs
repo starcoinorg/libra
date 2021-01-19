@@ -10,15 +10,15 @@ use diem_crypto_derive::CryptoHasher;
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest_derive::Arbitrary;
 use rand::{rngs::OsRng, Rng};
+use schemars::JsonSchema;
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize, Serializer};
 use short_hex_str::ShortHexStr;
 use static_assertions::const_assert;
 use std::{convert::TryFrom, fmt, str::FromStr};
-
 /// A struct that represents an account address.
-#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Copy, CryptoHasher)]
+#[derive(Ord, PartialOrd, Eq, PartialEq, Hash, Clone, Copy, CryptoHasher, JsonSchema)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
-pub struct AccountAddress([u8; AccountAddress::LENGTH]);
+pub struct AccountAddress(#[schemars(with = "String")] [u8; AccountAddress::LENGTH]);
 
 impl AccountAddress {
     pub const fn new(address: [u8; Self::LENGTH]) -> Self {
@@ -261,8 +261,8 @@ impl Serialize for AccountAddress {
 
 #[cfg(test)]
 mod tests {
-    use crate::account_address::AccountAddress;
     use super::*;
+    use crate::account_address::AccountAddress;
     use hex::FromHex;
 
     #[test]

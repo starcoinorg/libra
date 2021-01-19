@@ -30,9 +30,9 @@ use anyhow::{bail, Result};
 #[cfg(any(test, feature = "fuzzing"))]
 use proptest::prelude::*;
 use ref_cast::RefCast;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Borrow, fmt, ops::Deref};
-
 /// Describes what identifiers are allowed.
 ///
 /// For now this is deliberately restrictive -- we would like to evolve this in the future.
@@ -67,7 +67,7 @@ pub(crate) static ALLOWED_NO_SELF_IDENTIFIERS: &str =
 /// An owned identifier.
 ///
 /// For more details, see the module level documentation.
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize, JsonSchema)]
 pub struct Identifier(Box<str>);
 // An identifier cannot be mutated so use Box<str> instead of String -- it is 1 word smaller.
 

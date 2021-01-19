@@ -19,11 +19,7 @@ pub fn native_token_name_of(
     debug_assert!(ty_args.len() == 1);
     debug_assert!(arguments.len() == 0);
     //TODO add gas index
-    let cost = native_gas(
-        context.cost_table(),
-        NativeCostIndex::TOKEN_NAME_OF,
-        1,
-    );
+    let cost = native_gas(context.cost_table(), NativeCostIndex::TOKEN_NAME_OF, 1);
     let type_tag = context.type_to_type_tag(&ty_args[0])?;
     if let TypeTag::Struct(struct_tag) = type_tag {
         let mut name = struct_tag.name.as_bytes().to_vec();

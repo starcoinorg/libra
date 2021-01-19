@@ -2,17 +2,20 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::account_address::AccountAddress;
-use crate::parser::parse_transaction_argument;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-
-#[derive(Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(JsonSchema, Clone, Hash, Eq, PartialEq, Serialize, Deserialize)]
 pub enum TransactionArgument {
     U8(u8),
     U64(u64),
     U128(u128),
     Address(AccountAddress),
-    U8Vector(#[serde(with = "serde_bytes")] Vec<u8>),
+    U8Vector(
+        #[serde(with = "serde_bytes")]
+        #[schemars(with = "String")]
+        Vec<u8>,
+    ),
     Bool(bool),
 }
 
