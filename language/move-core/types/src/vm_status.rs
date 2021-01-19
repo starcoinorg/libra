@@ -465,6 +465,18 @@ pub enum StatusCode {
     SEQUENCE_NUMBER_TOO_BIG = 24,
     // The gas currency is not registered as a TransactionFee currency
     BAD_TRANSACTION_FEE_CURRENCY = 25,
+    // The code is not running in genesis
+    NOT_GENESIS = 26,
+    // Config value doesn't exist
+    CONFIG_VALUE_DOES_NOT_EXIST = 27,
+    // Timestamp is invalid
+    INVALID_TIMESTAMP = 28,
+    // Coin to deposit is zero
+    COIN_DEPOSIT_IS_ZERO = 29,
+    // Token to destroy is not zero
+    DESTROY_TOKEN_NON_ZERO = 30,
+    // Block number mismatch
+    BLOCK_NUMBER_MISMATCH = 31,
 
     // When a code module/script is published it is verified. These are the
     // possible errors that can arise from the verification process.
