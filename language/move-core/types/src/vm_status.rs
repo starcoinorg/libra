@@ -730,6 +730,8 @@ pub mod sub_status {
     pub const NFE_VECTOR_ERROR_BASE: u64 = 0;
     // Failure in BCS deserialization
     pub const NFE_BCS_SERIALIZATION_FAILURE: u64 = 0x1C5;
+    // Failure in Token native functions.
+    pub const NFE_TOKEN_INVALID_TYPE_ARG_FAILURE: u64 = 0x200;
 }
 
 /// The `Arbitrary` impl only generates validation statuses since the full enum is too large.
