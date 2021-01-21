@@ -1,4 +1,5 @@
 use move_core_types::language_storage::TypeTag;
+use move_core_types::vm_status::sub_status::NFE_TOKEN_INVALID_TYPE_ARG_FAILURE;
 use move_vm_types::{
     gas_schedule::NativeCostIndex,
     loaded_data::runtime_types::Type,
@@ -7,8 +8,6 @@ use move_vm_types::{
 };
 use std::collections::VecDeque;
 use vm::errors::PartialVMResult;
-
-const DEFAULT_ERROR_CODE: u64 = 0x0ED2_5519;
 
 /// Return Token types ModuleAddress, ModuleName and StructName
 pub fn native_token_name_of(
@@ -39,8 +38,7 @@ pub fn native_token_name_of(
             ],
         ))
     } else {
-        //TODO define error code
-        Ok(NativeResult::err(cost, DEFAULT_ERROR_CODE))
+        Ok(NativeResult::err(cost, NFE_TOKEN_INVALID_TYPE_ARG_FAILURE))
     }
 }
 
