@@ -61,13 +61,15 @@ pub fn native_to_address(
     debug_assert!(args.len() == 1);
 
     let key_bytes = pop_arg!(args, Vec<u8>);
-    assert_eq!(key_bytes.len(), AccountAddress::LENGTH);
-
     let cost = native_gas(
         context.cost_table(),
         NativeCostIndex::BCS_TO_ADDRESS,
         key_bytes.len(),
     );
+    if key_bytes.len() != AccountAddress::LENGTH {
+        return Ok(NativeResult::err(cost, NFE_BCS_TO_ADDRESS_FAILURE));
+    }
+
     let address =  match AccountAddress::try_from(&key_bytes[..AccountAddress::LENGTH]){
         Ok(addr) => addr,
         Err(_) => return Ok(NativeResult::err(cost, NFE_BCS_TO_ADDRESS_FAILURE)),
