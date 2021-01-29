@@ -1,7 +1,7 @@
 // Copyright (c) The Diem Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use move_core_types::vm_status::sub_status::NFE_BCS_SERIALIZATION_FAILURE;
+use move_core_types::vm_status::sub_status::{NFE_BCS_SERIALIZATION_FAILURE, NFE_BCS_TO_ADDRESS_FAILURE};
 use move_vm_types::{
     gas_schedule::NativeCostIndex,
     loaded_data::runtime_types::Type,
@@ -63,14 +63,15 @@ pub fn native_to_address(
     let key_bytes = pop_arg!(args, Vec<u8>);
     assert_eq!(key_bytes.len(), AccountAddress::LENGTH);
 
-    let address =  AccountAddress::try_from(&key_bytes[..AccountAddress::LENGTH]).unwrap();
-
     let cost = native_gas(
         context.cost_table(),
-        NativeCostIndex::LCS_TO_ADDRESS,
+        NativeCostIndex::BCS_TO_ADDRESS,
         key_bytes.len(),
     );
-
+    let address =  match AccountAddress::try_from(&key_bytes[..AccountAddress::LENGTH]){
+        Ok(addr) => addr,
+        Err(_) => return Ok(NativeResult::err(cost, NFE_BCS_TO_ADDRESS_FAILURE)),
+    };
     let return_values = vec![Value::address(address)];
     Ok(NativeResult::ok(cost, return_values))
 }
