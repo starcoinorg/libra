@@ -72,7 +72,7 @@ pub fn native_to_address(
         key_bytes.len(),
     );
 
-    let return_values = vec![Value::address(address)];
+    let return_values = smallvec![Value::address(address)];
     Ok(NativeResult::ok(cost, return_values))
 }
 

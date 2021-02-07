@@ -1109,6 +1109,7 @@ impl Frame {
                         cost_strategy.charge_instr_with_size(Opcodes::MOVE_TO_GENERIC, size)?;
                     }
                     Bytecode::FreezeRef => {
+                        cost_strategy.charge_instr(Opcodes::FREEZE_REF)?;
                         // FreezeRef should just be a null op as we don't distinguish between mut
                         // and immut ref at runtime.
                     }
