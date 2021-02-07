@@ -48,8 +48,7 @@ impl<'r, 'l, R: RemoteCache> SessionAdapter<'r, 'l, R> {
         module: &ModuleId,
         function_name: &IdentStr,
         ty_args: Vec<TypeTag>,
-        args: Vec<Value>,
-        sender: AccountAddress,
+        args: Vec<Vec<u8>>,
         cost_strategy: &mut CostStrategy,
     ) -> VMResult<()> {
         self.session.execute_function(
@@ -57,7 +56,6 @@ impl<'r, 'l, R: RemoteCache> SessionAdapter<'r, 'l, R> {
             function_name,
             ty_args,
             args,
-            sender,
             cost_strategy,
             &self.log_context,
         )
@@ -68,7 +66,7 @@ impl<'r, 'l, R: RemoteCache> SessionAdapter<'r, 'l, R> {
         module: &ModuleId,
         function_name: &IdentStr,
         ty_args: Vec<TypeTag>,
-        args: Vec<Value>,
+        args: Vec<Vec<u8>>,
         cost_strategy: &mut CostStrategy,
     ) -> VMResult<Vec<(TypeTag, Value)>> {
         self.session.runtime.execute_readonly_function(
@@ -86,7 +84,7 @@ impl<'r, 'l, R: RemoteCache> SessionAdapter<'r, 'l, R> {
         &mut self,
         script: Vec<u8>,
         ty_args: Vec<TypeTag>,
-        args: Vec<Value>,
+        args: Vec<Vec<u8>>,
         senders: Vec<AccountAddress>,
         cost_strategy: &mut CostStrategy,
     ) -> VMResult<()> {

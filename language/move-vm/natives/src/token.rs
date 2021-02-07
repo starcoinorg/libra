@@ -6,6 +6,7 @@ use move_vm_types::{
     natives::function::{native_gas, NativeContext, NativeResult},
     values::Value,
 };
+use smallvec::smallvec;
 use std::collections::VecDeque;
 use vm::errors::PartialVMResult;
 
@@ -31,7 +32,7 @@ pub fn native_token_name_of(
         name.append(&mut type_args_info.into_bytes());
         Ok(NativeResult::ok(
             cost,
-            vec![
+            smallvec![
                 Value::address(struct_tag.address),
                 Value::vector_u8(struct_tag.module.as_bytes().to_vec()),
                 Value::vector_u8(name),

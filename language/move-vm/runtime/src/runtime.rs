@@ -264,24 +264,32 @@ impl VMRuntime {
         module: &ModuleId,
         function_name: &IdentStr,
         ty_args: Vec<TypeTag>,
-        args: Vec<Value>,
+        args: Vec<Vec<u8>>,
         data_store: &mut impl DataStore,
         cost_strategy: &mut CostStrategy,
         log_context: &impl LogContext,
     ) -> VMResult<Vec<(TypeTag, Value)>> {
         // load the function in the given module, perform verification of the module and
         // its dependencies if the module was not loaded
-        let (func, type_params, return_type_tags) =
+        let (func, ty_args, params, return_type_tags) =
             self.loader
                 .load_function(function_name, module, &ty_args, data_store, log_context)?;
 
+        let params = params
+            .into_iter()
+            .map(|ty| ty.subst(&ty_args))
+            .collect::<PartialVMResult<Vec<_>>>()
+            .map_err(|err| err.finish(Location::Undefined))?;
+
         // check the arguments provided are of restricted types
-        check_args(&args).map_err(|e| e.finish(Location::Module(module.clone())))?;
+        let args = self
+            .deserialize_args(&params, args)
+            .map_err(|err| err.finish(Location::Undefined))?;
 
         // run the function
         let returned_value = Interpreter::entrypoint(
             func,
-            type_params,
+            ty_args,
             args,
             data_store,
             cost_strategy,
