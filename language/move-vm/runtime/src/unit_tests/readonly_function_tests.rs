@@ -106,11 +106,11 @@ fn compile_file(addr: &[u8; AccountAddress::LENGTH]) -> Vec<CompiledModule> {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("src/unit_tests/readonly_test.move");
     let s = path.to_str().expect("no path specified").to_owned();
-    let (_, modules) = move_lang::move_compile(&[s], &[], Some(Address::new(*addr)), None)
-        .expect("Error compiling...");
+    let (_, modules) = move_lang::move_compile(&[s], &[], Some(Address::new(*addr)), None, false)
+        .expect("Compiling test module failed.");
 
     let mut compiled_modules = vec![];
-    for module in modules {
+    for module in modules.expect("Unwrapping CompiledUnit failed.") {
         match module {
             CompiledUnit::Module { module, .. } => compiled_modules.push(module),
             CompiledUnit::Script { .. } => (),
@@ -143,7 +143,7 @@ fn readonly_func_call() -> PartialVMResult<()> {
     let module_id = ModuleId::new(WORKING_ACCOUNT, Identifier::new("A").unwrap());
     let name = Identifier::new("get_s").unwrap();
     let result = adapter.call_readonly_function(&module_id, &name);
-    let value = Value::struct_(Struct::pack(vec![Value::u64(20)], false));
+    let value = Value::struct_(Struct::pack(vec![Value::u64(20)]));
     let return_type_tag = TypeTag::Struct(StructTag {
         address: AccountAddress::from_hex_literal("0x2").unwrap(),
         module: Identifier::new("A").unwrap(),

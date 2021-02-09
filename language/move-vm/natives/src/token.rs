@@ -70,14 +70,14 @@ fn test_type_params_formatting() {
         type_params: vec![TypeTag::Address],
     };
     let cases = vec![
-        (vec![TypeTag::Address], "<Address>"),
+        (vec![TypeTag::Address], "<address>"),
         (
             vec![TypeTag::Vector(Box::new(TypeTag::U8)), TypeTag::U64],
-            "<Vector<U8>, U64>",
+            "<vector<u8>, u64>",
         ),
         (
             vec![TypeTag::U64, TypeTag::Struct(a_struct)],
-            "<U64, 00000000000000000000000000000000::TestModule::TestStruct<Address>>",
+            "<u64, 0x00000000000000000000000000000000::TestModule::TestStruct<address>>",
         ),
     ];
 
