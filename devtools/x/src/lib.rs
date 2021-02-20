@@ -21,3 +21,4 @@ pub mod playground;
 pub mod test;
 pub mod tools;
 pub mod utils;
+pub mod generate_workspace_hack;

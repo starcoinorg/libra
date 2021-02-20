@@ -1,8 +1,7 @@
 // Copyright (c) The Libra Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::data_cache::RemoteCache;
-use crate::move_vm_adapter::MoveVMAdapter;
+use move_vm_runtime::move_vm_adapter::MoveVMAdapter;
 use move_core_types::language_storage::StructTag;
 use move_core_types::{
     account_address::AccountAddress,
@@ -11,11 +10,12 @@ use move_core_types::{
     language_storage::{ModuleId, TypeTag},
 };
 use move_lang::{compiled_unit::CompiledUnit, shared::Address};
+use move_vm_test_utils::InMemoryStorage;
 use move_vm_types::gas_schedule::{zero_cost_schedule, CostStrategy};
 use move_vm_types::values::*;
-use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 use vm::{
-    errors::{PartialVMResult, VMResult},
+    errors::PartialVMResult,
     CompiledModule,
 };
 
@@ -23,12 +23,12 @@ const WORKING_ACCOUNT: AccountAddress =
     AccountAddress::new([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]);
 
 struct Adapter {
-    store: DataStore,
+    store: InMemoryStorage,
     vm: Arc<MoveVMAdapter>,
 }
 
 impl Adapter {
-    fn new(store: DataStore) -> Self {
+    fn new(store: InMemoryStorage) -> Self {
         Self {
             store,
             vm: Arc::new(MoveVMAdapter::new()),
@@ -48,10 +48,8 @@ impl Adapter {
                 .publish_module(binary, WORKING_ACCOUNT, &mut cost_strategy)
                 .unwrap_or_else(|_| panic!("failure publishing module: {:#?}", module));
         }
-        let data = session.finish().expect("failure getting write set");
-        for (module_id, module) in data.modules {
-            self.store.add_module(module_id, module);
-        }
+        let (changeset, _) = session.finish().expect("failure getting write set");
+        self.store.apply(changeset).expect("failure applying write set");
     }
 
     fn call_readonly_function(
@@ -65,40 +63,6 @@ impl Adapter {
         session
             .execute_readonly_function(module, name, vec![], vec![], &mut cost_strategy)
             .unwrap_or_else(|_| panic!("Failure executing {:?}::{:?}", module, name))
-    }
-}
-
-#[derive(Clone, Debug)]
-struct DataStore {
-    modules: HashMap<ModuleId, Vec<u8>>,
-}
-
-impl DataStore {
-    fn empty() -> Self {
-        Self {
-            modules: HashMap::new(),
-        }
-    }
-
-    fn add_module(&mut self, module_id: ModuleId, binary: Vec<u8>) {
-        self.modules.insert(module_id, binary);
-    }
-}
-
-impl RemoteCache for DataStore {
-    fn get_module(&self, module_id: &ModuleId) -> VMResult<Option<Vec<u8>>> {
-        match self.modules.get(module_id) {
-            None => Ok(None),
-            Some(binary) => Ok(Some(binary.clone())),
-        }
-    }
-
-    fn get_resource(
-        &self,
-        _address: &AccountAddress,
-        _tag: &StructTag,
-    ) -> PartialVMResult<Option<Vec<u8>>> {
-        unimplemented!()
     }
 }
 
@@ -121,7 +85,7 @@ fn compile_file(addr: &[u8; AccountAddress::LENGTH]) -> Vec<CompiledModule> {
 
 #[test]
 fn readonly_func_call() -> PartialVMResult<()> {
-    let data_store = DataStore::empty();
+    let data_store = InMemoryStorage::new();
     let mut adapter = Adapter::new(data_store);
     let modules = compile_file(&[0; 16]);
     adapter.publish_modules(modules);

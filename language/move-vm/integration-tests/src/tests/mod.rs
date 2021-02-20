@@ -6,3 +6,4 @@ mod bad_storage_tests;
 mod function_arg_tests;
 mod loader_tests;
 mod mutated_accounts_tests;
+mod readonly_function_tests;

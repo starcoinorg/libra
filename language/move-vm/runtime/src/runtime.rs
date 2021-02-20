@@ -230,7 +230,7 @@ impl VMRuntime {
         cost_strategy: &mut CostStrategy,
         log_context: &impl LogContext,
     ) -> VMResult<()> {
-        let (func, ty_args, params) = self.loader.load_function(
+        let (func, ty_args, params, _) = self.loader.load_function(
             function_name,
             module,
             &ty_args,
@@ -252,7 +252,8 @@ impl VMRuntime {
             cost_strategy,
             &self.loader,
             log_context,
-        )
+        )?;
+        Ok(())
     }
 
     // See Session::execute_function for what contracts to follow.
@@ -315,7 +316,7 @@ impl VMRuntime {
         // its dependencies if the module was not loaded
         let (func, ty_args, params, return_type_tags) =
             self.loader
-                .load_function(function_name, module, &ty_args, data_store, log_context)?;
+                .load_function(function_name, module, &ty_args, false, data_store, log_context)?;
 
         let params = params
             .into_iter()

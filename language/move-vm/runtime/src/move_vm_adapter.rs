@@ -1,12 +1,13 @@
 use crate::logging::NoContextLog;
 use crate::move_vm::MoveVM;
 use crate::{
-    data_cache::{RemoteCache, TransactionEffects},
+    data_cache::RemoteCache,
     session::Session,
 };
 use diem_logger::prelude::*;
 use move_core_types::{
     account_address::AccountAddress,
+    effects::{ChangeSet, Event},
     identifier::IdentStr,
     language_storage::{ModuleId, TypeTag},
 };
@@ -139,7 +140,7 @@ impl<'r, 'l, R: RemoteCache> SessionAdapter<'r, 'l, R> {
         self.session.num_mutated_accounts(sender)
     }
 
-    pub fn finish(self) -> VMResult<TransactionEffects> {
+    pub fn finish(self) -> VMResult<(ChangeSet, Vec<Event>)> {
         self.session.finish()
     }
 }
