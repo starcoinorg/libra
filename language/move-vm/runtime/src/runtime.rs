@@ -67,7 +67,7 @@ impl VMRuntime {
     pub(crate) fn publish_module(
         &self,
         module: Vec<u8>,
-        sender: AccountAddress,
+        _sender: AccountAddress,
         data_store: &mut impl DataStore,
         _cost_strategy: &mut CostStrategy,
         log_context: &impl LogContext,
@@ -82,40 +82,7 @@ impl VMRuntime {
             }
         };
 
-        // Make sure the module's self address matches the transaction sender. The self address is
-        // where the module will actually be published. If we did not check this, the sender could
-        // publish a module under anyone's account.
-        if compiled_module.address() != &sender {
-            return Err(verification_error(
-                StatusCode::MODULE_ADDRESS_DOES_NOT_MATCH_SENDER,
-                IndexKind::AddressIdentifier,
-                compiled_module.self_handle_idx().0,
-            )
-            .finish(Location::Undefined));
-        }
-
         let module_id = compiled_module.self_id();
-
-        // For now, we assume that all modules can be republished, as long as the new module is
-        // backward compatible with the old module.
-        //
-        // TODO: in the future, we may want to add restrictions on module republishing, possibly by
-        // changing the bytecode format to include an `is_upgradable` flag in the CompiledModule.
-        if data_store.exists_module(&module_id)? {
-            let old_module_ref =
-                self.loader
-                    .load_module_expect_not_missing(&module_id, data_store, log_context)?;
-            let old_module = old_module_ref.module();
-            let old_m = normalized::Module::new(old_module);
-            let new_m = normalized::Module::new(&compiled_module);
-            let compat = Compatibility::check(&old_m, &new_m);
-            if !compat.is_fully_compatible() {
-                return Err(
-                    PartialVMError::new(StatusCode::BACKWARD_INCOMPATIBLE_MODULE_UPDATE)
-                        .finish(Location::Undefined),
-                );
-            }
-        }
 
         // perform bytecode and loading verification
         self.loader
@@ -269,7 +236,7 @@ impl VMRuntime {
         data_store: &mut impl DataStore,
         cost_strategy: &mut CostStrategy,
         log_context: &impl LogContext,
-    ) -> VMResult<Vec<Vec<u8>>>
+    ) -> VMResult<(Vec<Value>, Vec<MoveTypeLayout>, Vec<TypeTag>)>
     where
         F: FnOnce(&VMRuntime, &[Type]) -> PartialVMResult<Vec<Value>>,
     {
@@ -286,6 +253,19 @@ impl VMRuntime {
             .iter()
             .map(|ty| {
                 self.loader.type_to_type_layout(ty).map_err(|_err| {
+                    PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR)
+                        .with_message(
+                            "cannot be called with non-serializable return type".to_string(),
+                        )
+                        .finish(Location::Undefined)
+                })
+            })
+            .collect::<VMResult<Vec<_>>>()?;
+
+        let return_typetags = return_tys
+            .iter()
+            .map(|ty| {
+                self.loader.type_to_type_tag(ty).map_err(|_err| {
                     PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR)
                         .with_message(
                             "cannot be called with non-serializable return type".to_string(),
@@ -325,18 +305,32 @@ impl VMRuntime {
             );
         }
 
+        Ok((return_vals, return_layouts, return_typetags))
+    }
+
+    fn serialize_values(&self, values: Vec<Value>, layouts: Vec<MoveTypeLayout>) -> VMResult<Vec<Vec<u8>>> {
+        if values.len() != layouts.len() {
+            return Err(
+                PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
+                    .with_message(format!(
+                        "number mismatch: {} values, {} types",
+                        values.len(),
+                        layouts.len(),
+                    ))
+                    .finish(Location::Undefined),
+            );
+        }
+
         let mut serialized_vals = vec![];
-        for (val, layout) in return_vals.into_iter().zip(return_layouts.iter()) {
+        for (val, layout) in values.into_iter().zip(layouts.iter()) {
             serialized_vals.push(val.simple_serialize(&layout).ok_or_else(|| {
                 PartialVMError::new(StatusCode::INTERNAL_TYPE_ERROR)
                     .with_message("failed to serialize return values".to_string())
                     .finish(Location::Undefined)
             })?)
         }
-
         Ok(serialized_vals)
     }
-
     // See Session::execute_script_function for what contracts to follow.
     pub(crate) fn execute_script_function(
         &self,
@@ -349,7 +343,7 @@ impl VMRuntime {
         cost_strategy: &mut CostStrategy,
         log_context: &impl LogContext,
     ) -> VMResult<Vec<Vec<u8>>> {
-        self.execute_function_impl(
+        let (values, layouts, _) = self.execute_function_impl(
             module,
             function_name,
             ty_args,
@@ -358,7 +352,8 @@ impl VMRuntime {
             data_store,
             cost_strategy,
             log_context,
-        )
+        )?;
+        self.serialize_values(values, layouts)
     }
 
     // See Session::execute_function for what contracts to follow.
@@ -372,7 +367,7 @@ impl VMRuntime {
         cost_strategy: &mut CostStrategy,
         log_context: &impl LogContext,
     ) -> VMResult<Vec<Vec<u8>>> {
-        self.execute_function_impl(
+        let (values, layouts, _) = self.execute_function_impl(
             module,
             function_name,
             ty_args,
@@ -381,6 +376,39 @@ impl VMRuntime {
             data_store,
             cost_strategy,
             log_context,
-        )
+        )?;
+        self.serialize_values(values, layouts)
+    }
+
+    pub(crate) fn execute_readonly_function(
+        &self,
+        module: &ModuleId,
+        function_name: &IdentStr,
+        ty_args: Vec<TypeTag>,
+        args: Vec<Vec<u8>>,
+        data_store: &mut impl DataStore,
+        cost_strategy: &mut CostStrategy,
+        log_context: &impl LogContext,
+    ) -> VMResult<Vec<(TypeTag, Value)>> {
+        let (values, _, typetags) = self.execute_function_impl(
+            module,
+            function_name,
+            ty_args,
+            move |runtime, params| runtime.deserialize_args(params, args),
+            false,
+            data_store,
+            cost_strategy,
+            log_context,
+        )?;
+
+        let result: Vec<_> = typetags
+            .into_iter()
+            .zip(values.into_iter())
+            .collect();
+        Ok(result)
+    }
+
+    pub(crate) fn loader(&self) -> &Loader {
+        &self.loader
     }
 }
