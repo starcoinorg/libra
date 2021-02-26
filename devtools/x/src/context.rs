@@ -9,6 +9,7 @@ use crate::{
 };
 use anyhow::Context;
 use x_core::XCoreContext;
+use std::path::Path;
 
 /// Global context shared across x commands.
 pub struct XContext {
@@ -20,16 +21,19 @@ pub struct XContext {
 impl XContext {
     /// Creates a new `GlobalContext` by reading the config in the project root.
     pub fn new() -> Result<Self> {
-        Self::with_config(XConfig::from_project_root()?)
+        Self::with_project_root(project_root())
     }
 
+    pub fn with_project_root(project_root: &'static Path) -> Result<Self> {
+        Self::with_config(XConfig::from_project_root(project_root)?, project_root)
+    }
     /// Creates a new `GlobalContext` based on the given config.
-    pub fn with_config(x_config: XConfig) -> Result<Self> {
+    pub fn with_config(x_config: XConfig, project_root: &'static Path) -> Result<Self> {
         let current_dir =
             std::env::current_dir().with_context(|| "error while fetching current dir")?;
         let XConfig { core, config } = x_config;
         Ok(Self {
-            core: XCoreContext::new(project_root(), current_dir, core)?,
+            core: XCoreContext::new(project_root, current_dir, core)?,
             installer: Installer::new(config.cargo_config().clone(), config.tools()),
             config,
         })
