@@ -46,11 +46,11 @@ impl AccountAddress {
     }
 
     pub fn from_hex_literal(literal: &str) -> Result<Self, AccountAddressParseError> {
-        if !literal.starts_with("0x") {
+        if literal.is_empty() {
             return Err(AccountAddressParseError);
         }
-
-        let hex_len = literal.len() - 2;
+        let literal = literal.strip_prefix("0x").unwrap_or_else(|| literal);
+        let hex_len = literal.len();
 
         // If the string is too short, pad it
         if hex_len < Self::LENGTH * 2 {
@@ -58,10 +58,10 @@ impl AccountAddress {
             for _ in 0..Self::LENGTH * 2 - hex_len {
                 hex_str.push('0');
             }
-            hex_str.push_str(&literal[2..]);
+            hex_str.push_str(&literal);
             AccountAddress::from_hex(hex_str)
         } else {
-            AccountAddress::from_hex(&literal[2..])
+            AccountAddress::from_hex(&literal)
         }
     }
 
@@ -98,13 +98,15 @@ impl std::ops::Deref for AccountAddress {
 
 impl fmt::Display for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{:X}", self)
+        // Forward to the LowerHex impl with a "0x" prepended (the # flag).
+        write!(f, "{:#x}", self)
     }
 }
 
 impl fmt::Debug for AccountAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:X}", self)
+        // Forward to the LowerHex impl with a "0x" prepended (the # flag).
+        write!(f, "{:#x}", self)
     }
 }
 
@@ -194,7 +196,7 @@ impl TryFrom<String> for AccountAddress {
     type Error = AccountAddressParseError;
 
     fn try_from(s: String) -> Result<AccountAddress, AccountAddressParseError> {
-        Self::from_hex(s)
+        AccountAddress::from_str(s.as_str())
     }
 }
 
@@ -202,7 +204,7 @@ impl FromStr for AccountAddress {
     type Err = AccountAddressParseError;
 
     fn from_str(s: &str) -> Result<Self, AccountAddressParseError> {
-        Self::from_hex(s)
+        AccountAddress::from_hex_literal(s)
     }
 }
 
@@ -213,7 +215,7 @@ impl<'de> Deserialize<'de> for AccountAddress {
     {
         if deserializer.is_human_readable() {
             let s = <String>::deserialize(deserializer)?;
-            AccountAddress::from_hex(s).map_err(D::Error::custom)
+            AccountAddress::from_str(&s).map_err(D::Error::custom)
         } else {
             // In order to preserve the Serde data model and help analysis tools,
             // make sure to wrap our value in a container with the same name
@@ -234,7 +236,7 @@ impl Serialize for AccountAddress {
         S: Serializer,
     {
         if serializer.is_human_readable() {
-            self.to_hex().serialize(serializer)
+            self.to_string().serialize(serializer)
         } else {
             // See comment in deserialize.
             serializer.serialize_newtype_struct("AccountAddress", &self.0)
@@ -270,8 +272,8 @@ mod tests {
 
         let address = AccountAddress::from_hex(hex).unwrap();
 
-        assert_eq!(format!("{}", address), upper_hex);
-        assert_eq!(format!("{:?}", address), upper_hex);
+        assert_eq!(format!("{}", address), format!("0x{}", hex));
+        assert_eq!(format!("{:?}", address), format!("0x{}", hex));
         assert_eq!(format!("{:X}", address), upper_hex);
         assert_eq!(format!("{:x}", address), hex);
 
@@ -325,8 +327,8 @@ mod tests {
 
         assert_eq!(address_from_literal, address);
 
-        // Missing '0x'
-        AccountAddress::from_hex_literal(hex).unwrap_err();
+        // Missing '0x' is ok
+        AccountAddress::from_hex_literal(hex).unwrap();
         // Too long
         AccountAddress::from_hex_literal("0x100000000000000000000000000000001").unwrap_err();
     }
@@ -355,7 +357,7 @@ mod tests {
     #[test]
     fn test_serde_json() {
         let hex = "ca843279e3427144cead5e4d5999a3d0";
-        let json_hex = "\"ca843279e3427144cead5e4d5999a3d0\"";
+        let json_hex = "\"0xca843279e3427144cead5e4d5999a3d0\"";
 
         let address = AccountAddress::from_hex(hex).unwrap();
 
