@@ -113,7 +113,7 @@ use tiny_keccak::{Hasher, Sha3};
 /// A prefix used to begin the salt of every diem hashable structure. The salt
 /// consists in this global prefix, concatenated with the specified
 /// serialization name of the struct.
-pub(crate) const DIEM_HASH_PREFIX: &[u8] = b"DIEM::";
+pub(crate) const STARCOIN_HASH_PREFIX: &[u8] = b"STARCOIN::";
 
 /// Output value of our hash function. Intentionally opaque for safety and modularity.
 #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -246,6 +246,32 @@ impl HashValue {
     pub fn from_hex(hex_str: &str) -> Result<Self> {
         Self::from_slice(hex::decode(hex_str)?.as_slice())
     }
+
+    /// Parse a given hex string to a hash value
+    pub fn from_hex_literal(literal: &str) -> Result<Self> {
+        let literal = literal.strip_prefix("0x").unwrap_or_else(|| literal);
+        let hex_len = literal.len();
+        let mut result = if hex_len % 2 != 0 {
+            let mut hex_str = String::with_capacity(hex_len + 1);
+            hex_str.push('0');
+            hex_str.push_str(literal);
+            hex::decode(&hex_str)?
+        } else {
+            hex::decode(literal)?
+        };
+
+        let len = result.len();
+        let padded_result = if len < Self::LENGTH {
+            let mut padded = Vec::with_capacity(Self::LENGTH);
+            padded.resize(Self::LENGTH - len, 0u8);
+            padded.append(&mut result);
+            padded
+        } else {
+            result
+        };
+
+        Self::from_slice(padded_result.as_slice())
+    }
 }
 
 // TODO(#1307)
@@ -255,7 +281,7 @@ impl ser::Serialize for HashValue {
         S: ser::Serializer,
     {
         if serializer.is_human_readable() {
-            serializer.serialize_str(&self.to_hex())
+            serializer.serialize_str(&self.to_string())
         } else {
             // In order to preserve the Serde data model and help analysis tools,
             // make sure to wrap our value in a container with the same name
@@ -273,7 +299,7 @@ impl<'de> de::Deserialize<'de> for HashValue {
     {
         if deserializer.is_human_readable() {
             let encoded_hash = <String>::deserialize(deserializer)?;
-            HashValue::from_hex(encoded_hash.as_str())
+            HashValue::from_str(encoded_hash.as_str())
                 .map_err(<D::Error as ::serde::de::Error>::custom)
         } else {
             // See comment in serialize.
@@ -335,20 +361,13 @@ impl fmt::LowerHex for HashValue {
 
 impl fmt::Debug for HashValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HashValue(")?;
-        <Self as fmt::LowerHex>::fmt(self, f)?;
-        write!(f, ")")?;
-        Ok(())
+        write!(f, "HashValue(0x{:#x})", self)
     }
 }
 
-/// Will print shortened (4 bytes) hash
 impl fmt::Display for HashValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for byte in self.hash.iter().take(4) {
-            write!(f, "{:02x}", byte)?;
-        }
-        Ok(())
+        write!(f, "0x{:#x}", self)
     }
 }
 
@@ -362,7 +381,7 @@ impl FromStr for HashValue {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        HashValue::from_hex(s)
+        HashValue::from_hex_literal(s)
     }
 }
 
@@ -454,7 +473,7 @@ impl DefaultHasher {
     pub fn prefixed_hash(buffer: &[u8]) -> [u8; HashValue::LENGTH] {
         // The salt is initial material we prefix to actual value bytes for
         // domain separation. Its length is variable.
-        let salt: Vec<u8> = [DIEM_HASH_PREFIX, buffer].concat();
+        let salt: Vec<u8> = [STARCOIN_HASH_PREFIX, buffer].concat();
         // The seed is a fixed-length hash of the salt, thereby preventing
         // suffix attacks on the domain separation bytes.
         HashValue::sha3_256_of(&salt[..]).hash
@@ -636,5 +655,21 @@ impl<T: ser::Serialize + ?Sized> TestOnlyHash for T {
         let mut hasher = TestOnlyHasher::default();
         hasher.update(&bytes);
         hasher.finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::HashValue;
+
+    #[test]
+    fn test_serialize() {
+        let hash = HashValue::random();
+
+        let json_value = serde_json::to_string(&hash).unwrap();
+        println!("{}", json_value);
+        assert_eq!(json_value, format!("\"{}\"", hash.to_string()));
+        let de_hash = serde_json::from_slice::<HashValue>(json_value.as_bytes()).unwrap();
+        assert_eq!(hash, de_hash);
     }
 }
