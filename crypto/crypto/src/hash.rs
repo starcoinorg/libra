@@ -118,7 +118,7 @@ use tiny_keccak::{Hasher, Sha3};
 /// A prefix used to begin the salt of every diem hashable structure. The salt
 /// consists in this global prefix, concatenated with the specified
 /// serialization name of the struct.
-pub(crate) const DIEM_HASH_PREFIX: &[u8] = b"DIEM::";
+pub(crate) const STARCOIN_HASH_PREFIX: &[u8] = b"STARCOIN::";
 
 /// Output value of our hash function. Intentionally opaque for safety and modularity.
 #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -245,6 +245,26 @@ impl HashValue {
             .map_err(|_| HashValueParseError)
             .map(Self::new)
     }
+
+    /// Parse a given hex string to a hash value
+    pub fn from_hex_literal(literal: &str) -> Result<Self, HashValueParseError> {
+        if literal.is_empty() {
+            return Err(HashValueParseError);
+        }
+        let literal = literal.strip_prefix("0x").unwrap_or_else(|| literal);
+        let hex_len = literal.len();
+        // If the string is too short, pad it
+        if hex_len < Self::LENGTH * 2 {
+            let mut hex_str = String::with_capacity(Self::LENGTH * 2);
+            for _ in 0..Self::LENGTH * 2 - hex_len {
+                hex_str.push('0');
+            }
+            hex_str.push_str(&literal);
+            Self::from_hex(hex_str)
+        } else {
+            Self::from_hex(&literal)
+        }
+    }
 }
 
 impl ser::Serialize for HashValue {
@@ -253,7 +273,7 @@ impl ser::Serialize for HashValue {
         S: ser::Serializer,
     {
         if serializer.is_human_readable() {
-            serializer.serialize_str(&self.to_hex())
+            serializer.serialize_str(&self.to_string())
         } else {
             // In order to preserve the Serde data model and help analysis tools,
             // make sure to wrap our value in a container with the same name
@@ -271,7 +291,7 @@ impl<'de> de::Deserialize<'de> for HashValue {
     {
         if deserializer.is_human_readable() {
             let encoded_hash = <String>::deserialize(deserializer)?;
-            HashValue::from_hex(encoded_hash.as_str())
+            HashValue::from_str(encoded_hash.as_str())
                 .map_err(<D::Error as ::serde::de::Error>::custom)
         } else {
             // See comment in serialize.
@@ -324,6 +344,9 @@ impl fmt::Binary for HashValue {
 
 impl fmt::LowerHex for HashValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if f.alternate() {
+            write!(f, "0x")?;
+        }
         for byte in &self.hash {
             write!(f, "{:02x}", byte)?;
         }
@@ -333,20 +356,13 @@ impl fmt::LowerHex for HashValue {
 
 impl fmt::Debug for HashValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HashValue(")?;
-        <Self as fmt::LowerHex>::fmt(self, f)?;
-        write!(f, ")")?;
-        Ok(())
+        write!(f, "HashValue({:#x})", self)
     }
 }
 
-/// Will print shortened (4 bytes) hash
 impl fmt::Display for HashValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        for byte in self.hash.iter().take(4) {
-            write!(f, "{:02x}", byte)?;
-        }
-        Ok(())
+        write!(f, "{:#x}", self)
     }
 }
 
@@ -360,7 +376,7 @@ impl FromStr for HashValue {
     type Err = HashValueParseError;
 
     fn from_str(s: &str) -> Result<Self, HashValueParseError> {
-        HashValue::from_hex(s)
+        HashValue::from_hex_literal(s)
     }
 }
 
@@ -464,7 +480,7 @@ impl DefaultHasher {
     pub fn prefixed_hash(buffer: &[u8]) -> [u8; HashValue::LENGTH] {
         // The salt is initial material we prefix to actual value bytes for
         // domain separation. Its length is variable.
-        let salt: Vec<u8> = [DIEM_HASH_PREFIX, buffer].concat();
+        let salt: Vec<u8> = [STARCOIN_HASH_PREFIX, buffer].concat();
         // The seed is a fixed-length hash of the salt, thereby preventing
         // suffix attacks on the domain separation bytes.
         HashValue::sha3_256_of(&salt[..]).hash
@@ -646,5 +662,21 @@ impl<T: ser::Serialize + ?Sized> TestOnlyHash for T {
         let mut hasher = TestOnlyHasher::default();
         hasher.update(&bytes);
         hasher.finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::HashValue;
+
+    #[test]
+    fn test_serialize() {
+        let hash = HashValue::random();
+
+        let json_value = serde_json::to_string(&hash).unwrap();
+        println!("{}", json_value);
+        assert_eq!(json_value, format!("\"{}\"", hash.to_string()));
+        let de_hash = serde_json::from_slice::<HashValue>(json_value.as_bytes()).unwrap();
+        assert_eq!(hash, de_hash);
     }
 }
