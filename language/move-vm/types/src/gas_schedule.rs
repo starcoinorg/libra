@@ -315,4 +315,6 @@ pub enum NativeCostIndex {
     CREATE_SIGNER = 15,
     DESTROY_SIGNER = 16,
     EMIT_EVENT = 17,
+    BCS_TO_ADDRESS = 18,
+    TOKEN_NAME_OF = 19,
 }
