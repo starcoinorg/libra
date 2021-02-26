@@ -565,7 +565,7 @@ impl Loader {
         is_script_execution: bool,
         data_store: &mut impl DataStore,
         log_context: &impl LogContext,
-    ) -> VMResult<(Arc<Function>, Vec<Type>, Vec<Type>)> {
+    ) -> VMResult<(Arc<Function>, Vec<Type>, Vec<Type>, Vec<TypeTag>)> {
         let module = self.load_module_verify_not_missing(module_id, data_store, log_context)?;
         let idx = self
             .module_cache
@@ -594,7 +594,22 @@ impl Loader {
             script_signature::verify_module_script_function(compiled_module, function_name)?;
         }
 
-        Ok((func, type_params, parameter_tys))
+        // type layout of returned value
+        let module = self.get_module(module_id);
+        let mut type_tags = vec![];
+        for token in func.return_.0.as_slice() {
+            let ty = self
+                .module_cache
+                .lock()
+                .make_type(module.module(), token)
+                .map_err(|e| e.finish(Location::Module(module_id.clone())))?;
+            let type_tag = self
+                .type_to_type_tag(&ty)
+                .map_err(|e| e.finish(Location::Module(module_id.clone())))?;
+            type_tags.push(type_tag);
+        }
+
+        Ok((func, type_params, parameter_tys, type_tags))
     }
 
     // Entry point for module publishing (`MoveVM::publish_module`).
@@ -1088,6 +1103,10 @@ impl<'a> Resolver<'a> {
             BinaryType::Module(module) => module.field_instantiation_count(idx.0),
             BinaryType::Script(_) => unreachable!("Scripts cannot have type instructions"),
         }
+    }
+
+    pub(crate) fn type_to_type_tag(&self, ty: &Type) -> PartialVMResult<TypeTag> {
+        self.loader.type_to_type_tag(ty)
     }
 
     pub(crate) fn type_to_type_layout(&self, ty: &Type) -> PartialVMResult<MoveTypeLayout> {
@@ -1588,7 +1607,7 @@ impl Function {
         match &self.scope {
             Scope::Script(_) => "Script::main".into(),
             Scope::Module(id) => format!(
-                "0x{}::{}::{}",
+                "{}::{}::{}",
                 id.address(),
                 id.name().as_str(),
                 self.name.as_str()
@@ -1605,6 +1624,10 @@ impl Function {
             PartialVMError::new(StatusCode::UNREACHABLE)
                 .with_message("Missing Native Function".to_string())
         })
+    }
+
+    pub(crate) fn returns(&self) -> &Signature {
+        &self.return_
     }
 }
 

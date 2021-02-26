@@ -67,7 +67,7 @@ impl VMRuntime {
     pub(crate) fn publish_module(
         &self,
         module: Vec<u8>,
-        sender: AccountAddress,
+        _sender: AccountAddress,
         data_store: &mut impl DataStore,
         _cost_strategy: &mut CostStrategy,
         log_context: &impl LogContext,
@@ -82,44 +82,7 @@ impl VMRuntime {
             }
         };
 
-        // Make sure the module's self address matches the transaction sender. The self address is
-        // where the module will actually be published. If we did not check this, the sender could
-        // publish a module under anyone's account.
-        if compiled_module.address() != &sender {
-            return Err(verification_error(
-                StatusCode::MODULE_ADDRESS_DOES_NOT_MATCH_SENDER,
-                IndexKind::AddressIdentifier,
-                compiled_module.self_handle_idx().0,
-            )
-            .finish(Location::Undefined));
-        }
-
         let module_id = compiled_module.self_id();
-
-        // For now, we assume that all modules can be republished, as long as the new module is
-        // backward compatible with the old module.
-        //
-        // TODO: in the future, we may want to add restrictions on module republishing, possibly by
-        // changing the bytecode format to include an `is_upgradable` flag in the CompiledModule.
-        if data_store.exists_module(&module_id)? {
-            let old_module_bytes = data_store.load_module(&module_id)?;
-            let old_module = match CompiledModule::deserialize(&old_module_bytes) {
-                Ok(module) => module,
-                Err(err) => {
-                    warn!(*log_context, "[VM] module deserialization failed {:?}", err);
-                    return Err(err.finish(Location::Undefined));
-                }
-            };
-            let old_m = normalized::Module::new(&old_module);
-            let new_m = normalized::Module::new(&compiled_module);
-            let compat = Compatibility::check(&old_m, &new_m);
-            if !compat.is_fully_compatible() {
-                return Err(
-                    PartialVMError::new(StatusCode::BACKWARD_INCOMPATIBLE_MODULE_UPDATE)
-                        .finish(Location::Undefined),
-                );
-            }
-        }
 
         // perform bytecode and loading verification
         self.loader.verify_module_verify_no_missing_dependencies(
@@ -251,7 +214,8 @@ impl VMRuntime {
             cost_strategy,
             &self.loader,
             log_context,
-        )
+        )?;
+        Ok(())
     }
 
     // See Session::execute_script_function for what contracts to follow.
@@ -266,7 +230,7 @@ impl VMRuntime {
         cost_strategy: &mut CostStrategy,
         log_context: &impl LogContext,
     ) -> VMResult<()> {
-        let (func, ty_args, params) = self.loader.load_function(
+        let (func, ty_args, params, _) = self.loader.load_function(
             function_name,
             module,
             &ty_args,
@@ -288,7 +252,8 @@ impl VMRuntime {
             cost_strategy,
             &self.loader,
             log_context,
-        )
+        )?;
+        Ok(())
     }
 
     // See Session::execute_function for what contracts to follow.
@@ -304,7 +269,7 @@ impl VMRuntime {
     ) -> VMResult<()> {
         // load the function in the given module, perform verification of the module and
         // its dependencies if the module was not loaded
-        let (func, ty_args, params) = self.loader.load_function(
+        let (func, ty_args, params, _) = self.loader.load_function(
             function_name,
             module,
             &ty_args,
@@ -333,6 +298,56 @@ impl VMRuntime {
             cost_strategy,
             &self.loader,
             log_context,
-        )
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn execute_readonly_function(
+        &self,
+        module: &ModuleId,
+        function_name: &IdentStr,
+        ty_args: Vec<TypeTag>,
+        args: Vec<Vec<u8>>,
+        data_store: &mut impl DataStore,
+        cost_strategy: &mut CostStrategy,
+        log_context: &impl LogContext,
+    ) -> VMResult<Vec<(TypeTag, Value)>> {
+        // load the function in the given module, perform verification of the module and
+        // its dependencies if the module was not loaded
+        let (func, ty_args, params, return_type_tags) =
+            self.loader
+                .load_function(function_name, module, &ty_args, false, data_store, log_context)?;
+
+        let params = params
+            .into_iter()
+            .map(|ty| ty.subst(&ty_args))
+            .collect::<PartialVMResult<Vec<_>>>()
+            .map_err(|err| err.finish(Location::Undefined))?;
+
+        // check the arguments provided are of restricted types
+        let args = self
+            .deserialize_args(&params, args)
+            .map_err(|err| err.finish(Location::Undefined))?;
+
+        // run the function
+        let returned_value = Interpreter::entrypoint(
+            func,
+            ty_args,
+            args,
+            data_store,
+            cost_strategy,
+            &self.loader,
+            log_context,
+        )?;
+
+        let result: Vec<_> = return_type_tags
+            .into_iter()
+            .zip(returned_value.into_iter())
+            .collect();
+        Ok(result)
+    }
+
+    pub(crate) fn loader(&self) -> &Loader {
+        &self.loader
     }
 }
