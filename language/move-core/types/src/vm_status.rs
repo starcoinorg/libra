@@ -467,6 +467,18 @@ pub enum StatusCode {
     BAD_TRANSACTION_FEE_CURRENCY = 25,
     // The feature requested is intended for a future Diem version instead of the current one
     FEATURE_UNDER_GATING = 26,
+    // The code is not running in genesis
+    NOT_GENESIS = 27,
+    // Config value doesn't exist
+    CONFIG_VALUE_DOES_NOT_EXIST = 28,
+    // Timestamp is invalid
+    INVALID_TIMESTAMP = 29,
+    // Coin to deposit is zero
+    COIN_DEPOSIT_IS_ZERO = 30,
+    // Token to destroy is not zero
+    DESTROY_TOKEN_NON_ZERO = 31,
+    // Block number mismatch
+    BLOCK_NUMBER_MISMATCH = 32,
 
     // When a code module/script is published it is verified. These are the
     // possible errors that can arise from the verification process.
@@ -729,6 +741,10 @@ pub mod sub_status {
     pub const NFE_VECTOR_ERROR_BASE: u64 = 0;
     // Failure in BCS deserialization
     pub const NFE_BCS_SERIALIZATION_FAILURE: u64 = 0x1C5;
+    // Failure in BCS to_addr.
+    pub const NFE_BCS_TO_ADDRESS_FAILURE: u64 = 0x1c6;
+    // Failure in Token native functions.
+    pub const NFE_TOKEN_INVALID_TYPE_ARG_FAILURE: u64 = 0x200;
 }
 
 /// The `Arbitrary` impl only generates validation statuses since the full enum is too large.
