@@ -200,8 +200,8 @@ impl XConfig {
         toml::from_slice(bytes).map_err(Into::into)
     }
 
-    pub fn from_project_root() -> Result<Self> {
-        Self::from_file(project_root().join("x.toml"))
+    pub fn from_project_root(project_root: &'static Path) -> Result<Self> {
+        Self::from_file(project_root.join("x.toml"))
     }
 }
 
