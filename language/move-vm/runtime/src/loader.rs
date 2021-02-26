@@ -1140,6 +1140,10 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    pub(crate) fn type_to_type_tag(&self, ty: &Type) -> PartialVMResult<TypeTag> {
+        self.loader.type_to_type_tag(ty)
+    }
+
     pub(crate) fn type_to_type_layout(&self, ty: &Type) -> PartialVMResult<MoveTypeLayout> {
         self.loader.type_to_type_layout(ty)
     }
@@ -1638,7 +1642,7 @@ impl Function {
         match &self.scope {
             Scope::Script(_) => "Script::main".into(),
             Scope::Module(id) => format!(
-                "0x{}::{}::{}",
+                "{}::{}::{}",
                 id.address(),
                 id.name().as_str(),
                 self.name.as_str()
