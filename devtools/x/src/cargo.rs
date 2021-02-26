@@ -4,6 +4,7 @@
 use crate::{
     cargo::selected_package::{SelectedInclude, SelectedPackages},
     config::CargoConfig,
+    context::XContext,
     utils::{apply_sccache_if_possible, project_root},
     Result,
 };
@@ -325,7 +326,7 @@ impl<'a> CargoCommand<'a> {
         }
     }
 
-    pub fn run_on_packages(&self, packages: &SelectedPackages<'_>) -> Result<()> {
+    pub fn run_on_packages(&self, packages: &SelectedPackages<'_>, xctx: &XContext) -> Result<()> {
         // Early return if we have no packages to run.
         if !packages.should_invoke() {
             info!("no packages to {}: exiting early", self.as_str());
@@ -334,7 +335,7 @@ impl<'a> CargoCommand<'a> {
 
         let mut cargo = Cargo::new(self.cargo_config(), self.as_str(), true);
         cargo
-            .current_dir(project_root())
+            .current_dir(xctx.core().project_root())
             .args(self.direct_args())
             .packages(packages)
             .pass_through(self.pass_through_args())
