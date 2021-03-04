@@ -13,7 +13,6 @@ use diem_jellyfish_merkle::node_type::{Node, NodeKey};
 use diem_temppath::TempPath;
 #[allow(unused_imports)]
 use diem_types::{
-    account_address::{AccountAddress, HashAccountAddress},
     account_config::AccountResource,
     contract_event::ContractEvent,
     ledger_info::LedgerInfo,

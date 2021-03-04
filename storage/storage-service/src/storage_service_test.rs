@@ -3,7 +3,7 @@
 
 use super::*;
 use diem_config::{config::NodeConfig, utils};
-use diem_types::account_address::HashAccountAddress;
+use diem_crypto::hash::CryptoHash;
 #[cfg(test)]
 use diemdb::test_helper::arb_blocks_to_commit;
 use itertools::zip_eq;

@@ -103,11 +103,8 @@ where
                 )
             }
             Auth::MaybeMutual => {
-                let listener_peer_id = diem_types::account_address::from_identity_public_key(
-                    listener_key.public_key(),
-                );
-                let dialer_peer_id =
-                    diem_types::account_address::from_identity_public_key(dialer_key.public_key());
+                let listener_peer_id = PeerId::from_identity_public_key(listener_key.public_key());
+                let dialer_peer_id = PeerId::from_identity_public_key(dialer_key.public_key());
                 let trusted_peers = build_trusted_peers(
                     dialer_peer_id,
                     &dialer_key,
@@ -126,11 +123,8 @@ where
                 )
             }
             Auth::ServerOnly => {
-                let listener_peer_id = diem_types::account_address::from_identity_public_key(
-                    listener_key.public_key(),
-                );
-                let dialer_peer_id =
-                    diem_types::account_address::from_identity_public_key(dialer_key.public_key());
+                let listener_peer_id = PeerId::from_identity_public_key(listener_key.public_key());
+                let dialer_peer_id = PeerId::from_identity_public_key(dialer_key.public_key());
                 let trusted_peers = Arc::new(RwLock::new(HashMap::new()));
 
                 (
