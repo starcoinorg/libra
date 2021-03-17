@@ -2,7 +2,7 @@ address 0x2 {
 
 module A {
 
-    struct S {
+    struct S has copy, drop, store {
         f1: u64,
     }
 
