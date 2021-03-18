@@ -2138,9 +2138,9 @@ impl TypeConstraint {
     // TODO(tmn) migrate to abilities
     fn from(abs: AbilitySet) -> Self {
         match (abs.has_copy(), abs.has_drop(), abs.has_key()) {
-            (true, true, false) => TypeConstraint::Copyable,
             (false, false, true) => TypeConstraint::Resource,
             (false, false, false) => TypeConstraint::None,
+            (_, _, false) => TypeConstraint::Copyable,
             _ => panic!("Unsupported ability set"),
         }
     }
