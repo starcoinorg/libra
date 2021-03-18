@@ -99,6 +99,26 @@ impl<'r, 'l, R: RemoteCache> SessionAdapter<'r, 'l, R> {
         )
     }
 
+    pub fn execute_script_function(
+        &mut self,
+        module: &ModuleId,
+        function_name: &IdentStr,
+        ty_args: Vec<TypeTag>,
+        args: Vec<Vec<u8>>,
+        senders: Vec<AccountAddress>,
+        cost_strategy: &mut CostStrategy,
+    ) -> VMResult<()> {
+        self.session.execute_script_function(
+            module,
+            function_name,
+            ty_args,
+            args,
+            senders,
+            cost_strategy,
+            &self.log_context,
+        )
+    }
+
     pub fn publish_module(
         &mut self,
         module: Vec<u8>,
