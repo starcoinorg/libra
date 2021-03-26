@@ -406,7 +406,7 @@ impl VMRuntime {
             module,
             function_name,
             ty_args,
-            move |runtime, params| runtime.deserialize_args(params, args),
+            move |runtime, version, params| runtime.deserialize_args(version, params, args),
             false,
             data_store,
             cost_strategy,
