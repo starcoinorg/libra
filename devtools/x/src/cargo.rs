@@ -290,7 +290,7 @@ impl<'a> CargoCommand<'a> {
             return Ok(());
         }
 
-        let mut cargo = self.prepare_cargo(packages);
+        let mut cargo = self.prepare_cargo(packages, xctx);
         cargo.run()
     }
 
@@ -298,13 +298,14 @@ impl<'a> CargoCommand<'a> {
     pub fn run_capture_messages(
         &self,
         packages: &SelectedPackages<'_>,
+        xctx: &XContext,
     ) -> Result<impl Iterator<Item = Result<Message>>> {
         // Early return if we have no packages to run.
         let output = if !packages.should_invoke() {
             info!("no packages to {}: exiting early", self.as_str());
             vec![]
         } else {
-            let mut cargo = self.prepare_cargo(packages);
+            let mut cargo = self.prepare_cargo(packages, xctx);
             cargo.args(&["--message-format", "json-render-diagnostics"]);
             cargo.run_with_output()?
         };
@@ -313,7 +314,7 @@ impl<'a> CargoCommand<'a> {
             .map(|message| message.context("error while parsing message from Cargo")))
     }
 
-    fn prepare_cargo(&self, packages: &SelectedPackages<'_>) -> Cargo {
+    fn prepare_cargo(&self, packages: &SelectedPackages<'_>, xctx: &XContext) -> Cargo {
         let mut cargo = Cargo::new(self.cargo_config(), self.as_str(), true);
         cargo
             .current_dir(xctx.core().project_root())

@@ -19,6 +19,7 @@ pub mod installer;
 pub mod lint;
 pub mod playground;
 pub mod test;
+pub mod nextest;
 pub mod tools;
 pub mod utils;
 pub mod generate_workspace_hack;
