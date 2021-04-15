@@ -4524,6 +4524,7 @@ dependencies = [
  "once_cell",
  "sha2",
  "smallvec",
+ "tiny-keccak",
  "vm",
 ]
 

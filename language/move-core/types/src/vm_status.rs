@@ -745,6 +745,7 @@ pub mod sub_status {
     pub const NFE_BCS_TO_ADDRESS_FAILURE: u64 = 0x1c6;
     // Failure in Token native functions.
     pub const NFE_TOKEN_INVALID_TYPE_ARG_FAILURE: u64 = 0x200;
+    pub const NFE_RLP_DECODE_FAILURE: u64 = 0x300;
 }
 
 /// The `Arbitrary` impl only generates validation statuses since the full enum is too large.

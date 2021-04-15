@@ -47,6 +47,7 @@ pub(crate) enum NativeFunction {
     CreateSigner,
     DestroySigner,
     TokenNameOf,
+    HashKeccak256,
 }
 
 impl NativeFunction {
@@ -61,6 +62,7 @@ impl NativeFunction {
         Some(match case {
             (&CORE_CODE_ADDRESS, "Hash", "sha2_256") => HashSha2_256,
             (&CORE_CODE_ADDRESS, "Hash", "sha3_256") => HashSha3_256,
+            (&CORE_CODE_ADDRESS, "Hash", "keccak_256") => HashKeccak256,
             (&CORE_CODE_ADDRESS, "BCS", "to_bytes") => BCSToBytes,
             (&CORE_CODE_ADDRESS, "BCS", "to_address") => BCSToAddress,
             (&CORE_CODE_ADDRESS, "Signature", "ed25519_validate_pubkey") => PubED25519Validate,
@@ -94,6 +96,7 @@ impl NativeFunction {
         let result = match self {
             Self::HashSha2_256 => hash::native_sha2_256(ctx, t, v),
             Self::HashSha3_256 => hash::native_sha3_256(ctx, t, v),
+            Self::HashKeccak256 => hash::native_keccak_256(ctx, t, v),
             Self::PubED25519Validate => signature::native_ed25519_publickey_validation(ctx, t, v),
             Self::SigED25519Verify => signature::native_ed25519_signature_verification(ctx, t, v),
             Self::VectorLength => vector::native_length(ctx, t, v),
