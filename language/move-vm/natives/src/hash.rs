@@ -47,11 +47,9 @@ pub fn native_keccak_256(
 
     let hash_arg = pop_arg!(arguments, Vec<u8>);
 
-    // FIXME: once cost gas of this native function is added to cost table, change the NativeCostIndex.
-    // for now, use SHA3_256.
     let cost = native_gas(
         context.cost_table(),
-        NativeCostIndex::SHA3_256,
+        NativeCostIndex::KECCAK_256,
         hash_arg.len(),
     );
     let output = {

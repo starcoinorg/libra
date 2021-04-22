@@ -317,4 +317,5 @@ pub enum NativeCostIndex {
     EMIT_EVENT = 17,
     BCS_TO_ADDRESS = 18,
     TOKEN_NAME_OF = 19,
+    KECCAK_256 = 20,
 }
