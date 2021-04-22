@@ -145,6 +145,7 @@ pub static INITIAL_GAS_SCHEDULE: Lazy<CostTable> = Lazy::new(|| {
         (N::EMIT_EVENT, GasCost::new(52, 1)),
         (N::BCS_TO_ADDRESS, GasCost::new(26, 1)),
         (N::TOKEN_NAME_OF, GasCost::new(2002, 1)),
+        (N::KECCAK_256, GasCost::new(64, 1)),
     ];
     native_table.sort_by_key(|cost| cost.0 as u64);
     let raw_native_table = native_table
