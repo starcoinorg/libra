@@ -72,7 +72,7 @@ where
             Some(idx) => {
                 self.binaries.remove(*idx);
                 self.id_map.remove(&key);
-            },
+            }
             None => {}
         }
     }
@@ -148,11 +148,7 @@ impl ModuleCache {
         Arc::clone(&self.structs[idx])
     }
 
-    fn remove(
-        &mut self,
-        id: ModuleId,
-        log_context: &impl LogContext,
-    ) -> VMResult<()> {
+    fn remove(&mut self, id: ModuleId, log_context: &impl LogContext) -> VMResult<()> {
         match self.module_at(&id) {
             Some(module) => {
                 // remove module
@@ -186,6 +182,7 @@ impl ModuleCache {
         module: CompiledModule,
         log_context: &impl LogContext,
     ) -> VMResult<Arc<Module>> {
+        println!("insert module {:?} to cache", id);
         if let Some(module) = self.module_at(&id) {
             return Ok(module);
         }
@@ -645,8 +642,6 @@ impl Loader {
         data_store: &mut impl DataStore,
         log_context: &impl LogContext,
     ) -> VMResult<()> {
-        let module_id = module.self_id();
-        let is_cached = self.module_cached(&module_id);
         // Performs all verification steps to load the module without loading it, i.e., the new
         // module will NOT show up in `module_cache`. In the module republishing case, it means
         // that the old module is still in the `module_cache`, unless a new Loader is created,
@@ -657,7 +652,7 @@ impl Loader {
         // module is put into the bundle.
         let friends = module.immediate_friends();
         self.load_dependencies_verify_no_missing_dependencies(friends, data_store, log_context)?;
-        self.verify_module_cyclic_relations(module)?;
+        self.verify_module_cyclic_relations(module)
 
         // NOTE: one might wonder why we don't need to worry about `module` (say M) being missing in
         // the code cache? Obviously, if a `friend`, say module F, is being loaded and verified, and
@@ -680,22 +675,6 @@ impl Loader {
         //   with the guarantee that M is compatible with M'.
         // - F cannot "suddenly" depend on M because we are not updating F under the current module
         //   of publishing-one-module-at-a-time.
-
-        // Make sure the module is unloaded from code cache, lose some performance in exchange for
-        // code cache coherency.
-        println!("unload module {:?}", module_id);
-        if is_cached {
-            self.unload_module(&module_id, log_context)?;
-        }
-        //self.load_module(&module_id, data_store, true, log_context)?;
-        Ok(())
-    }
-
-    fn module_cached(&self, module_id: &ModuleId) -> bool {
-         match self.module_cache.lock().module_at(module_id) {
-             Some(module) => true,
-             None => false,
-        }
     }
 
     fn verify_module_verify_no_missing_dependencies(
@@ -872,6 +851,7 @@ impl Loader {
         verify_module_is_not_missing: bool,
         log_context: &impl LogContext,
     ) -> VMResult<Arc<Module>> {
+        println!("load module {:?}", id);
         // kept private to `load_module` to prevent verification errors from leaking
         // and not being marked as invariant violations
         fn deserialize_and_verify_module(
@@ -884,6 +864,7 @@ impl Loader {
                 PartialVMError::new(StatusCode::CODE_DESERIALIZATION_ERROR)
                     .finish(Location::Undefined)
             })?;
+            println!("deserialize_and_verify_module module {:?}", module.name());
             loader.verify_module_expect_no_missing_dependencies(
                 &module,
                 data_store,
@@ -893,6 +874,7 @@ impl Loader {
         }
 
         if let Some(module) = self.module_cache.lock().module_at(id) {
+            println!("module {:?} already in cache", id);
             return Ok(module);
         }
 
@@ -983,15 +965,23 @@ impl Loader {
         Ok(())
     }
 
-    fn unload_module(
+    pub(crate) fn unload_module(
         &self,
         module_id: &ModuleId,
         log_context: &impl LogContext,
     ) -> VMResult<()> {
+        println!("unload module {:?}", module_id);
         self.module_cache
             .lock()
             .remove(module_id.clone(), log_context)?;
         Ok(())
+    }
+
+    pub(crate) fn module_cached(&self, module_id: &ModuleId) -> bool {
+        match self.module_cache.lock().module_at(module_id) {
+            Some(module) => true,
+            None => false,
+        }
     }
 
     //
