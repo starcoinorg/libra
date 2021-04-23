@@ -150,6 +150,7 @@ pub fn encode_genesis_change_set(
 
     let state_view = GenesisStateView::new();
     let data_cache = StateViewCache::new(&state_view);
+    let move_vm = MoveVM::new();
     let mut session = move_vm.new_session(&data_cache);
     publish_stdlib(&mut session, &log_context, stdlib_module_tuples);
     let (changeset2, events2) = session.finish().unwrap();
@@ -458,6 +459,7 @@ fn publish_stdlib(
     log_context: &impl LogContext,
     stdlib: Vec<(ModuleId, &Vec<u8>)>,
 ) {
+    println!("publish stdlib......");
     let genesis_removed = stdlib
         .iter()
         .filter(|(module_id, _bytes)| module_id.name().as_str() != GENESIS_MODULE_NAME);
