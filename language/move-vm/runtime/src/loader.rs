@@ -66,6 +66,16 @@ where
             .get(&key)
             .and_then(|idx| self.binaries.get(*idx))
     }
+
+    fn remove(&mut self, key: &K) {
+        match self.id_map.get(&key) {
+            Some(idx) => {
+                self.binaries.remove(*idx);
+                self.id_map.remove(&key);
+            },
+            None => {}
+        }
+    }
 }
 
 // A script cache is a map from the hash value of a script and the `Script` itself.
@@ -136,6 +146,33 @@ impl ModuleCache {
     // Retrieve a struct by index
     fn struct_at(&self, idx: usize) -> Arc<StructType> {
         Arc::clone(&self.structs[idx])
+    }
+
+    fn remove(
+        &mut self,
+        id: ModuleId,
+        log_context: &impl LogContext,
+    ) -> VMResult<()> {
+        match self.module_at(&id) {
+            Some(module) => {
+                // remove module
+                self.modules.remove(&id);
+                // remove structs
+                for (idx, struct_type) in self.structs.clone().iter().enumerate() {
+                    if struct_type.module == id {
+                        self.structs.remove(idx);
+                    }
+                }
+                // remove functions
+                for (idx, function) in self.functions.clone().iter().enumerate() {
+                    if function.module_id() == Some(&id) {
+                        self.functions.remove(idx);
+                    }
+                }
+            }
+            None => {}
+        }
+        Ok(())
     }
 
     //
@@ -608,6 +645,8 @@ impl Loader {
         data_store: &mut impl DataStore,
         log_context: &impl LogContext,
     ) -> VMResult<()> {
+        let module_id = module.self_id();
+        let is_cached = self.module_cached(&module_id);
         // Performs all verification steps to load the module without loading it, i.e., the new
         // module will NOT show up in `module_cache`. In the module republishing case, it means
         // that the old module is still in the `module_cache`, unless a new Loader is created,
@@ -618,7 +657,7 @@ impl Loader {
         // module is put into the bundle.
         let friends = module.immediate_friends();
         self.load_dependencies_verify_no_missing_dependencies(friends, data_store, log_context)?;
-        self.verify_module_cyclic_relations(module)
+        self.verify_module_cyclic_relations(module)?;
 
         // NOTE: one might wonder why we don't need to worry about `module` (say M) being missing in
         // the code cache? Obviously, if a `friend`, say module F, is being loaded and verified, and
@@ -641,6 +680,22 @@ impl Loader {
         //   with the guarantee that M is compatible with M'.
         // - F cannot "suddenly" depend on M because we are not updating F under the current module
         //   of publishing-one-module-at-a-time.
+
+        // Make sure the module is unloaded from code cache, lose some performance in exchange for
+        // code cache coherency.
+        println!("unload module {:?}", module_id);
+        if is_cached {
+            self.unload_module(&module_id, log_context)?;
+        }
+        //self.load_module(&module_id, data_store, true, log_context)?;
+        Ok(())
+    }
+
+    fn module_cached(&self, module_id: &ModuleId) -> bool {
+         match self.module_cache.lock().module_at(module_id) {
+             Some(module) => true,
+             None => false,
+        }
     }
 
     fn verify_module_verify_no_missing_dependencies(
@@ -925,6 +980,17 @@ impl Loader {
                 return Err(PartialVMError::new(StatusCode::CONSTRAINT_NOT_SATISFIED));
             }
         }
+        Ok(())
+    }
+
+    fn unload_module(
+        &self,
+        module_id: &ModuleId,
+        log_context: &impl LogContext,
+    ) -> VMResult<()> {
+        self.module_cache
+            .lock()
+            .remove(module_id.clone(), log_context)?;
         Ok(())
     }
 
