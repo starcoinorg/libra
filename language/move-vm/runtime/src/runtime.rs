@@ -86,6 +86,11 @@ impl VMRuntime {
         }
 
         let module_id = compiled_module.self_id();
+        let pre_loaded = self.loader.module_cached(&module_id);
+        println!(
+            "prepare publish module {:?} pre_loaded: {:?}",
+            module_id, pre_loaded
+        );
 
         // For now, we assume that all modules can be republished, as long as the new module is
         // backward compatible with the old module.
@@ -111,7 +116,14 @@ impl VMRuntime {
         // perform bytecode and loading verification
         self.loader
             .verify_module_for_publication(&compiled_module, data_store, log_context)?;
-
+        println!(
+            "publish module {:?} after_loaded: {:?}",
+            module_id,
+            self.loader.module_cached(&module_id)
+        );
+        if pre_loaded {
+            self.loader.unload_module(&module_id, log_context)?;
+        }
         data_store.publish_module(&module_id, module)
     }
 
