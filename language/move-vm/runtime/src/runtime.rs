@@ -91,6 +91,7 @@ impl VMRuntime {
         );
         if pre_loaded {
             self.loader.unload_module(&module_id, log_context)?;
+            self.loader.empty_cache()?;
         }
         data_store.publish_module(&module_id, module)
     }

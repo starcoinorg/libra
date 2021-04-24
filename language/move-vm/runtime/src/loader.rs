@@ -76,6 +76,11 @@ where
             None => {}
         }
     }
+
+    fn empty(&mut self) {
+        self.binaries = vec![];
+        self.id_map = HashMap::new();
+    }
 }
 
 // A script cache is a map from the hash value of a script and the `Script` itself.
@@ -106,6 +111,10 @@ impl ScriptCache {
                 (script.entry_point(), script.parameter_tys.clone())
             }
         }
+    }
+
+    fn empty(&mut self) {
+        self.scripts.empty();
     }
 }
 
@@ -169,6 +178,12 @@ impl ModuleCache {
             None => {}
         }
         Ok(())
+    }
+
+    fn empty(&mut self){
+        self.modules.empty();
+        self.functions = vec![];
+        self.structs = vec![];
     }
 
     //
@@ -974,6 +989,16 @@ impl Loader {
         self.module_cache
             .lock()
             .remove(module_id.clone(), log_context)?;
+        Ok(())
+    }
+
+    pub(crate) fn empty_cache(
+        &self
+    ) -> VMResult<()> {
+        println!("empty the code cache");
+        self.scripts.lock().empty();
+        self.module_cache.lock().empty();
+        self.type_cache.lock().empty();
         Ok(())
     }
 
@@ -1801,6 +1826,10 @@ impl TypeCache {
         Self {
             structs: HashMap::new(),
         }
+    }
+
+    fn empty(&mut self) {
+        self.structs = HashMap::new();
     }
 }
 
