@@ -76,19 +76,19 @@ impl VMRuntime {
 
         let module_id = compiled_module.self_id();
         let pre_loaded = self.loader.module_cached(&module_id);
-        println!(
-            "prepare publish module {:?} pre_loaded: {:?}",
-            module_id, pre_loaded
-        );
+        // println!(
+        //     "prepare publish module {:?} pre_loaded: {:?}",
+        //     module_id, pre_loaded
+        // );
 
         // perform bytecode and loading verification
         self.loader
             .verify_module_for_publication(&compiled_module, data_store, log_context)?;
-        println!(
-            "publish module {:?} after_loaded: {:?}",
-            module_id,
-            self.loader.module_cached(&module_id)
-        );
+        // println!(
+        //     "publish module {:?} after_loaded: {:?}",
+        //     module_id,
+        //     self.loader.module_cached(&module_id)
+        // );
         if pre_loaded {
             self.loader.unload_module(&module_id, log_context)?;
             self.loader.empty_cache()?;

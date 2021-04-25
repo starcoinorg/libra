@@ -197,7 +197,7 @@ impl ModuleCache {
         module: CompiledModule,
         log_context: &impl LogContext,
     ) -> VMResult<Arc<Module>> {
-        println!("insert module {:?} to cache", id);
+        //println!("insert module {:?} to cache", id);
         if let Some(module) = self.module_at(&id) {
             return Ok(module);
         }
@@ -866,7 +866,7 @@ impl Loader {
         verify_module_is_not_missing: bool,
         log_context: &impl LogContext,
     ) -> VMResult<Arc<Module>> {
-        println!("load module {:?}", id);
+        //println!("load module {:?}", id);
         // kept private to `load_module` to prevent verification errors from leaking
         // and not being marked as invariant violations
         fn deserialize_and_verify_module(
@@ -879,7 +879,7 @@ impl Loader {
                 PartialVMError::new(StatusCode::CODE_DESERIALIZATION_ERROR)
                     .finish(Location::Undefined)
             })?;
-            println!("deserialize_and_verify_module module {:?}", module.name());
+            //println!("deserialize_and_verify_module module {:?}", module.name());
             loader.verify_module_expect_no_missing_dependencies(
                 &module,
                 data_store,
@@ -889,7 +889,7 @@ impl Loader {
         }
 
         if let Some(module) = self.module_cache.lock().module_at(id) {
-            println!("module {:?} already in cache", id);
+            //println!("module {:?} already in cache", id);
             return Ok(module);
         }
 
@@ -985,7 +985,7 @@ impl Loader {
         module_id: &ModuleId,
         log_context: &impl LogContext,
     ) -> VMResult<()> {
-        println!("unload module {:?}", module_id);
+        //println!("unload module {:?}", module_id);
         self.module_cache
             .lock()
             .remove(module_id.clone(), log_context)?;
