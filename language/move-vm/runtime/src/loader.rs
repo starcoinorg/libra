@@ -995,7 +995,7 @@ impl Loader {
     pub(crate) fn empty_cache(
         &self
     ) -> VMResult<()> {
-        println!("empty the code cache");
+        //println!("empty the code cache");
         self.scripts.lock().empty();
         self.module_cache.lock().empty();
         self.type_cache.lock().empty();
