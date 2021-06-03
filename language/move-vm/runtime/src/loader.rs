@@ -157,30 +157,22 @@ impl ModuleCache {
         Arc::clone(&self.structs[idx])
     }
 
-    fn remove(&mut self, id: ModuleId, log_context: &impl LogContext) -> VMResult<()> {
+    fn remove(&mut self, id: ModuleId, _log_context: &impl LogContext) -> VMResult<()> {
         match self.module_at(&id) {
-            Some(module) => {
+            Some(_module) => {
                 // remove module
                 self.modules.remove(&id);
-                // remove structs
-                for (idx, struct_type) in self.structs.clone().iter().enumerate() {
-                    if struct_type.module == id {
-                        self.structs.remove(idx);
-                    }
-                }
-                // remove functions
-                for (idx, function) in self.functions.clone().iter().enumerate() {
-                    if function.module_id() == Some(&id) {
-                        self.functions.remove(idx);
-                    }
-                }
+                self.structs
+                    .retain(|struct_type| &struct_type.module != &id);
+                self.functions
+                    .retain(|function| function.module_id() != Some(&id));
             }
             None => {}
         }
         Ok(())
     }
 
-    fn empty(&mut self){
+    fn empty(&mut self) {
         self.modules.empty();
         self.functions = vec![];
         self.structs = vec![];
@@ -992,9 +984,7 @@ impl Loader {
         Ok(())
     }
 
-    pub(crate) fn empty_cache(
-        &self
-    ) -> VMResult<()> {
+    pub(crate) fn empty_cache(&self) -> VMResult<()> {
         //println!("empty the code cache");
         self.scripts.lock().empty();
         self.module_cache.lock().empty();
