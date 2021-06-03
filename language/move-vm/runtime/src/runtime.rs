@@ -90,7 +90,6 @@ impl VMRuntime {
         //     self.loader.module_cached(&module_id)
         // );
         if pre_loaded {
-            self.loader.unload_module(&module_id, log_context)?;
             self.loader.empty_cache()?;
         }
         data_store.publish_module(&module_id, module)
@@ -335,7 +334,11 @@ impl VMRuntime {
         Ok((return_vals, return_layouts, return_typetags))
     }
 
-    fn serialize_values(&self, values: Vec<Value>, layouts: Vec<MoveTypeLayout>) -> VMResult<Vec<Vec<u8>>> {
+    fn serialize_values(
+        &self,
+        values: Vec<Value>,
+        layouts: Vec<MoveTypeLayout>,
+    ) -> VMResult<Vec<Vec<u8>>> {
         if values.len() != layouts.len() {
             return Err(
                 PartialVMError::new(StatusCode::UNKNOWN_INVARIANT_VIOLATION_ERROR)
@@ -449,10 +452,7 @@ impl VMRuntime {
             log_context,
         )?;
 
-        let result: Vec<_> = typetags
-            .into_iter()
-            .zip(values.into_iter())
-            .collect();
+        let result: Vec<_> = typetags.into_iter().zip(values.into_iter()).collect();
         Ok(result)
     }
 
