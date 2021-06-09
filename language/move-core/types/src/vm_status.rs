@@ -459,11 +459,25 @@ pub enum StatusCode {
     BAD_TRANSACTION_FEE_CURRENCY = 25,
     // The feature requested is intended for a future Diem version instead of the current one
     FEATURE_UNDER_GATING = 26,
+    // The code is not running in genesis
+    NOT_GENESIS = 27,
+    // Config value doesn't exist
+    CONFIG_VALUE_DOES_NOT_EXIST = 28,
+    // Timestamp is invalid
+    INVALID_TIMESTAMP = 29,
+    // Coin to deposit is zero
+    COIN_DEPOSIT_IS_ZERO = 30,
+    // Token to destroy is not zero
+    DESTROY_TOKEN_NON_ZERO = 31,
+    // Block number mismatch
+    BLOCK_NUMBER_MISMATCH = 32,
+
+    // TODO: This two is added in diem, but with code 27 and 28.
     // The number of secondary signer addresses is different from the number of secondary
     // public keys provided.
-    SECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH = 27,
+    SECONDARY_KEYS_ADDRESSES_COUNT_MISMATCH = 33,
     // There are duplicates among signers, including the sender and all the secondary signers
-    SIGNERS_CONTAIN_DUPLICATES = 28,
+    SIGNERS_CONTAIN_DUPLICATES = 34,
 
     // When a code module/script is published it is verified. These are the
     // possible errors that can arise from the verification process.
@@ -573,6 +587,8 @@ pub enum StatusCode {
     INVALID_FRIEND_DECL_WITH_MODULES_IN_DEPENDENCIES = 1106,
     // The updated module introduces a cyclic friendship (i.e., A friends B and B also friends A)
     CYCLIC_MODULE_FRIENDSHIP = 1107,
+    // The self address of a module is different from the package address
+    MODULE_ADDRESS_DOES_NOT_MATCH_PACKAGE_ADDRESS = 1108,
 
     // These are errors that the VM might raise if a violation of internal
     // invariants takes place.
@@ -726,6 +742,11 @@ pub mod sub_status {
     pub const NFE_VECTOR_ERROR_BASE: u64 = 0;
     // Failure in BCS deserialization
     pub const NFE_BCS_SERIALIZATION_FAILURE: u64 = 0x1C5;
+    // Failure in BCS to_addr.
+    pub const NFE_BCS_TO_ADDRESS_FAILURE: u64 = 0x1c6;
+    // Failure in Token native functions.
+    pub const NFE_TOKEN_INVALID_TYPE_ARG_FAILURE: u64 = 0x200;
+    pub const NFE_RLP_DECODE_FAILURE: u64 = 0x300;
 }
 
 /// The `Arbitrary` impl only generates validation statuses since the full enum is too large.

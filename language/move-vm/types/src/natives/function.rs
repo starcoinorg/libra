@@ -18,6 +18,7 @@
 
 use crate::{gas_schedule::NativeCostIndex, loaded_data::runtime_types::Type, values::Value};
 use move_binary_format::errors::PartialVMResult;
+use move_core_types::language_storage::TypeTag;
 use move_core_types::{
     gas_schedule::{AbstractMemorySize, CostTable, GasAlgebra, GasCarrier, InternalGasUnits},
     value::MoveTypeLayout,
@@ -49,6 +50,8 @@ pub trait NativeContext {
     ) -> PartialVMResult<bool>;
     /// Get the a data layout via the type.
     fn type_to_type_layout(&self, ty: &Type) -> PartialVMResult<Option<MoveTypeLayout>>;
+    /// Get the type tag via the type.
+    fn type_to_type_tag(&self, ty: &Type) -> PartialVMResult<TypeTag>;
 }
 
 /// Result of a native function execution requires charges for execution cost.

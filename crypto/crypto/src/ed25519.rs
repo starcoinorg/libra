@@ -559,3 +559,19 @@ impl proptest::arbitrary::Arbitrary for Ed25519PublicKey {
             .boxed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::ed25519::Ed25519PrivateKey;
+    use crate::Uniform;
+
+    #[test]
+    fn test_serialize_key() {
+        let k = Ed25519PrivateKey::generate_for_testing();
+
+        let json_value = serde_json::to_string(&k).unwrap();
+        println!("{}", json_value);
+        let de_key = serde_json::from_slice::<Ed25519PrivateKey>(json_value.as_bytes()).unwrap();
+        assert_eq!(k, de_key);
+    }
+}

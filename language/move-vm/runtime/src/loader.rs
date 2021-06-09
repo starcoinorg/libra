@@ -66,6 +66,21 @@ where
             .get(&key)
             .and_then(|idx| self.binaries.get(*idx))
     }
+
+    fn remove(&mut self, key: &K) {
+        match self.id_map.get(&key) {
+            Some(idx) => {
+                self.binaries.remove(*idx);
+                self.id_map.remove(&key);
+            }
+            None => {}
+        }
+    }
+
+    fn empty(&mut self) {
+        self.binaries = vec![];
+        self.id_map = HashMap::new();
+    }
 }
 
 // A script cache is a map from the hash value of a script and the `Script` itself.
@@ -96,6 +111,10 @@ impl ScriptCache {
                 (script.entry_point(), script.parameter_tys.clone())
             }
         }
+    }
+
+    fn empty(&mut self) {
+        self.scripts.empty();
     }
 }
 
@@ -138,6 +157,27 @@ impl ModuleCache {
         Arc::clone(&self.structs[idx])
     }
 
+    fn remove(&mut self, id: ModuleId, _log_context: &impl LogContext) -> VMResult<()> {
+        match self.module_at(&id) {
+            Some(_module) => {
+                // remove module
+                self.modules.remove(&id);
+                self.structs
+                    .retain(|struct_type| &struct_type.module != &id);
+                self.functions
+                    .retain(|function| function.module_id() != Some(&id));
+            }
+            None => {}
+        }
+        Ok(())
+    }
+
+    fn empty(&mut self) {
+        self.modules.empty();
+        self.functions = vec![];
+        self.structs = vec![];
+    }
+
     //
     // Insertion is under lock and it's a pretty heavy operation.
     // The VM is pretty much stopped waiting for this to finish
@@ -149,6 +189,7 @@ impl ModuleCache {
         module: CompiledModule,
         log_context: &impl LogContext,
     ) -> VMResult<Arc<Module>> {
+        //println!("insert module {:?} to cache", id);
         if let Some(module) = self.module_at(&id) {
             return Ok(module);
         }
@@ -816,6 +857,7 @@ impl Loader {
         verify_module_is_not_missing: bool,
         log_context: &impl LogContext,
     ) -> VMResult<Arc<Module>> {
+        //println!("load module {:?}", id);
         // kept private to `load_module` to prevent verification errors from leaking
         // and not being marked as invariant violations
         fn deserialize_and_verify_module(
@@ -828,6 +870,7 @@ impl Loader {
                 PartialVMError::new(StatusCode::CODE_DESERIALIZATION_ERROR)
                     .finish(Location::Undefined)
             })?;
+            //println!("deserialize_and_verify_module module {:?}", module.name());
             loader.verify_module_expect_no_missing_dependencies(
                 &module,
                 data_store,
@@ -925,6 +968,33 @@ impl Loader {
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn unload_module(
+        &self,
+        module_id: &ModuleId,
+        log_context: &impl LogContext,
+    ) -> VMResult<()> {
+        //println!("unload module {:?}", module_id);
+        self.module_cache
+            .write()
+            .remove(module_id.clone(), log_context)?;
+        Ok(())
+    }
+
+    pub(crate) fn empty_cache(&self) -> VMResult<()> {
+        //println!("empty the code cache");
+        self.scripts.write().empty();
+        self.module_cache.write().empty();
+        self.type_cache.write().empty();
+        Ok(())
+    }
+
+    pub(crate) fn module_cached(&self, module_id: &ModuleId) -> bool {
+        match self.module_cache.read().module_at(module_id) {
+            Some(_) => true,
+            None => false,
+        }
     }
 
     //
@@ -1137,6 +1207,10 @@ impl<'a> Resolver<'a> {
             BinaryType::Module(module) => module.field_instantiation_count(idx.0),
             BinaryType::Script(_) => unreachable!("Scripts cannot have type instructions"),
         }
+    }
+
+    pub(crate) fn type_to_type_tag(&self, ty: &Type) -> PartialVMResult<TypeTag> {
+        self.loader.type_to_type_tag(ty)
     }
 
     pub(crate) fn type_to_type_layout(&self, ty: &Type) -> PartialVMResult<MoveTypeLayout> {
@@ -1644,7 +1718,7 @@ impl Function {
         match &self.scope {
             Scope::Script(_) => "Script::main".into(),
             Scope::Module(id) => format!(
-                "0x{}::{}::{}",
+                "{}::{}::{}",
                 id.address(),
                 id.name().as_str(),
                 self.name.as_str()
@@ -1740,6 +1814,10 @@ impl TypeCache {
         Self {
             structs: HashMap::new(),
         }
+    }
+
+    fn empty(&mut self) {
+        self.structs = HashMap::new();
     }
 }
 
