@@ -3,11 +3,12 @@
 
 use crate::{interpreter::Interpreter, loader::Resolver, logging::LogContext};
 use move_binary_format::errors::PartialVMResult;
+use move_core_types::language_storage::TypeTag;
 use move_core_types::{
     account_address::AccountAddress, gas_schedule::CostTable, language_storage::CORE_CODE_ADDRESS,
     value::MoveTypeLayout, vm_status::StatusType,
 };
-use move_vm_natives::{account, bcs, debug, event, hash, signature, signer, vector};
+use move_vm_natives::{account, bcs, debug, event, hash, signature, signer, token, vector};
 use move_vm_types::{
     data_store::DataStore,
     gas_schedule::GasStatus,
@@ -28,6 +29,7 @@ pub(crate) enum NativeFunction {
     HashSha2_256,
     HashSha3_256,
     BCSToBytes,
+    BCSToAddress,
     PubED25519Validate,
     SigED25519Verify,
     VectorLength,
@@ -45,6 +47,8 @@ pub(crate) enum NativeFunction {
     CreateSigner,
     // functions below this line are deprecated and remain only for replaying old transactions
     DestroySigner,
+    TokenNameOf,
+    HashKeccak256,
 }
 
 impl NativeFunction {
@@ -59,7 +63,9 @@ impl NativeFunction {
         Some(match case {
             (&CORE_CODE_ADDRESS, "Hash", "sha2_256") => HashSha2_256,
             (&CORE_CODE_ADDRESS, "Hash", "sha3_256") => HashSha3_256,
+            (&CORE_CODE_ADDRESS, "Hash", "keccak_256") => HashKeccak256,
             (&CORE_CODE_ADDRESS, "BCS", "to_bytes") => BCSToBytes,
+            (&CORE_CODE_ADDRESS, "BCS", "to_address") => BCSToAddress,
             (&CORE_CODE_ADDRESS, "Signature", "ed25519_validate_pubkey") => PubED25519Validate,
             (&CORE_CODE_ADDRESS, "Signature", "ed25519_verify") => SigED25519Verify,
             (&CORE_CODE_ADDRESS, "Vector", "length") => VectorLength,
@@ -71,12 +77,12 @@ impl NativeFunction {
             (&CORE_CODE_ADDRESS, "Vector", "destroy_empty") => VectorDestroyEmpty,
             (&CORE_CODE_ADDRESS, "Vector", "swap") => VectorSwap,
             (&CORE_CODE_ADDRESS, "Event", "write_to_event_store") => AccountWriteEvent,
-            (&CORE_CODE_ADDRESS, "DiemAccount", "create_signer") => CreateSigner,
+            (&CORE_CODE_ADDRESS, "Account", "create_signer") => CreateSigner,
+            (&CORE_CODE_ADDRESS, "Account", "destroy_signer") => DestroySigner,
             (&CORE_CODE_ADDRESS, "Debug", "print") => DebugPrint,
             (&CORE_CODE_ADDRESS, "Debug", "print_stack_trace") => DebugPrintStackTrace,
             (&CORE_CODE_ADDRESS, "Signer", "borrow_address") => SignerBorrowAddress,
-            // functions below this line are deprecated and remain only for replaying old transactions
-            (&CORE_CODE_ADDRESS, "DiemAccount", "destroy_signer") => DestroySigner,
+            (&CORE_CODE_ADDRESS, "Token", "name_of") => TokenNameOf,
             _ => return None,
         })
     }
@@ -91,6 +97,7 @@ impl NativeFunction {
         let result = match self {
             Self::HashSha2_256 => hash::native_sha2_256(ctx, t, v),
             Self::HashSha3_256 => hash::native_sha3_256(ctx, t, v),
+            Self::HashKeccak256 => hash::native_keccak_256(ctx, t, v),
             Self::PubED25519Validate => signature::native_ed25519_publickey_validation(ctx, t, v),
             Self::SigED25519Verify => signature::native_ed25519_signature_verification(ctx, t, v),
             Self::VectorLength => vector::native_length(ctx, t, v),
@@ -104,12 +111,14 @@ impl NativeFunction {
             // natives that need the full API of `NativeContext`
             Self::AccountWriteEvent => event::native_emit_event(ctx, t, v),
             Self::BCSToBytes => bcs::native_to_bytes(ctx, t, v),
+            Self::BCSToAddress => bcs::native_to_address(ctx, t, v),
             Self::DebugPrint => debug::native_print(ctx, t, v),
             Self::DebugPrintStackTrace => debug::native_print_stack_trace(ctx, t, v),
             Self::SignerBorrowAddress => signer::native_borrow_address(ctx, t, v),
             Self::CreateSigner => account::native_create_signer(ctx, t, v),
             // functions below this line are deprecated and remain only for replaying old transactions
             Self::DestroySigner => account::native_destroy_signer(ctx, t, v),
+            Self::TokenNameOf => token::native_token_name_of(ctx, t, v),
         };
         debug_assert!(match &result {
             Err(e) => e.major_status().status_type() == StatusType::InvariantViolation,
@@ -172,5 +181,9 @@ impl<'a, L: LogContext> NativeContext for FunctionContext<'a, L> {
             Err(e) if e.major_status().status_type() == StatusType::InvariantViolation => Err(e),
             Err(_) => Ok(None),
         }
+    }
+
+    fn type_to_type_tag(&self, ty: &Type) -> PartialVMResult<TypeTag> {
+        self.resolver.type_to_type_tag(ty)
     }
 }

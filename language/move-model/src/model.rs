@@ -34,7 +34,7 @@ use codespan_reporting::{
 use itertools::Itertools;
 #[allow(unused_imports)]
 use log::{info, warn};
-use num::{BigUint, One, ToPrimitive};
+use num::{BigUint, Num, One, ToPrimitive};
 use serde::{Deserialize, Serialize};
 
 use bytecode_source_map::{mapping::SourceMapping, source_map::SourceMap};
@@ -1972,7 +1972,12 @@ impl<'env> ModuleEnv<'env> {
     /// Retrieve an address identifier from the pool
     pub fn get_address_identifier(&self, idx: AddressIdentifierIndex) -> BigUint {
         let addr = &self.data.module.address_identifiers()[idx.0 as usize];
-        crate::addr_to_big_uint(addr)
+        Self::addr_to_big_uint(addr)
+    }
+
+    /// Converts an address identifier to a number representing the address.
+    pub fn addr_to_big_uint(addr: &AccountAddress) -> BigUint {
+        BigUint::from_str_radix(&format!("{:x}", addr), 16).unwrap()
     }
 
     /// Returns specification variables of this module.
