@@ -22,7 +22,7 @@ impl<'a> Context<'a> {
     }
 }
 
-pub(crate) fn build_address_map(
+pub fn build_address_map(
     env: &mut CompilationEnv,
     pre_compiled_lib: Option<&FullyCompiledProgram>,
     prog: &P::Program,
