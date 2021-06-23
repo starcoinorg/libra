@@ -80,6 +80,28 @@ impl<'r, 'l, R: MoveStorage> SessionAdapter<'r, 'l, R> {
         )
     }
 
+    pub fn verify_script_args(
+        &mut self,
+        script: Vec<u8>,
+        ty_args: Vec<TypeTag>,
+        args: Vec<Vec<u8>>,
+        senders: Vec<AccountAddress>,
+    ) -> VMResult<()> {
+        // load the script, perform verification
+        let (main, _ty_args, params) = self.session.runtime.loader.load_script(
+            &script,
+            &ty_args,
+            &mut self.session.data_cache,
+            &self.log_context,
+        )?;
+        let _signers_and_args = self
+            .session
+            .runtime
+            .create_signers_and_arguments(main.file_format_version(), &params, senders, args)
+            .map_err(|err| err.finish(Location::Undefined))?;
+        Ok(())
+    }
+
     pub fn execute_script(
         &mut self,
         script: Vec<u8>,
@@ -96,6 +118,36 @@ impl<'r, 'l, R: MoveStorage> SessionAdapter<'r, 'l, R> {
             gas_status,
             &self.log_context,
         )
+    }
+
+    pub fn verify_script_function_args(
+        &mut self,
+        module: &ModuleId,
+        function_name: &IdentStr,
+        ty_args: Vec<TypeTag>,
+        args: Vec<Vec<u8>>,
+        senders: Vec<AccountAddress>,
+    ) -> VMResult<()> {
+        let (func, ty_args, params, _return_tys) = self.session.runtime.loader.load_function(
+            function_name,
+            module,
+            &ty_args,
+            true,
+            &mut self.session.data_cache,
+            &self.log_context,
+        )?;
+        let params = params
+            .into_iter()
+            .map(|ty| ty.subst(&ty_args))
+            .collect::<PartialVMResult<Vec<_>>>()
+            .map_err(|err| err.finish(Location::Undefined))?;
+
+        let _signer_and_args = self
+            .session
+            .runtime
+            .create_signers_and_arguments(func.file_format_version(), &params, senders, args)
+            .map_err(|err| err.finish(Location::Undefined))?;
+        Ok(())
     }
 
     pub fn execute_script_function(
