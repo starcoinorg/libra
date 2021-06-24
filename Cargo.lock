@@ -4478,6 +4478,7 @@ version = "0.0.2"
 dependencies = [
  "anyhow",
  "bcs",
+ "bech32",
  "diem-workspace-hack",
  "hex",
  "mirai-annotations",

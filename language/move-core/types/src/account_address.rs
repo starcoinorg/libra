@@ -1,6 +1,7 @@
 // Copyright (c) The Diem Core Contributors
 // SPDX-License-Identifier: Apache-2.0
 
+use bech32::ToBase32;
 use hex::FromHex;
 use rand::{rngs::OsRng, Rng};
 use serde::{de::Error as _, Deserialize, Deserializer, Serialize, Serializer};
@@ -79,6 +80,42 @@ impl AccountAddress {
         <[u8; Self::LENGTH]>::try_from(bytes.as_ref())
             .map_err(|_| AccountAddressParseError)
             .map(Self)
+    }
+
+    pub fn to_bech32(&self) -> String {
+        let mut data = self.to_vec().to_base32();
+        data.insert(
+            0,
+            bech32::u5::try_from_u8(1).expect("1 to u8 should success"),
+        );
+        bech32::encode("stc", data, bech32::Variant::Bech32).expect("bech32 encode should success")
+    }
+
+    fn parse_bench32(s: impl AsRef<str>) -> anyhow::Result<Vec<u8>> {
+        let (hrp, data, variant) = bech32::decode(s.as_ref())?;
+
+        anyhow::ensure!(variant == bech32::Variant::Bech32, "expect bech32 encoding");
+        anyhow::ensure!(hrp.as_str() == "stc", "expect bech32 hrp to be stc");
+
+        let version = data.first().map(|u| u.to_u8());
+        anyhow::ensure!(version.filter(|v| *v == 1u8).is_some(), "expect version 1");
+
+        let data: Vec<u8> = bech32::FromBase32::from_base32(&data[1..])?;
+
+        if data.len() == AccountAddress::LENGTH {
+            Ok(data)
+        } else if data.len() == AccountAddress::LENGTH + 32 {
+            // for address + auth key format, just ignore auth key
+            Ok(data[0..AccountAddress::LENGTH].to_vec())
+        } else {
+            anyhow::bail!("Invalid address's length");
+        }
+    }
+
+    //This method should not be part of the move core type, but can not implement from_str in starcoin project.
+    //May be the AccountAddress should not be move core type, move only take care of AddressBytes.
+    pub fn from_bech32(s: impl AsRef<str>) -> Result<Self, AccountAddressParseError> {
+        Self::from_bytes(Self::parse_bench32(s).map_err(|_| AccountAddressParseError)?)
     }
 }
 
@@ -204,7 +241,11 @@ impl FromStr for AccountAddress {
     type Err = AccountAddressParseError;
 
     fn from_str(s: &str) -> Result<Self, AccountAddressParseError> {
-        AccountAddress::from_hex_literal(s)
+        if s.starts_with("stc") {
+            AccountAddress::from_bech32(s)
+        } else {
+            AccountAddress::from_hex_literal(s)
+        }
     }
 }
 
@@ -249,7 +290,7 @@ pub struct AccountAddressParseError;
 
 impl fmt::Display for AccountAddressParseError {
     fn fmt(&self, f: &mut fmt::Formatter) -> std::fmt::Result {
-        write!(f, "unable to parse AccoutAddress")
+        write!(f, "unable to parse AccountAddress")
     }
 }
 
@@ -372,6 +413,23 @@ mod tests {
     fn test_address_from_empty_string() {
         assert!(AccountAddress::try_from("".to_string()).is_err());
         assert!(AccountAddress::from_str("").is_err());
+    }
+
+    #[test]
+    fn test_bech32() {
+        let hex = "0xca843279e3427144cead5e4d5999a3d0";
+        let json_hex = "\"0xca843279e3427144cead5e4d5999a3d0\"";
+        let bech32 = "stc1pe2zry70rgfc5fn4dtex4nxdr6qyyuevr";
+        let json_bech32 = "\"stc1pe2zry70rgfc5fn4dtex4nxdr6qyyuevr\"";
+
+        let address = AccountAddress::from_str(hex).unwrap();
+        let bech32_address = AccountAddress::from_str(bech32).unwrap();
+        let json_address: AccountAddress = serde_json::from_str(json_hex).unwrap();
+        let json_bech32_address: AccountAddress = serde_json::from_str(json_bech32).unwrap();
+
+        assert_eq!(address, bech32_address);
+        assert_eq!(address, json_address);
+        assert_eq!(address, json_bech32_address);
     }
 
     proptest! {
